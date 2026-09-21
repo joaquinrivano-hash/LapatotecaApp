@@ -213,3 +213,24 @@ describe("requisitos que agregó el folleto", () => {
     ).toBe(true);
   });
 });
+
+describe("avisos que no bloquean", () => {
+  it("sin registro de desparasitación avisa, pero el perro entra", () => {
+    const r = evaluarAdmision(perro({ desparasitadoHasta: undefined }), {
+      fecha: HOY,
+    });
+
+    expect(r.admitido).toBe(true);
+    expect(r.bloqueos).toHaveLength(0);
+    expect(r.problemas.map((p) => p.motivo)).toEqual(["desparasitacion"]);
+  });
+
+  it("con la desparasitación vencida sí se bloquea", () => {
+    const r = evaluarAdmision(perro({ desparasitadoHasta: "2026-05-01" }), {
+      fecha: HOY,
+    });
+
+    expect(r.admitido).toBe(false);
+    expect(r.bloqueos.map((p) => p.motivo)).toEqual(["desparasitacion"]);
+  });
+});

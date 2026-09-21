@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ClipboardList, Dog, ShieldCheck, User } from "lucide-react";
+import Link from "next/link";
+import { ClipboardList, Dog, ShieldCheck, User, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -64,8 +65,15 @@ export default function Ingresar() {
 
         {rol === "cliente" && (
           <Card className="p-4">
+            <Button asChild size="lg" className="mb-3 w-full">
+              <Link href="/crear-cuenta">
+                <UserPlus />
+                Soy nuevo, crear mi cuenta
+              </Link>
+            </Button>
+
             <p className="mb-3 text-sm font-semibold">
-              ¿Con qué cuenta quieres entrar?
+              O entra con una cuenta de prueba
             </p>
             {!montado || clientes.cargando ? (
               <div className="space-y-2">

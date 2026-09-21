@@ -29,13 +29,18 @@ export default function PortalLayout({
     return (
       <main className="mx-auto flex w-full max-w-md flex-1 items-center px-4">
         <EstadoVacio
-          titulo="Entra con tu cuenta"
-          descripcion="Para reservar, comprar y ver los reportes de tu perro necesitas iniciar sesión."
+          titulo="Crea tu cuenta para reservar"
+          descripcion="Con la cuenta lista agendas el día de prueba y, después de eso, hotel, jardín, spa y paseos."
           className="w-full"
         >
-          <Button asChild size="lg">
-            <Link href="/ingresar">Ingresar</Link>
-          </Button>
+          <div className="flex w-full flex-col gap-2">
+            <Button asChild size="xl">
+              <Link href="/crear-cuenta">Crear mi cuenta</Link>
+            </Button>
+            <Button asChild variant="ghost">
+              <Link href="/ingresar">Ya tengo cuenta</Link>
+            </Button>
+          </div>
         </EstadoVacio>
       </main>
     );

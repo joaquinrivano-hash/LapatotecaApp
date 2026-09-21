@@ -334,6 +334,35 @@ cliente reserva a futuro y no hay ningún perro en la puerta que registrar.
 Los `input type="date"` se ven en el formato del navegador, que puede no ser el
 chileno. Por eso llevan la fecha escrita debajo.
 
+### La puerta de entrada del portal
+
+`/lib/servicios/registro.ts` y las pantallas `/crear-cuenta` y
+`/dia-de-prueba`.
+
+Para un visitante sin cuenta, **"reservar" significa crear la cuenta**: la casa
+exige el día de prueba antes de la primera estadía, así que no hay nada que
+reservar todavía. El botón de la landing lo lleva a `/crear-cuenta`, no a la
+pantalla de roles —esa es el interruptor del prototipo y vive al final de la
+portada, con letra chica—.
+
+El alta pide los datos del dueño y del perro, incluidos los **vencimientos de
+las vacunas**: el día de prueba ya es una jornada completa en la casa con otros
+perros, así que la admisión se aplica igual. Lo único que impide crear la
+cuenta es lo que no tiene vuelta: el peso y la esterilización de los machos.
+
+El día de prueba se agenda como una `EstadiaJardin` con `origen:
+"dia_de_prueba"` y deja al perro en `diaDePrueba.estado = "agendado"`. No emite
+cobro: igual que el día suelto, se cobra al cerrar la jornada.
+
+### Avisar no es bloquear
+
+`evaluarAdmision` distingue `problemas` (todo lo que hay que saber) de
+`bloqueos` (lo que impide de verdad), y `admitido` mira solo los segundos. Hoy
+el único aviso que no bloquea es la desparasitación **sin registro**; vencida sí
+bloquea. Estaba escrito así en el comentario de la regla desde la etapa 1, pero
+el código la contaba como impedimento y dejaba fuera a cualquier perro sin el
+campo.
+
 ### El backoffice y sus definiciones
 
 `/lib/servicios/panel.ts`, `calendario.ts`, `cobranza.ts` y `clientes.ts`.
