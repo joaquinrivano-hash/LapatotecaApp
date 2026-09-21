@@ -5,6 +5,8 @@ import {
   esFinDeSemana,
   fechaISO,
   formatearDuracion,
+  formatearFecha,
+  formatearFechaLarga,
   formatearHora,
   hhmmDesdeMinutos,
   horasEntre,
@@ -101,5 +103,25 @@ describe("horas", () => {
 describe("formato para ejes", () => {
   it("omite el día de la semana y deja el mes en minúscula", () => {
     expect(formatearDiaMesCorto("2026-09-21T15:00:00.000Z")).toBe("21 sep");
+  });
+});
+
+describe("una fecha sin hora es un día del calendario", () => {
+  // El bug: "2026-09-21" leído como ISO es medianoche UTC, que en Santiago
+  // todavía es el día 20. La pantalla mostraba el día anterior en cualquier
+  // navegador al este de Chile y en el render del servidor.
+  it("no se corre de día al formatear", () => {
+    expect(formatearFecha("2026-09-21")).toBe("21 de septiembre");
+    expect(formatearFechaLarga("2026-01-01")).toBe(
+      "jueves 1 de enero de 2026",
+    );
+    expect(formatearDiaMesCorto("2026-08-05")).toBe("5 ago");
+  });
+
+  it("da la vuelta completa sin perder el día", () => {
+    expect(fechaISO("2026-09-21")).toBe("2026-09-21");
+    expect(fechaISO("2026-01-01")).toBe("2026-01-01");
+    // 6 de septiembre de 2026: el día en que empieza el horario de verano.
+    expect(fechaISO("2026-09-06")).toBe("2026-09-06");
   });
 });

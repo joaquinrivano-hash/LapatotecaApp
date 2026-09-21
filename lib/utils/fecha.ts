@@ -22,8 +22,21 @@ function aDate(valor: EntradaFecha): Date {
   return parseISO(valor);
 }
 
+/** Una fecha sin hora: "2026-09-21". */
+const SOLO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+
 /** El mismo instante, leído con el reloj de Santiago. */
 export function enZona(valor: EntradaFecha): TZDate {
+  // "2026-09-21" no es un instante: es un día del calendario de Santiago. Si
+  // se lo deja leer como ISO, se entiende como medianoche del reloj de quien
+  // mira, y desde cualquier zona al este de Chile (un servidor en UTC, un
+  // dueño de viaje en Madrid) el día se corre al anterior.
+  //
+  // Se ancla al mediodía, no a la medianoche: en Chile el cambio de horario
+  // de verano ocurre a las 24:00, así que hay días cuya medianoche no existe.
+  if (typeof valor === "string" && SOLO_FECHA.test(valor)) {
+    return new TZDate(instanteEn(valor, 12 * 60), ZONA_HORARIA);
+  }
   return new TZDate(aDate(valor), ZONA_HORARIA);
 }
 
