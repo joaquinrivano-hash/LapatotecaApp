@@ -230,6 +230,12 @@ export function generarSeed(
       vacunas: generarVacunas(i),
       diaDePrueba,
       notas: azar.probabilidad(0.6) ? azar.elegir(NOTAS_PERRO) : undefined,
+      // Desparasitación: la mayoría al día, algunos vencidos o sin registro.
+      desparasitadoHasta:
+        i % 11 === 4
+          ? undefined
+          : sumarDias(hoy, i % 9 === 2 ? -azar.entero(2, 30) : azar.entero(20, 150)),
+      sociable: i % 23 !== 7,
       creadoEn: instanteEn(
         sumarDias(primerDia, -azar.entero(10, 400)),
         azar.entero(9, 19) * 60,
@@ -259,27 +265,33 @@ export function generarSeed(
     return pago;
   };
 
+  /** Meses que toca el historial: en cada uno se compra un plan. */
+  const mesesDelHistorial = [
+    ...new Set(rangoFechas(primerDia, hoy).map((f) => f.slice(0, 7))),
+  ];
+
   // Los 18 perros más regulares compran planes.
   const conPlan = [...perrosActivos]
     .sort((a, b) => (frecuencia.get(b.id) ?? 0) - (frecuencia.get(a.id) ?? 0))
     .slice(0, 18);
 
   conPlan.forEach((perro, i) => {
-    const tipo = i % 3 === 0 ? "p20" : "p5";
-    // Compras repartidas en los 60 días: unos vigentes, otros ya vencidos.
-    const compras = tipo === "p20" ? 2 : 3;
+    const tipo: "dias" | "pase_libre" = i % 5 === 0 ? "pase_libre" : "dias";
+    // Días contratados: la mayoría en el tramo barato, algunos en el caro.
+    const diasContratados = i % 3 === 0 ? azar.entero(12, 20) : azar.entero(5, 10);
 
-    for (let c = 0; c < compras; c++) {
-      const diaCompra = sumarDias(
-        primerDia,
-        Math.floor((DIAS_HISTORIAL / compras) * c) + azar.entero(0, 4),
-      );
+    // Los planes vencen a fin de mes, así que se compran uno por mes. Sin
+    // esto no quedaría ninguno vigente el día que se abre el prototipo.
+    for (const mes of mesesDelHistorial) {
+      const propuesto = `${mes}-0${azar.entero(1, 4)}`;
+      const diaCompra = propuesto < primerDia ? primerDia : propuesto;
       const compradoEn = instanteEn(diaCompra, azar.entero(9, 19) * 60);
       const plan = crearPlanComprado({
         id: id("plan", planes.length),
         clienteId: perro.clienteId,
         perroId: perro.id,
         tipo,
+        dias: diasContratados,
         compradoEn,
       });
       planes.push(plan);
@@ -296,8 +308,8 @@ export function generarSeed(
       });
     }
 
-    // Un tercio de los del plan de 20 lo tiene como suscripción recurrente.
-    if (tipo === "p20" && i % 2 === 0) {
+    // Algunos lo tienen como suscripción que se recarga el día 1.
+    if (i % 4 === 0) {
       const periodoActual = mesISO(instanteEn(hoy, 12 * 60));
       const [a, m] = periodoActual.split("-").map(Number);
       const proximo =
@@ -309,7 +321,8 @@ export function generarSeed(
         id: id("susc", suscripciones.length),
         clienteId: perro.clienteId,
         perroId: perro.id,
-        tipo: "p20",
+        tipo,
+        diasContratados,
         estado: azar.probabilidad(0.85) ? "activa" : "pausada",
         creadaEn: instanteEn(sumarDias(primerDia, -azar.entero(30, 120)), 10 * 60),
         proximoCobro: proximo,

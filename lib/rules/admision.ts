@@ -14,6 +14,8 @@ export type MotivoRechazo =
   | "peso"
   | "esterilizacion"
   | "vacunas"
+  | "desparasitacion"
+  | "sociabilidad"
   | "dia_de_prueba";
 
 export interface ProblemaAdmision {
@@ -29,9 +31,9 @@ export interface ResultadoAdmision {
 }
 
 const NOMBRE_VACUNA: Record<string, string> = {
-  sextuple: "séxtuple",
+  octuple: "óctuple",
   antirrabica: "antirrábica",
-  traqueobronquitis: "traqueobronquitis",
+  kc: "KC (traqueobronquitis)",
 };
 
 export function nombreVacuna(tipo: string): string {
@@ -66,6 +68,14 @@ export function vacunasFaltantes(perro: Perro, fecha: FechaISO): TipoVacuna[] {
 
 export function tieneVacunasAlDia(perro: Perro, fecha: FechaISO): boolean {
   return vacunasFaltantes(perro, fecha).length === 0;
+}
+
+/** true si la desparasitación está registrada y vigente. */
+export function desparasitacionAlDia(perro: Perro, fecha: FechaISO): boolean {
+  return (
+    perro.desparasitadoHasta !== undefined &&
+    diasEntre(fecha, perro.desparasitadoHasta) >= 0
+  );
 }
 
 /** Para las alertas del backoffice: vacunas que vencen dentro de N días. */
@@ -124,6 +134,33 @@ export function evaluarAdmision(
       motivo: "esterilizacion",
       mensaje: `${perro.nombre} necesita estar esterilizado para quedarse con nosotros.`,
       subsanable: true,
+    });
+  }
+
+  // Desparasitación interna y externa al día. Sin registro se avisa pero no
+  // se bloquea: los perros cargados antes de que existiera el campo no tienen
+  // por qué quedar rechazados de golpe.
+  if (NEGOCIO.admision.exigeDesparasitacion) {
+    if (perro.desparasitadoHasta === undefined) {
+      problemas.push({
+        motivo: "desparasitacion",
+        mensaje: `No tenemos registro de la desparasitación de ${perro.nombre}.`,
+        subsanable: true,
+      });
+    } else if (diasEntre(fecha, perro.desparasitadoHasta) < 0) {
+      problemas.push({
+        motivo: "desparasitacion",
+        mensaje: `La desparasitación de ${perro.nombre} está vencida.`,
+        subsanable: true,
+      });
+    }
+  }
+
+  if (NEGOCIO.admision.exigeSociabilidad && perro.sociable === false) {
+    problemas.push({
+      motivo: "sociabilidad",
+      mensaje: `${perro.nombre} no pasó la evaluación de sociabilidad.`,
+      subsanable: false,
     });
   }
 

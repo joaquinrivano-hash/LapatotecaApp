@@ -22,14 +22,14 @@ import type {
   Cotizacion,
   DuracionPaseo,
   InstanteISO,
-  LineaCotizacion,
   NivelSpa,
 } from "@/lib/types";
 
 export type TamanoSpa = "chico" | "grande";
 
+/** Pequeño bajo 10 kg; desde 10 kg y hasta 25, mediano. */
 export function tamanoSpa(pesoKg: number): TamanoSpa {
-  return pesoKg <= NEGOCIO.spa.pesoMaximoChicoKg ? "chico" : "grande";
+  return pesoKg < NEGOCIO.spa.pesoChicoBajoKg ? "chico" : "grande";
 }
 
 export interface EntradaSpa {
@@ -43,17 +43,23 @@ export function cotizarSpa(entrada: EntradaSpa): Cotizacion {
   const tamano = tamanoSpa(entrada.pesoKg);
   const monto = PRECIOS.spa[entrada.nivel][tamano];
 
+  // El 20% a clientes aplica SOLO al baño premium: el express ya está al
+  // precio de entrada y no lleva descuento.
+  const aplicaDescuento =
+    (entrada.esClienteActivo ?? false) &&
+    (!NEGOCIO.spa.descuentoSoloEnPremium || entrada.nivel === "premium");
+
   return construirCotizacion(
     [
       {
-        concepto: entrada.nivel === "express" ? "Spa express" : "Spa premium",
-        detalle: `Perro ${tamano} (${entrada.pesoKg} kg)`,
+        concepto: entrada.nivel === "express" ? "Baño express" : "Baño premium",
+        detalle: `Perro ${tamano === "chico" ? "pequeño" : "mediano"} (${entrada.pesoKg} kg)`,
         monto,
       },
     ],
     soloAplicables([
       descuentoSegundoPerro(entrada.indicePerro),
-      descuentoClienteActivo(entrada.esClienteActivo ?? false),
+      descuentoClienteActivo(aplicaDescuento),
     ]),
   );
 }
@@ -95,57 +101,28 @@ export interface EntradaTraslado {
 }
 
 /**
- * Traslado: base que cubre los primeros 5 km, más $700 por km adicional y
- * $2.000 si cae en horario punta. Nunca pasa del tope de $15.000, así que el
- * cliente siempre sabe cuánto es lo máximo que puede costar.
+ * Traslado: matriz de tramo de distancia por horario, tal como el folleto.
+ * No hay precio por kilómetro; hay tramos con precio fijo.
  */
 export function cotizarTraslado(entrada: EntradaTraslado): Cotizacion {
-  const kmAdicionales = Math.max(
-    0,
-    Math.ceil(entrada.km - NEGOCIO.traslado.kmIncluidos),
-  );
   const enPunta = esHorarioPunta(entrada.fechaHora);
+  const tramos = PRECIOS.traslado.tramos;
+  const tramo = tramos.find((t) => entrada.km <= t.hastaKm) ?? tramos.at(-1)!;
+  const monto = enPunta ? tramo.punta : tramo.normal;
 
-  const bruto =
-    PRECIOS.traslado.base +
-    kmAdicionales * PRECIOS.traslado.porKmAdicional +
-    (enPunta ? PRECIOS.traslado.recargoHorarioPunta : 0);
+  const indice = tramos.indexOf(tramo);
+  const desdeKm = indice === 0 ? 0 : tramos[indice - 1].hastaKm;
 
-  // El tope se reparte recortando primero el recargo y después los km, para
-  // que el desglose siga cuadrando con el total.
-  const excedente = Math.max(0, bruto - PRECIOS.traslado.tope);
-
-  const lineas: LineaCotizacion[] = [
+  return construirCotizacion([
     {
       concepto: "Traslado",
-      detalle: `Base hasta ${NEGOCIO.traslado.kmIncluidos} km`,
-      monto: PRECIOS.traslado.base,
+      detalle: `${desdeKm} a ${tramo.hastaKm} km · ${enPunta ? "horario punta" : "horario normal"}`,
+      monto,
     },
-  ];
+  ]);
+}
 
-  if (kmAdicionales > 0) {
-    lineas.push({
-      concepto: "Kilómetros adicionales",
-      detalle: `${kmAdicionales} km sobre los ${NEGOCIO.traslado.kmIncluidos} incluidos`,
-      monto: kmAdicionales * PRECIOS.traslado.porKmAdicional,
-    });
-  }
-
-  if (enPunta) {
-    lineas.push({
-      concepto: "Horario punta",
-      detalle: "Recargo por congestión",
-      monto: PRECIOS.traslado.recargoHorarioPunta,
-    });
-  }
-
-  if (excedente > 0) {
-    lineas.push({
-      concepto: "Tope de traslado",
-      detalle: `El traslado nunca supera los ${PRECIOS.traslado.tope.toLocaleString("es-CL")} pesos`,
-      monto: -excedente,
-    });
-  }
-
-  return construirCotizacion(lineas);
+/** Hasta dónde llega la tarifa con tramo definido. */
+export function kmMaximoConTarifa(): number {
+  return PRECIOS.traslado.tramos.at(-1)!.hastaKm;
 }

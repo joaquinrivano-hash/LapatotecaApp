@@ -16,7 +16,8 @@ function suscripcion(sobrescribir: Partial<Suscripcion> = {}): Suscripcion {
     id: "s1",
     clienteId: "c1",
     perroId: "p1",
-    tipo: "p20",
+    tipo: "dias",
+    diasContratados: 20,
     estado: "activa",
     creadaEn: instanteEnHora("2026-05-01", "10:00"),
     proximoCobro: "2026-09-01",
@@ -119,7 +120,7 @@ describe("generarCuentaMensual", () => {
     expect(cuenta.renovaciones).toHaveLength(1);
     expect(cuenta.renovaciones[0].detalle).toBe("Para Pancho");
     expect(cuenta.consumos).toHaveLength(2);
-    expect(cuenta.total).toBe(231_000);
+    expect(cuenta.total).toBe(311_000);
     expect(cuenta.estado).toBe("pendiente");
   });
 

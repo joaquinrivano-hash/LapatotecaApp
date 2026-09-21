@@ -53,6 +53,14 @@ export interface Perro {
   fechaNacimiento?: FechaISO;
   fotoUrl?: string;
   vacunas: Vacuna[];
+  /**
+   * Hasta cuándo está vigente la desparasitación interna y externa.
+   * `undefined` = sin registro: avisa, pero no bloquea (los perros cargados
+   * antes de que existiera el campo no tienen por qué quedar rechazados).
+   */
+  desparasitadoHasta?: FechaISO;
+  /** El folleto lo exige explícitamente. `undefined` = sin evaluar. */
+  sociable?: boolean;
   diaDePrueba: DiaDePrueba;
   notas?: string;
   creadoEn: InstanteISO;
@@ -162,6 +170,7 @@ export interface PlanComprado {
   clienteId: ID;
   perroId: ID;
   tipo: TipoPlan;
+  /** En el pase libre, los días hábiles que cubre el mes. */
   diasTotales: number;
   diasUsados: number;
   compradoEn: InstanteISO;
@@ -183,6 +192,8 @@ export interface Suscripcion {
   clienteId: ID;
   perroId: ID;
   tipo: TipoPlan;
+  /** Días que se recargan cada mes. Se ignora en el pase libre. */
+  diasContratados?: number;
   estado: EstadoSuscripcion;
   creadaEn: InstanteISO;
   proximoCobro: FechaISO;

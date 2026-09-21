@@ -212,11 +212,11 @@ describe("calcularRenovacion", () => {
     id: "pl-1",
     clienteId: CLIENTE.id,
     perroId: PELUSA.id,
-    tipo: "p5",
+    tipo: "dias",
     diasTotales: 5,
     diasUsados: 0,
     compradoEn: en("10:00", "2026-05-01"),
-    venceEn: "2026-05-16",
+    venceEn: "2026-05-31",
     precio: 75_000,
   };
 
@@ -328,7 +328,8 @@ describe("emitirCuentasDelMes", () => {
     id: "susc-1",
     clienteId: CLIENTE.id,
     perroId: PELUSA.id,
-    tipo: "p20",
+    tipo: "dias",
+    diasContratados: 20,
     estado: "activa",
     creadaEn: en("10:00", "2026-01-01"),
     proximoCobro: "2026-07-01",
@@ -342,7 +343,7 @@ describe("emitirCuentasDelMes", () => {
 
     const { cuentas } = await emitirCuentasDelMes(repo, "2026-06");
     expect(cuentas).toHaveLength(1);
-    expect(cuentas[0].total).toBe(218_000);
+    expect(cuentas[0].total).toBe(298_000);
     expect(cuentas[0].renovaciones).toHaveLength(1);
     expect(cuentas[0].consumos).toHaveLength(1);
   });
@@ -359,7 +360,7 @@ describe("emitirCuentasDelMes", () => {
     // Queda la cuenta por cobrar, no el día suelto que la compone.
     expect(cobranza.pendientes).toHaveLength(1);
     expect(cobranza.pendientes[0].concepto).toBe("cuenta_mensual");
-    expect(cobranza.total).toBe(218_000);
+    expect(cobranza.total).toBe(298_000);
   });
 
   it("no emite dos veces el mismo periodo", async () => {

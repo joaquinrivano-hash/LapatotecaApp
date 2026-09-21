@@ -8,7 +8,7 @@
  * Los packs comprados de una vez se pagan al comprarlos y no entran acá.
  */
 
-import { PRECIOS } from "@/lib/config/precios";
+import { nombreDePlan, precioDePlan } from "@/lib/rules/planes";
 import { fechaISO, instanteEn, mesISO } from "@/lib/utils/fecha";
 import { redondearCLP } from "@/lib/utils/moneda";
 import type {
@@ -101,12 +101,12 @@ export function generarCuentaMensual(
   )
     .filter((s) => s.clienteId === entrada.clienteId)
     .map((s) => {
-      const config = PRECIOS.planes[s.tipo];
       const perro = entrada.nombrePerro?.(s.perroId);
+      const dias = s.diasContratados ?? 0;
       return {
-        concepto: `Renovación ${config.nombre}`,
+        concepto: `Renovación ${nombreDePlan({ tipo: s.tipo, diasTotales: dias })}`,
         detalle: perro ? `Para ${perro}` : undefined,
-        monto: config.precio,
+        monto: precioDePlan(s.tipo, dias),
       };
     });
 

@@ -71,12 +71,12 @@ const PLAN: PlanComprado = {
   id: "plan-001",
   clienteId: CLIENTE.id,
   perroId: PELUSA.id,
-  tipo: "p20",
+  tipo: "dias",
   diasTotales: 20,
   diasUsados: 3,
   compradoEn: en("10:00", "2026-06-01"),
-  venceEn: "2026-07-16",
-  precio: 200_000,
+  venceEn: "2026-06-30",
+  precio: 280_000,
 };
 
 const RESERVA: ReservaHotel = {
@@ -145,14 +145,24 @@ describe("check-out de jardín", () => {
     expect(pago?.estado).toBe("pendiente");
   });
 
-  it("la jornada corta cobra el tramo barato", async () => {
+  it("bajo 4 horas cobra el tramo barato", async () => {
+    await registrarLlegadaJardin(repo, "est-001", en("09:00"));
+    const { estadia: cerrada } = await registrarSalidaJardin(
+      repo,
+      "est-001",
+      en("12:30"),
+    );
+    expect(cerrada.cotizacion?.total).toBe(10_000);
+  });
+
+  it("entre 4 y 8 horas cobra el tramo medio", async () => {
     await registrarLlegadaJardin(repo, "est-001", en("09:00"));
     const { estadia: cerrada } = await registrarSalidaJardin(
       repo,
       "est-001",
       en("14:30"),
     );
-    expect(cerrada.cotizacion?.total).toBe(10_000);
+    expect(cerrada.cotizacion?.total).toBe(16_000);
   });
 
   it("el retiro tarde suma el recargo, calculado desde la hora real", async () => {
@@ -305,6 +315,8 @@ describe("ingreso no planificado", () => {
         fechaAplicacion: "2026-01-01",
         fechaVencimiento: "2027-01-01",
       })),
+      desparasitadoHasta: "2027-01-01",
+      sociable: true,
       ...sobrescribir,
     };
   }
@@ -340,7 +352,7 @@ describe("ingreso no planificado", () => {
       finEstimadoMinutos: 14 * 60,
     });
     expect(estadia.finProgramado).toBe(en("14:00"));
-    expect(estadia.cotizacion?.total).toBe(10_000);
+    expect(estadia.cotizacion?.total).toBe(16_000);
   });
 
   it("usa el plan del perro y le descuenta el día", async () => {
@@ -464,10 +476,10 @@ describe("ingreso no planificado", () => {
 
 describe("opcionesDeRetiro", () => {
   it("redondea la media jornada a la media hora siguiente", () => {
-    // 13:08 + 5 h = 18:08, redondeado a 18:30. Son 5 h 22 min: queda bajo el
-    // tramo de 6 h, que es lo que define el precio barato.
+    // 13:08 + 3 h = 16:08, redondeado a 16:30. Son 3 h 22 min: queda bajo el
+    // tramo de 4 h, que es lo que define el precio barato.
     const opciones = opcionesDeRetiro(en("13:08"));
-    expect(opciones[0].minutos).toBe(18 * 60 + 30);
+    expect(opciones[0].minutos).toBe(16 * 60 + 30);
     expect(opciones.at(-1)!.minutos).toBe(19 * 60);
   });
 

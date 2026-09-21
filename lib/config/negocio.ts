@@ -1,7 +1,9 @@
 /**
- * Parámetros operativos de La Patoteca. Los montos viven en `precios.ts`;
- * acá están las reglas que no son plata: capacidad, horarios, umbrales,
- * vigencias y requisitos de admisión.
+ * Parámetros operativos de La Patoteca, tomados del folleto de agosto 2026.
+ * Los montos viven en `precios.ts`; acá están las reglas que no son plata:
+ * capacidad, horarios, umbrales, vigencias y requisitos.
+ *
+ * Todo esto es editable: cambia el valor y las reglas lo respetan.
  */
 
 export const NEGOCIO = {
@@ -23,8 +25,14 @@ export const NEGOCIO = {
   jardin: {
     horaApertura: 7,
     horaCierre: 19,
-    /** Hasta estas horas inclusive se cobra la jornada corta. */
-    horasJornadaCorta: 6,
+    /**
+     * Tramos de la tarifa por tiempo, en horas:
+     *   menos de 4 h            → jornada corta
+     *   entre 4 y 8 h inclusive → jornada media
+     *   más de 8 h              → jornada larga
+     */
+    horasJornadaCorta: 4,
+    horasJornadaMedia: 8,
     /** Margen antes de empezar a cobrar el recargo fuera de horario. */
     minutosGracia: 15,
   },
@@ -33,9 +41,9 @@ export const NEGOCIO = {
     horasPorBloque: 24,
     /** Atraso perdonado en el check-out antes de cobrar horas extra. */
     horasToleranciaCheckout: 2,
-    /** Descuentos por duración: umbrales ESTRICTOS (más de N bloques). */
-    bloquesParaDescuento10: 7,
-    bloquesParaDescuento15: 14,
+    /** Descuentos por duración: umbrales INCLUSIVOS ("desde N noches"). */
+    nochesParaDescuento10: 7,
+    nochesParaDescuento15: 14,
     /** Fracción del total que se paga al reservar. */
     fraccionAbono: 0.3,
     /** Cancelando con al menos estas horas de aviso, el abono se devuelve entero. */
@@ -43,15 +51,27 @@ export const NEGOCIO = {
   },
 
   planes: {
-    /** Días corridos desde la compra para usar los días del pack. */
-    vigenciaDias: { p5: 15, p20: 45 },
+    /** Mínimo de días que se puede contratar en un plan. */
+    minimoDias: 5,
+    /**
+     * Los planes son MENSUALES y se pagan por adelantado: valen hasta el
+     * último día del mes en que se compran. Los días no usados no pasan al mes
+     * siguiente.
+     */
+    vigenciaHastaFinDeMes: true,
+    /** Los días del plan se usan de lunes a viernes. */
+    soloDiasHabiles: true,
   },
 
   admision: {
     pesoMaximoKg: 20,
     /** Las hembras no tienen requisito de esterilización. */
     esterilizacionObligatoriaEnMachos: true,
-    vacunasObligatorias: ["sextuple", "antirrabica", "traqueobronquitis"],
+    vacunasObligatorias: ["octuple", "antirrabica", "kc"],
+    /** Desparasitación interna y externa al día. */
+    exigeDesparasitacion: true,
+    /** El perro tiene que ser 100% sociable. */
+    exigeSociabilidad: true,
   },
 
   /** Un cliente está "activo" si tiene plan vigente con saldo o estadía reciente. */
@@ -60,16 +80,27 @@ export const NEGOCIO = {
   },
 
   spa: {
-    /** Hasta este peso el spa cobra tarifa de perro chico. */
-    pesoMaximoChicoKg: 10,
+    /** Perro pequeño: bajo este peso. Desde acá y hasta el máximo, mediano. */
+    pesoChicoBajoKg: 10,
+    pesoMaximoKg: 25,
+    /** El descuento a clientes solo aplica al baño premium. */
+    descuentoSoloEnPremium: true,
   },
 
   traslado: {
-    kmIncluidos: 5,
     /** Tramos en hora local de Santiago, formato HH:MM. */
     horariosPunta: [
-      { desde: "07:00", hasta: "09:30" },
-      { desde: "18:00", hasta: "20:00" },
+      { desde: "07:00", hasta: "09:00" },
+      { desde: "17:00", hasta: "20:00" },
+    ],
+  },
+
+  reportes: {
+    /** Ventanas en que se mandan los 2 o 3 reportes del día. */
+    ventanas: [
+      { desde: "08:00", hasta: "10:30" },
+      { desde: "13:00", hasta: "15:00" },
+      { desde: "18:00", hasta: "19:30" },
     ],
   },
 

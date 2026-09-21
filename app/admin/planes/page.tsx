@@ -9,8 +9,12 @@ import { PrecioCLP } from "@/components/shared/precio";
 import { Tile } from "@/components/shared/tile";
 import { BarraParticipacion } from "@/components/admin/barra-participacion";
 import { useConsulta } from "@/lib/hooks/use-consulta";
-import { PRECIOS } from "@/lib/config/precios";
-import { diasPerdidos, planVigente, saldoPlan } from "@/lib/rules/planes";
+import {
+  diasPerdidos,
+  nombreDePlan,
+  planVigente,
+  saldoPlan,
+} from "@/lib/rules/planes";
 import { hoyDelStaff } from "@/lib/servicios/asistencia";
 import { diasEntre, formatearFecha } from "@/lib/utils/fecha";
 import type { PlanComprado } from "@/lib/types";
@@ -64,6 +68,12 @@ export default function Planes() {
     .filter((p) => diasEntre(hoy, p.venceEn) <= 10)
     .sort((a, b) => a.venceEn.localeCompare(b.venceEn));
 
+  // Los planes son mensuales, así que a fin de mes vencen todos juntos y la
+  // sección repetiría la lista completa. Solo vale la pena cuando destaca a
+  // unos pocos.
+  const destacarPorVencer =
+    porVencer.length > 0 && porVencer.length < vigentes.length;
+
   return (
     <div className="space-y-5">
       <div>
@@ -97,7 +107,7 @@ export default function Planes() {
         />
       </div>
 
-      {porVencer.length > 0 && (
+      {destacarPorVencer && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle>Se vencen pronto</CardTitle>
@@ -178,8 +188,8 @@ function FilaPlan({
           <span className="text-muted-foreground font-normal"> · {cliente}</span>
         </span>
         <span className="flex items-center gap-2 text-sm">
-          <Badge variant={plan.tipo === "p20" ? "jardin" : "secondary"}>
-            {PRECIOS.planes[plan.tipo].nombre}
+          <Badge variant={plan.tipo === "pase_libre" ? "jardin" : "secondary"}>
+            {nombreDePlan(plan)}
           </Badge>
           <span className="tabular-nums">
             {plan.diasUsados} de {plan.diasTotales}

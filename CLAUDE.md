@@ -60,21 +60,37 @@ Se validan antes de permitir cualquier reserva:
 
 - Peso **hasta 20 kg**.
 - **Machos esterilizados** (las hembras no tienen este requisito).
-- **Vacunas al día**: todas las obligatorias vigentes y sin vencer al día del
-  servicio.
+- **Vacunas al día**: **óctuple, antirrábica y KC**, vigentes y sin vencer al
+  día del servicio.
+- **Desparasitación interna y externa al día.** Sin registro se avisa pero no
+  se bloquea: los perros cargados antes de que existiera el campo no tienen por
+  qué quedar rechazados de golpe.
+- **100% sociable.** Sin evaluar no bloquea; evaluado como no sociable, sí.
 - **Día de prueba aprobado** ($10.000) antes de la *primera* reserva del perro,
   sea de hotel o de jardín.
 
 ### Jardín
 
 - Horario **7:00–19:00**.
-- Día suelto: **≤6h $10.000**, **>6h $18.000** (exactamente 6h paga el tramo
-  barato).
-- Plan 5 días: **$75.000**, vigencia **15 días**.
-- Plan 20 días: **$200.000**, vigencia **45 días**.
-- Días **no acumulables** entre planes; uso L-D según disponibilidad.
+- Tarifa por tiempo, tres tramos: **menos de 4 h $10.000**, **entre 4 y 8 h
+  inclusive $16.000**, **más de 8 h $18.000**.
 - **Fuera de horario**: $1.000 por hora iniciada después de las 19:00, con 15
   minutos de gracia, calculado desde el **check-out real** registrado por staff.
+
+### Planes de jardín
+
+Son **mensuales y se pagan por adelantado**: valen hasta el último día del mes
+en que se compran. Los días no usados **no pasan al mes siguiente** y se usan
+**de lunes a viernes**.
+
+- Se cobran **por día**, y el precio por día baja según cuántos se contraten:
+  **5 a 10 días $15.000/día**, **más de 10 días $14.000/día**.
+- **Pase libre: $220.000 al mes**, todos los días hábiles.
+- Mínimo 5 días.
+
+El pase libre se modela con `diasTotales` igual a los días hábiles que le
+quedan al mes: es el máximo que se puede usar de verdad, y así el saldo, el
+consumo y los avisos de vencimiento funcionan igual que en cualquier plan.
 
 ### Hotel
 
@@ -85,22 +101,28 @@ Se validan antes de permitir cualquier reserva:
   que se pasa de un bloque ya empezado. Por construcción el recargo nunca llega
   a costar más que una noche (22h × $1.000 < $24.000), así que alargarse
   siempre sale más barato que reservar un día de más.
-- Descuentos por duración: **sobre 7 días -10%**, **sobre 14 días -15%**
-  (umbrales estrictos: 8+ bloques y 15+ bloques).
-- Paseo opcional: **$4.000**.
+- Descuentos por duración, umbrales **inclusivos** ("desde N noches"):
+  **desde 7 noches -10%**, **desde 14 noches -15%**. Son excluyentes entre sí.
+- **10% adicional** si el cliente tiene un **plan de jardín vigente**.
+- Paseo opcional: **$4.000 cada uno**, de 30 min.
 - Reserva con **abono del 30%**.
 - **Devolución solo si se cancela con ≥48h de aviso**: devuelve el abono
   completo. Con menos de 48h, no se devuelve nada.
 
 ### Servicios spot
 
-- **Spa** (según tamaño: chico ≤10 kg, grande >10 kg):
+- **Baño** (pequeño bajo 10 kg, mediano de 10 a 25 kg):
   - Express: $13.000 / $18.000
   - Premium: $25.000 / $30.000
-  - **-20% para clientes activos**
+  - **-20% para clientes activos, SOLO en el premium.** El express ya está al
+    precio de entrada.
 - **Paseos sueltos**: $5.000 media hora, $10.000 la hora. **-20% para clientes**.
-- **Traslados**: base $8.000 hasta 5 km, +$700 por km adicional, +$2.000 en
-  horario punta (7:00–9:30 y 18:00–20:00), **tope $15.000**.
+- **Traslados**: es una **matriz**, no un precio por kilómetro.
+  - 0 a 5 km: $8.000 normal, $10.000 en punta
+  - 5 a 10 km: $12.000 normal, $15.000 en punta
+  - Punta: 7:00–9:00 y 17:00–20:00
+  - Más allá de 10 km el folleto no define tarifa: la app cobra el último
+    tramo para no quedarse sin precio.
 
 **Cliente activo** = tiene un plan vigente con saldo, o registró una estadía en
 los últimos 30 días.
@@ -108,9 +130,9 @@ los últimos 30 días.
 ### Descuentos
 
 - **Segundo perro del mismo dueño: -20%.**
-- Los descuentos son **acumulables en cascada**, aplicados en orden: primero el
-  de duración, después el de segundo perro, después el de cliente activo.
-  Ejemplo: hotel 10 días $240.000 → -10% = $216.000 → -20% = $172.800.
+- Los descuentos son **acumulables en cascada**, aplicados en orden: duración,
+  plan de jardín vigente, segundo perro, cliente activo.
+  Ejemplo: hotel 15 noches $360.000 → -15% = $306.000 → -20% = $244.800.
 - El desglose que ve el cliente debe mostrar cada descuento por separado con su
   monto, nunca un total sin explicación.
 
@@ -412,37 +434,22 @@ npm run typecheck
 4. **Portal cliente** ← siguiente
 5. **PWA** + pulido
 
-## 8. Pendiente: el folleto contradice varias reglas
+## 8. Del folleto
 
-El folleto de agosto 2026 se incorporó como patrón de **marca**. Pero también
-trae precios y requisitos que **no coinciden** con las reglas implementadas.
-Nada de esto se cambió sin confirmación; queda listado para decidir.
+Las reglas y los precios están **alineados al folleto de agosto 2026**, y todos
+los valores viven en `lib/config/precios.ts` y `lib/config/negocio.ts` para
+poder cambiarlos sin tocar reglas ni pantallas.
 
-| Tema | Folleto | Implementado |
-|---|---|---|
-| Jardín por tiempo | `<4h $10.000` · `4-8h $16.000` · `>8h $18.000` | `≤6h $10.000` · `>6h $18.000` |
-| Planes de jardín | Mensuales, pagados por adelantado, L-V: 5-10 días `$15.000/día`, +10 días `$14.000/día`, pase libre `$220.000/mes` | Packs: 5 días `$75.000` (15 días de vigencia), 20 días `$200.000` (45 días) |
-| Descuento hotel | **Desde** 7 noches (≥) | Estricto (>7) |
-| Hotel + plan jardín | 10% adicional con plan de jardín vigente | No existe |
-| Spa, descuento cliente | Solo en **baño premium** | En express y premium |
-| Spa, tamaño | Pequeños `<10kg`, medianos `10 a 25kg` | Chico `≤10kg`, grande `>10kg` sin tope |
-| Traslados | Matriz: `0-5km` $8.000/$10.000, `5-10km` $12.000/$15.000. Punta 7-9 y 17-20 | Base + $700/km + $2.000 punta, tope $15.000. Punta 7-9:30 y 18-20 |
-| Vacunas | **Óctuple**, antirrábica, KC | Séxtuple, antirrábica, traqueobronquitis |
-| Requisitos | Además: desparasitación interna y externa al día, ser 100% sociable | No están |
-| Reportes | 2 a 3 al día, en ventanas 8:00-10:30, 13:00-15:00, 18:00-19:30 | Sin ventanas |
-
-Sí coinciden y están bien: capacidad 25, tope 20 kg, machos esterilizados, día
-de prueba $10.000, horario de jardín 7:00-19:00 con recargo de $1.000/hora,
-hotel $1.000/hora y $24.000 las 24 h, paseos de hotel $4.000 **cada uno** de
-30 min, abono 30%, devolución con 48 h de aviso, días no acumulables, y los
-paseos sueltos ($5.000 media hora / $10.000 hora, 20% a clientes).
-
-Otros datos del folleto que sirven para la landing de la etapa 4:
+Datos del folleto que sirven para la landing de la etapa 4:
 
 - Ubicación: Providencia, cerca de Av. Diagonal Oriente con Manuel Montt.
 - Horario de atención (entregas y retiros): L-V 07:00-21:00, sáb-dom
   08:30-21:00. La casa funciona 24/7 pero fuera de ese horario no se entrega
-  ni se retira.
+  ni se retira. Ojo: es distinto del horario del **jardín** (7:00-19:00), que
+  es el que define el recargo.
+- Reportes: 2 a 3 al día, en las ventanas 8:00-10:30, 13:00-15:00 y
+  18:00-19:30 (`NEGOCIO.reportes.ventanas`). Todavía no están aplicadas en la
+  pantalla de reportes.
 - Traslados cubren parte de Vitacura, Las Condes, La Reina, Peñalolén,
   Providencia, Ñuñoa y Macul.
 - Urgencias: MediVet, Miguel Claro 2116, Ñuñoa.

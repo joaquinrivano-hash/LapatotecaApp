@@ -9,7 +9,8 @@ const planVigente = crearPlanComprado({
   id: "pl1",
   clienteId: "c1",
   perroId: "p1",
-  tipo: "p20",
+  tipo: "dias",
+  dias: 20,
   compradoEn: instanteEnHora("2026-06-01", "10:00"),
 });
 

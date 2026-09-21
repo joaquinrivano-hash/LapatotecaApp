@@ -27,6 +27,8 @@ export interface EntradaPrecioHotel {
   paseosContratados?: number;
   /** Posición del perro en la reserva del dueño: 0 = primero, sin descuento. */
   indicePerro?: number;
+  /** Suma un 10% adicional si el cliente tiene plan de jardín vigente. */
+  conPlanDeJardin?: boolean;
 }
 
 export interface DesgloseEstadiaHotel {
@@ -78,25 +80,39 @@ export function desglosarEstadiaHotel(
 }
 
 /**
- * Descuento por duración. Son tramos EXCLUYENTES: sobre 14 días reemplaza al
- * de sobre 7 días, no se suman entre sí.
+ * Descuento por duración. Son tramos EXCLUYENTES: el de 14 noches reemplaza al
+ * de 7, no se suman entre sí.
+ *
+ * Los umbrales son INCLUSIVOS: el folleto dice "desde 7 noches", así que 7
+ * noches justas ya llevan el 10%.
  */
 export function descuentoPorDuracion(
   bloques: number,
 ): DescuentoSolicitado | null {
-  if (bloques > NEGOCIO.hotel.bloquesParaDescuento15) {
+  if (bloques >= NEGOCIO.hotel.nochesParaDescuento15) {
     return {
-      concepto: `Estadía larga (más de ${NEGOCIO.hotel.bloquesParaDescuento15} días)`,
-      porcentaje: DESCUENTOS.hotelSobre14Dias,
+      concepto: `Desde ${NEGOCIO.hotel.nochesParaDescuento15} noches`,
+      porcentaje: DESCUENTOS.hotelDesde14Noches,
     };
   }
-  if (bloques > NEGOCIO.hotel.bloquesParaDescuento10) {
+  if (bloques >= NEGOCIO.hotel.nochesParaDescuento10) {
     return {
-      concepto: `Estadía larga (más de ${NEGOCIO.hotel.bloquesParaDescuento10} días)`,
-      porcentaje: DESCUENTOS.hotelSobre7Dias,
+      concepto: `Desde ${NEGOCIO.hotel.nochesParaDescuento10} noches`,
+      porcentaje: DESCUENTOS.hotelDesde7Noches,
     };
   }
   return null;
+}
+
+/** El folleto da un 10% adicional a quien tiene un plan de jardín vigente. */
+export function descuentoPorPlanDeJardin(
+  tienePlanVigente: boolean,
+): DescuentoSolicitado | null {
+  if (!tienePlanVigente) return null;
+  return {
+    concepto: "Con plan de jardín vigente",
+    porcentaje: DESCUENTOS.hotelConPlanDeJardin,
+  };
 }
 
 export function calcularPrecioHotel(entrada: EntradaPrecioHotel): Cotizacion {
@@ -136,6 +152,7 @@ export function calcularPrecioHotel(entrada: EntradaPrecioHotel): Cotizacion {
     lineas,
     soloAplicables([
       descuentoPorDuracion(bloques),
+      descuentoPorPlanDeJardin(entrada.conPlanDeJardin ?? false),
       descuentoSegundoPerro(entrada.indicePerro),
     ]),
   );

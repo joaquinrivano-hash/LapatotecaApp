@@ -10,16 +10,20 @@ const DIA = "2026-06-15";
 const en = (hora: string) => instanteEnHora(DIA, hora);
 
 describe("clasificarJornada", () => {
-  it("hasta 6 horas es jornada corta", () => {
-    expect(clasificarJornada(en("08:00"), en("13:00"))).toBe("corta");
+  it("bajo 4 horas es jornada corta", () => {
+    expect(clasificarJornada(en("08:00"), en("11:30"))).toBe("corta");
   });
 
-  it("6 horas exactas siguen siendo jornada corta", () => {
-    expect(clasificarJornada(en("08:00"), en("14:00"))).toBe("corta");
+  it("4 horas justas ya son jornada media", () => {
+    expect(clasificarJornada(en("08:00"), en("12:00"))).toBe("media");
   });
 
-  it("un minuto más de 6 horas ya es jornada larga", () => {
-    expect(clasificarJornada(en("08:00"), en("14:01"))).toBe("larga");
+  it("8 horas justas siguen siendo jornada media", () => {
+    expect(clasificarJornada(en("08:00"), en("16:00"))).toBe("media");
+  });
+
+  it("un minuto más de 8 horas es jornada larga", () => {
+    expect(clasificarJornada(en("08:00"), en("16:01"))).toBe("larga");
   });
 });
 
@@ -27,10 +31,19 @@ describe("calcularPrecioJardin", () => {
   it("cobra $10.000 la jornada corta", () => {
     const c = calcularPrecioJardin({
       inicio: en("08:00"),
-      fin: en("13:00"),
+      fin: en("11:30"),
       origen: "dia_suelto",
     });
     expect(c.total).toBe(10_000);
+  });
+
+  it("cobra $16.000 la jornada media", () => {
+    const c = calcularPrecioJardin({
+      inicio: en("08:00"),
+      fin: en("14:00"),
+      origen: "dia_suelto",
+    });
+    expect(c.total).toBe(16_000);
   });
 
   it("cobra $18.000 la jornada larga", () => {

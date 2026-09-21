@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Perro, Vacuna } from "@/lib/types";
 import {
+  desparasitacionAlDia,
   evaluarAdmision,
   tieneVacunasAlDia,
   vacunasFaltantes,
@@ -11,17 +12,13 @@ const HOY = "2026-06-15";
 
 function vacunasAlDia(vence = "2027-01-01"): Vacuna[] {
   return [
-    { tipo: "sextuple", fechaAplicacion: "2026-01-01", fechaVencimiento: vence },
+    { tipo: "octuple", fechaAplicacion: "2026-01-01", fechaVencimiento: vence },
     {
       tipo: "antirrabica",
       fechaAplicacion: "2026-01-01",
       fechaVencimiento: vence,
     },
-    {
-      tipo: "traqueobronquitis",
-      fechaAplicacion: "2026-01-01",
-      fechaVencimiento: vence,
-    },
+    { tipo: "kc", fechaAplicacion: "2026-01-01", fechaVencimiento: vence },
   ];
 }
 
@@ -35,6 +32,8 @@ function perro(sobrescribir: Partial<Perro> = {}): Perro {
     sexo: "macho",
     esterilizado: true,
     vacunas: vacunasAlDia(),
+    desparasitadoHasta: "2027-01-01",
+    sociable: true,
     diaDePrueba: { estado: "aprobado", fecha: "2026-05-01" },
     creadoEn: "2026-01-01T12:00:00.000Z",
     ...sobrescribir,
@@ -77,7 +76,7 @@ describe("evaluarAdmision", () => {
       perro({
         vacunas: [
           {
-            tipo: "sextuple",
+            tipo: "octuple",
             fechaAplicacion: "2025-01-01",
             fechaVencimiento: "2026-01-01",
           },
@@ -87,7 +86,7 @@ describe("evaluarAdmision", () => {
     );
     expect(r.admitido).toBe(false);
     const vacunas = r.problemas.find((p) => p.motivo === "vacunas")!;
-    expect(vacunas.mensaje).toContain("séxtuple");
+    expect(vacunas.mensaje).toContain("óctuple");
     expect(vacunas.mensaje).toContain("antirrábica");
   });
 
@@ -131,11 +130,12 @@ describe("evaluarAdmision", () => {
         pesoKg: 30,
         esterilizado: false,
         vacunas: [],
+        desparasitadoHasta: undefined,
         diaDePrueba: { estado: "pendiente" },
       }),
       { fecha: HOY },
     );
-    expect(r.problemas).toHaveLength(4);
+    expect(r.problemas).toHaveLength(5);
   });
 });
 
@@ -157,7 +157,7 @@ describe("vacunas", () => {
       vacunas: [
         ...vacunasAlDia(),
         {
-          tipo: "sextuple",
+          tipo: "octuple",
           fechaAplicacion: "2024-01-01",
           fechaVencimiento: "2025-01-01",
         },
@@ -176,5 +176,40 @@ describe("vacunas", () => {
   it("las ya vencidas no salen como 'por vencer'", () => {
     const p = perro({ vacunas: vacunasAlDia("2026-06-01") });
     expect(vacunasPorVencer(p, HOY, 30)).toHaveLength(0);
+  });
+});
+
+describe("requisitos que agregó el folleto", () => {
+  it("avisa cuando no hay registro de desparasitación, pero no bloquea", () => {
+    const r = evaluarAdmision(perro({ desparasitadoHasta: undefined }), {
+      fecha: HOY,
+    });
+    const problema = r.problemas.find((p) => p.motivo === "desparasitacion")!;
+    expect(problema.mensaje).toContain("No tenemos registro");
+    expect(problema.subsanable).toBe(true);
+  });
+
+  it("marca la desparasitación vencida", () => {
+    const r = evaluarAdmision(perro({ desparasitadoHasta: "2026-06-01" }), {
+      fecha: HOY,
+    });
+    expect(r.problemas.map((p) => p.motivo)).toContain("desparasitacion");
+    expect(desparasitacionAlDia(perro({ desparasitadoHasta: "2026-06-01" }), HOY)).toBe(false);
+  });
+
+  it("la desparasitación que vence hoy todavía sirve", () => {
+    expect(desparasitacionAlDia(perro({ desparasitadoHasta: HOY }), HOY)).toBe(true);
+  });
+
+  it("un perro no sociable no entra", () => {
+    const r = evaluarAdmision(perro({ sociable: false }), { fecha: HOY });
+    const problema = r.problemas.find((p) => p.motivo === "sociabilidad")!;
+    expect(problema.subsanable).toBe(false);
+  });
+
+  it("sin evaluar la sociabilidad no se bloquea", () => {
+    expect(
+      evaluarAdmision(perro({ sociable: undefined }), { fecha: HOY }).admitido,
+    ).toBe(true);
   });
 });

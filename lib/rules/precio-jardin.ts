@@ -37,15 +37,35 @@ export interface EntradaPrecioJardin {
   indicePerro?: number;
 }
 
-export type TipoJornada = "corta" | "larga";
+export type TipoJornada = "corta" | "media" | "larga";
 
+/**
+ * Tres tramos por tiempo, según el folleto:
+ *   menos de 4 h            → corta
+ *   entre 4 y 8 h inclusive → media
+ *   más de 8 h              → larga
+ */
 export function clasificarJornada(
   inicio: InstanteISO,
   fin: InstanteISO,
 ): TipoJornada {
   const horas = Math.max(0, horasEntre(inicio, fin));
-  return horas <= NEGOCIO.jardin.horasJornadaCorta ? "corta" : "larga";
+  if (horas < NEGOCIO.jardin.horasJornadaCorta) return "corta";
+  if (horas <= NEGOCIO.jardin.horasJornadaMedia) return "media";
+  return "larga";
 }
+
+const PRECIO_JORNADA: Record<TipoJornada, number> = {
+  corta: PRECIOS.jardin.jornadaCorta,
+  media: PRECIOS.jardin.jornadaMedia,
+  larga: PRECIOS.jardin.jornadaLarga,
+};
+
+const DETALLE_JORNADA: Record<TipoJornada, string> = {
+  corta: `Menos de ${NEGOCIO.jardin.horasJornadaCorta} h`,
+  media: `Entre ${NEGOCIO.jardin.horasJornadaCorta} y ${NEGOCIO.jardin.horasJornadaMedia} h`,
+  larga: `Más de ${NEGOCIO.jardin.horasJornadaMedia} h`,
+};
 
 export interface RecargoFueraDeHorario {
   horas: number;
@@ -102,14 +122,8 @@ export function calcularPrecioJardin(
   } else {
     lineas.push({
       concepto: "Jardín día suelto",
-      detalle:
-        jornada === "corta"
-          ? `Jornada de hasta ${NEGOCIO.jardin.horasJornadaCorta} h`
-          : `Jornada de más de ${NEGOCIO.jardin.horasJornadaCorta} h`,
-      monto:
-        jornada === "corta"
-          ? PRECIOS.jardin.diaSueltoCorto
-          : PRECIOS.jardin.diaSueltoLargo,
+      detalle: DETALLE_JORNADA[jornada],
+      monto: PRECIO_JORNADA[jornada],
     });
   }
 

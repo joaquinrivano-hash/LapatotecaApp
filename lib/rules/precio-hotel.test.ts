@@ -113,36 +113,48 @@ describe("calcularPrecioHotel", () => {
 });
 
 describe("descuentos por duración", () => {
-  it("7 días exactos no alcanzan el descuento: el umbral es estricto", () => {
-    expect(descuentoPorDuracion(7)).toBeNull();
+  it("6 noches todavía no alcanzan", () => {
+    expect(descuentoPorDuracion(6)).toBeNull();
+    const c = calcularPrecioHotel({
+      inicio: en("01", "10:00"),
+      fin: en("07", "10:00"),
+    });
+    expect(c.descuentos).toEqual([]);
+    expect(c.total).toBe(144_000);
+  });
+
+  it("desde 7 noches descuenta 10%: el umbral es inclusivo", () => {
     const c = calcularPrecioHotel({
       inicio: en("01", "10:00"),
       fin: en("08", "10:00"),
     });
-    expect(c.descuentos).toEqual([]);
-    expect(c.total).toBe(168_000);
+    expect(c.subtotal).toBe(168_000);
+    expect(c.total).toBe(151_200);
   });
 
-  it("sobre 7 días descuenta 10%", () => {
+  it("desde 14 noches descuenta 15% y reemplaza al de 10%", () => {
     const c = calcularPrecioHotel({
       inicio: en("01", "10:00"),
-      fin: en("09", "10:00"),
-    });
-    expect(c.subtotal).toBe(192_000);
-    expect(c.total).toBe(172_800);
-  });
-
-  it("sobre 14 días descuenta 15% y reemplaza al de 10%", () => {
-    const c = calcularPrecioHotel({
-      inicio: en("01", "10:00"),
-      fin: en("16", "10:00"),
+      fin: en("15", "10:00"),
     });
     expect(c.descuentos).toHaveLength(1);
-    expect(c.subtotal).toBe(360_000);
-    expect(c.total).toBe(306_000);
+    expect(c.subtotal).toBe(336_000);
+    expect(c.total).toBe(285_600);
+  });
+
+  it("el plan de jardín vigente suma otro 10% en cascada", () => {
+    // 3 noches = 72.000 → -10% = 64.800
+    const c = calcularPrecioHotel({
+      inicio: en("15", "10:00"),
+      fin: en("18", "10:00"),
+      conPlanDeJardin: true,
+    });
+    expect(c.descuentos).toHaveLength(1);
+    expect(c.total).toBe(64_800);
   });
 
   it("el segundo perro encadena su 20% sobre el precio ya descontado", () => {
+    // 15 noches = 360.000 → -15% = 306.000 → -20% = 244.800
     const c = calcularPrecioHotel({
       inicio: en("01", "10:00"),
       fin: en("16", "10:00"),
