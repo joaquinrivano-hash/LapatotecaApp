@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Dog, PawPrint, TriangleAlert, User } from "lucide-react";
+import Image from "next/image";
+import { Camera, Dog, PawPrint, TriangleAlert, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ import {
   reparosParaEntrar,
 } from "@/lib/servicios/registro";
 import { useSesion } from "@/lib/store/sesion";
+import { comprimirImagen } from "@/lib/utils/imagen";
 import { formatearCLP } from "@/lib/utils/moneda";
 import { esTelefonoValido } from "@/lib/utils/telefono";
 import type { Sexo, TipoVacuna } from "@/lib/types";
@@ -52,6 +54,8 @@ export default function CrearCuenta() {
     Partial<Record<TipoVacuna, string>>
   >({});
   const [desparasitadoHasta, setDesparasitadoHasta] = useState("");
+  const [foto, setFoto] = useState<string | undefined>();
+  const archivo = useRef<HTMLInputElement>(null);
 
   const peso = Number(perro.pesoKg.replace(",", "."));
   const pesoValido = Number.isFinite(peso) && peso > 0;
@@ -78,6 +82,17 @@ export default function CrearCuenta() {
 
   const puedeCrear = completo && reparos.length === 0;
 
+  async function elegirFoto(evento: React.ChangeEvent<HTMLInputElement>) {
+    const entrante = evento.target.files?.[0];
+    evento.target.value = "";
+    if (!entrante) return;
+    try {
+      setFoto(await comprimirImagen(entrante));
+    } catch {
+      toast.error("No pudimos procesar esa foto.");
+    }
+  }
+
   async function crear() {
     try {
       const { cliente, perro: creado } = await ejecutar((repo) =>
@@ -91,6 +106,7 @@ export default function CrearCuenta() {
             esterilizado: perro.esterilizado,
             alimentacion: perro.alimentacion,
             desparasitadoHasta: desparasitadoHasta || undefined,
+            fotoUrl: foto,
             vacunas: VACUNAS.filter((tipo) => vencimientos[tipo]).map(
               (tipo) => ({ tipo, fechaVencimiento: vencimientos[tipo]! }),
             ),
@@ -195,6 +211,51 @@ export default function CrearCuenta() {
               <Dog className="size-5" />
               Tu perro
             </h2>
+
+            <div className="space-y-2">
+              {foto ? (
+                <div className="relative">
+                  <Image
+                    src={foto}
+                    alt="Foto del perro"
+                    width={640}
+                    height={480}
+                    unoptimized
+                    className="h-44 w-full rounded-2xl object-cover"
+                  />
+                  <Button
+                    size="icon"
+                    variant="secondary"
+                    aria-label="Quitar la foto"
+                    className="absolute top-2 right-2"
+                    onClick={() => setFoto(undefined)}
+                  >
+                    <X />
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => archivo.current?.click()}
+                  className="text-muted-foreground hover:border-primary hover:text-primary flex h-28 w-full flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-border transition-colors"
+                >
+                  <Camera className="size-6" />
+                  <span className="text-sm font-semibold">
+                    Ponle una foto (opcional)
+                  </span>
+                  <span className="text-xs">
+                    Así el equipo lo reconoce apenas llega.
+                  </span>
+                </button>
+              )}
+              <input
+                ref={archivo}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={elegirFoto}
+              />
+            </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Campo
