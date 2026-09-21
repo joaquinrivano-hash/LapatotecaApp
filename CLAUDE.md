@@ -292,6 +292,26 @@ eso no es una decisión, es un error.
 Solo aplica a perros que ya son clientes. Uno nuevo necesita su día de prueba
 antes de quedarse, así que no puede entrar por esta vía.
 
+### El portal del cliente
+
+`/lib/servicios/reservas.ts`. Todo pasa por la misma puerta: se **cotiza**
+primero —con capacidad y admisión ya revisadas— y recién después se confirma.
+Así la pantalla muestra el precio en vivo y los reparos sin haber creado nada.
+
+A diferencia del ingreso no planificado del staff, acá **sí se bloquea**: el
+cliente reserva a futuro y no hay ningún perro en la puerta que registrar.
+
+- El día suelto de jardín **no se cobra al agendar**: se cobra al cerrar la
+  jornada, con la hora real. Lo que se descuenta al agendar es el día del plan.
+- La reserva de hotel deja el **abono del 30% pagado** y el saldo se cobra al
+  retiro.
+- La tienda, si un producto no alcanza, **compra lo que hay y lo avisa**, en
+  vez de fallar la orden entera: en una tienda de mostrador eso es lo que pasa.
+- El desglose que ve el cliente muestra **cada descuento por separado**.
+
+Los `input type="date"` se ven en el formato del navegador, que puede no ser el
+chileno. Por eso llevan la fecha escrita debajo.
+
 ### El backoffice y sus definiciones
 
 `/lib/servicios/panel.ts`, `calendario.ts`, `cobranza.ts` y `clientes.ts`.
@@ -431,8 +451,10 @@ npm run typecheck
 3. ~~**Backoffice admin**~~ — hecho: KPIs, calendario de ocupación, clientes
    y perros con alertas, cobranza con la cuenta del día 1, planes e
    inventario.
-4. **Portal cliente** ← siguiente
-5. **PWA** + pulido
+4. ~~**Portal cliente**~~ — hecho: landing con precios de config, reserva de
+   hotel y jardín con precio en vivo, compra de planes, servicios spot,
+   tienda con carrito y la cuenta con perros, planes, reservas y reportes.
+5. **PWA** + pulido ← siguiente
 
 ## 8. Del folleto
 
