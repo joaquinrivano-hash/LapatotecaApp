@@ -12,12 +12,14 @@ import {
   MessageCircle,
   Moon,
   Sun,
+  Users,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   AccionesPortada,
+  BotonAgendar,
   CabeceraPublica,
 } from "@/components/shared/cabecera-publica";
 import { NEGOCIO } from "@/lib/config/negocio";
@@ -233,9 +235,7 @@ export default function Landing() {
                 {formatearCLP(PRECIOS.diaDePrueba)}): pasa un día con nosotros y
                 vemos juntos cómo le va.
               </p>
-              <Button asChild size="lg">
-                <Link href="/reservar">Agendar el día de prueba</Link>
-              </Button>
+              <BotonAgendar size="lg">Agendar el día de prueba</BotonAgendar>
             </div>
           </div>
         </section>
@@ -343,11 +343,34 @@ export default function Landing() {
                   {formatearCLP(PRECIOS.jardin.horaFueraDeHorario)} por hora.
                 </p>
               </div>
-              <Button asChild size="lg" className="w-full">
-                <Link href="/reservar">Reservar ahora</Link>
-              </Button>
+              <BotonAgendar size="lg" className="w-full">
+                Reservar ahora
+              </BotonAgendar>
             </CardContent>
           </Card>
+        </section>
+
+        {/* Esto no es del negocio: es el interruptor del prototipo. Va al
+            final y con letra chica, pero tiene que estar en la portada para
+            poder mostrar las tres caras sin saberse la URL de memoria. */}
+        <section className="border-t border-border/60 bg-secondary/30">
+          <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-3 px-4 py-8 text-center">
+            <p className="text-muted-foreground text-sm text-pretty">
+              Esto es un prototipo con datos de prueba. Puedes entrar como
+              cliente, como cuidador o como administración.
+            </p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button asChild variant="outline">
+                <Link href="/ingresar">
+                  <Users />
+                  Elegir con qué cara entrar
+                </Link>
+              </Button>
+              <Button asChild variant="ghost">
+                <Link href="/crear-cuenta">Crear una cuenta nueva</Link>
+              </Button>
+            </div>
+          </div>
         </section>
       </main>
     </>

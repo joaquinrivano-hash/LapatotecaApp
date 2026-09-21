@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   Bath,
+  CalendarCheck,
   Car,
   Check,
   Footprints,
@@ -110,6 +112,36 @@ export default function Reservar() {
             </button>
           ))}
         </div>
+      )}
+
+      {/* Un perro sin día de prueba aprobado no puede reservar nada: en vez
+          de dejar que choque contra el reparo en cada pestaña, la pantalla
+          lo manda derecho a tomar ese día. */}
+      {perro && perro.diaDePrueba.estado !== "aprobado" && (
+        <Card className="border-warning/50">
+          <CardContent className="space-y-3 p-5">
+            <h2 className="font-display flex items-center gap-2 text-lg font-bold">
+              <CalendarCheck className="size-5" />
+              Primero, el día de prueba
+            </h2>
+            <p className="text-muted-foreground text-sm text-pretty">
+              {perro.diaDePrueba.estado === "agendado"
+                ? `${perro.nombre} tiene su día de prueba agendado${
+                    perro.diaDePrueba.fecha
+                      ? ` para el ${formatearFechaLarga(perro.diaDePrueba.fecha)}`
+                      : ""
+                  }. Cuando lo apruebe, se abren las reservas.`
+                : perro.diaDePrueba.estado === "rechazado"
+                  ? `El día de prueba de ${perro.nombre} no salió bien. Escríbenos y lo vemos juntos.`
+                  : `Antes de la primera reserva, ${perro.nombre} pasa una jornada con nosotros para conocernos.`}
+            </p>
+            {perro.diaDePrueba.estado === "pendiente" && (
+              <Button asChild size="lg" className="w-full">
+                <Link href="/dia-de-prueba">Agendar el día de prueba</Link>
+              </Button>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {perro && (

@@ -23,11 +23,20 @@ export interface ProblemaAdmision {
   mensaje: string;
   /** true si el dueño puede resolverlo (vacunar, esterilizar, agendar). */
   subsanable: boolean;
+  /**
+   * false cuando es un aviso y no un impedimento.
+   *
+   * Hoy solo la desparasitación sin registro: los perros cargados antes de
+   * que existiera el campo no tienen por qué quedar rechazados de golpe.
+   */
+  bloquea: boolean;
 }
 
 export interface ResultadoAdmision {
   admitido: boolean;
   problemas: ProblemaAdmision[];
+  /** Los que impiden de verdad. `problemas` incluye además los avisos. */
+  bloqueos: ProblemaAdmision[];
 }
 
 const NOMBRE_VACUNA: Record<string, string> = {
@@ -122,6 +131,7 @@ export function evaluarAdmision(
       motivo: "peso",
       mensaje: `${perro.nombre} pesa ${perro.pesoKg} kg y el máximo es ${NEGOCIO.admision.pesoMaximoKg} kg.`,
       subsanable: false,
+      bloquea: true,
     });
   }
 
@@ -134,6 +144,7 @@ export function evaluarAdmision(
       motivo: "esterilizacion",
       mensaje: `${perro.nombre} necesita estar esterilizado para quedarse con nosotros.`,
       subsanable: true,
+      bloquea: true,
     });
   }
 
@@ -146,13 +157,15 @@ export function evaluarAdmision(
         motivo: "desparasitacion",
         mensaje: `No tenemos registro de la desparasitación de ${perro.nombre}.`,
         subsanable: true,
+        bloquea: false,
       });
     } else if (diasEntre(fecha, perro.desparasitadoHasta) < 0) {
       problemas.push({
         motivo: "desparasitacion",
         mensaje: `La desparasitación de ${perro.nombre} está vencida.`,
         subsanable: true,
-      });
+      bloquea: true,
+    });
     }
   }
 
@@ -161,6 +174,7 @@ export function evaluarAdmision(
       motivo: "sociabilidad",
       mensaje: `${perro.nombre} no pasó la evaluación de sociabilidad.`,
       subsanable: false,
+      bloquea: true,
     });
   }
 
@@ -171,6 +185,7 @@ export function evaluarAdmision(
       motivo: "vacunas",
       mensaje: `A ${perro.nombre} le falta tener al día: ${lista}.`,
       subsanable: true,
+      bloquea: true,
     });
   }
 
@@ -182,8 +197,10 @@ export function evaluarAdmision(
           ? `El día de prueba de ${perro.nombre} no fue aprobado.`
           : `${perro.nombre} necesita hacer su día de prueba antes de la primera reserva.`,
       subsanable: perro.diaDePrueba.estado !== "rechazado",
+      bloquea: true,
     });
   }
 
-  return { admitido: problemas.length === 0, problemas };
+  const bloqueos = problemas.filter((p) => p.bloquea);
+  return { admitido: bloqueos.length === 0, problemas, bloqueos };
 }

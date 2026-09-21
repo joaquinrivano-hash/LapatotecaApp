@@ -55,7 +55,7 @@ export class ReservaRechazada extends Error {
 }
 
 /** Ocupantes ya comprometidos en un rango de días. */
-async function ocupantesEnRango(
+export async function ocupantesEnRango(
   repo: RepositorioPatoteca,
   desde: FechaISO,
   hasta: FechaISO,

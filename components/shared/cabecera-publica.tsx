@@ -78,9 +78,7 @@ export function AccionesPortada() {
 
   return (
     <div className="flex flex-wrap justify-center gap-3 lg:justify-start">
-      <Button asChild size="xl">
-        <Link href="/reservar">Reservar</Link>
-      </Button>
+      <BotonAgendar>Reservar</BotonAgendar>
       <Button asChild size="xl" variant="outline">
         {destino ? (
           <Link href={destino.href}>{destino.etiqueta}</Link>
@@ -89,5 +87,34 @@ export function AccionesPortada() {
         )}
       </Button>
     </div>
+  );
+}
+
+/**
+ * El botón de reservar de la landing.
+ *
+ * Un visitante sin cuenta no tiene nada que reservar todavía: la casa exige
+ * el día de prueba antes de la primera estadía. Por eso "agendar" lo lleva a
+ * crear su cuenta, no a la pantalla de roles del prototipo.
+ */
+export function BotonAgendar({
+  children,
+  size = "xl",
+  variant,
+  className,
+}: {
+  children: React.ReactNode;
+  size?: React.ComponentProps<typeof Button>["size"];
+  variant?: React.ComponentProps<typeof Button>["variant"];
+  className?: string;
+}) {
+  const montado = useMontado();
+  const rol = useSesion((s) => s.rol);
+  const destino = montado && rol === "cliente" ? "/reservar" : "/crear-cuenta";
+
+  return (
+    <Button asChild size={size} variant={variant} className={className}>
+      <Link href={destino}>{children}</Link>
+    </Button>
   );
 }
