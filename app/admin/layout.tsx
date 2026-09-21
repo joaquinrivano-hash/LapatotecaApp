@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   CalendarDays,
   ChartNoAxesColumn,
+  Database,
   LogOut,
   Package,
   Ticket,
@@ -25,6 +26,7 @@ const SECCIONES = [
   { href: "/admin/pagos", etiqueta: "Pagos", icono: Wallet },
   { href: "/admin/planes", etiqueta: "Planes", icono: Ticket },
   { href: "/admin/inventario", etiqueta: "Tienda", icono: Package },
+  { href: "/admin/datos", etiqueta: "Datos", icono: Database },
 ];
 
 export default function AdminLayout({
