@@ -7,6 +7,7 @@ import {
   AlertCircle,
   Camera,
   CheckCheck,
+  ChevronDown,
   Eye,
   RefreshCw,
   Send,
@@ -31,7 +32,7 @@ import { useSesion } from "@/lib/store/sesion";
 import { cn } from "@/lib/utils";
 import { formatearHora } from "@/lib/utils/fecha";
 import { comprimirImagen } from "@/lib/utils/imagen";
-import type { EstadoMensaje, MensajeSaliente } from "@/lib/types";
+import type { Cliente, EstadoMensaje, MensajeSaliente } from "@/lib/types";
 
 const ATAJOS = [
   "Día tranquilo, comió todo.",
@@ -362,6 +363,7 @@ export default function Reportes() {
       <TabsContent value="enviados" className="mt-3 space-y-2">
         <BandejaDeSalida
           mensajes={mensajes.datos ?? []}
+          clientes={dia.datos?.clientes ?? []}
           cargando={mensajes.cargando}
         />
       </TabsContent>
@@ -383,12 +385,17 @@ const ETIQUETA_ESTADO: Record<
 
 function BandejaDeSalida({
   mensajes,
+  clientes,
   cargando,
 }: {
   mensajes: MensajeSaliente[];
+  clientes: Cliente[];
   cargando: boolean;
 }) {
   const { ocupado, ejecutar } = useAccion();
+  // Cuál está abierto. Uno a la vez: en el celular dos mensajes abiertos ya
+  // obligan a hacer scroll para comparar.
+  const [abierto, setAbierto] = useState<string | null>(null);
 
   if (cargando) return <Skeleton className="h-40" />;
 
@@ -416,24 +423,108 @@ function BandejaDeSalida({
         .sort((a, b) => b.creadoEn.localeCompare(a.creadoEn))
         .map((mensaje) => {
           const etiqueta = ETIQUETA_ESTADO[mensaje.estado];
+          const cliente = clientes.find((c) => c.id === mensaje.clienteId);
+          const nombre = cliente
+            ? `${cliente.nombre} ${cliente.apellido}`
+            : mensaje.destino;
+          const estaAbierto = abierto === mensaje.id;
+
           return (
             <div
               key={mensaje.id}
-              className="bg-card space-y-2 rounded-2xl border border-border/70 p-3 shadow-sm"
+              className="bg-card overflow-hidden rounded-2xl border border-border/70 shadow-sm"
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground text-sm tabular-nums">
-                  {formatearHora(mensaje.creadoEn)} · {mensaje.destino}
-                </span>
-                <Badge variant={etiqueta.variante}>{etiqueta.texto}</Badge>
-              </div>
+              {/* Toda la tarjeta abre el mensaje: en el celular un botoncito
+                  "ver más" es un blanco muy chico con el perro en brazos. */}
+              <button
+                type="button"
+                aria-expanded={estaAbierto}
+                onClick={() => setAbierto(estaAbierto ? null : mensaje.id)}
+                className="hover:bg-secondary/40 w-full space-y-2 p-3 text-left transition-colors"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground truncate text-sm tabular-nums">
+                    {formatearHora(mensaje.creadoEn)} · {nombre}
+                  </span>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Badge variant={etiqueta.variante}>{etiqueta.texto}</Badge>
+                    <ChevronDown
+                      className={cn(
+                        "text-muted-foreground size-4 transition-transform",
+                        estaAbierto && "rotate-180",
+                      )}
+                    />
+                  </div>
+                </div>
 
-              <p className="line-clamp-3 text-sm whitespace-pre-line">
-                {mensaje.vistaPrevia}
-              </p>
+                {estaAbierto ? (
+                  <p className="text-sm whitespace-pre-line">
+                    {mensaje.vistaPrevia}
+                  </p>
+                ) : (
+                  // Cerrado se juntan las líneas: el mensaje parte con el
+                  // saludo y una línea en blanco, así que recortar a dos
+                  // líneas "de verdad" dejaba ver solo "¡Hola Paula!".
+                  <p className="line-clamp-2 text-sm">
+                    {mensaje.vistaPrevia
+                      .split("\n")
+                      .map((linea) => linea.trim())
+                      .filter(Boolean)
+                      .join(" ")}
+                  </p>
+                )}
+
+                {!estaAbierto && (
+                  <span className="text-muted-foreground text-xs">
+                    Toca para ver el mensaje completo
+                  </span>
+                )}
+              </button>
+
+              {estaAbierto && (
+                <div className="space-y-3 border-t border-border/60 p-3">
+                  {mensaje.adjuntoUrl && (
+                    <Image
+                      src={mensaje.adjuntoUrl}
+                      alt="Foto que se mandó en el reporte"
+                      width={640}
+                      height={480}
+                      unoptimized
+                      className="h-48 w-full rounded-xl object-cover"
+                    />
+                  )}
+
+                  <dl className="text-muted-foreground space-y-1 text-xs">
+                    <div className="flex justify-between gap-3">
+                      <dt>Va a</dt>
+                      <dd className="text-foreground font-semibold tabular-nums">
+                        {mensaje.destino}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt>Plantilla</dt>
+                      <dd>
+                        <code>{mensaje.plantilla}</code>
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt>Último cambio de estado</dt>
+                      <dd className="tabular-nums">
+                        {formatearHora(mensaje.actualizadoEn)}
+                      </dd>
+                    </div>
+                    {mensaje.intentos > 1 && (
+                      <div className="flex justify-between gap-3">
+                        <dt>Intentos</dt>
+                        <dd className="tabular-nums">{mensaje.intentos}</dd>
+                      </div>
+                    )}
+                  </dl>
+                </div>
+              )}
 
               {mensaje.estado === "fallido" && (
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-2 border-t border-border/60 p-3">
                   <span className="text-destructive text-xs">
                     {mensaje.error}
                   </span>
