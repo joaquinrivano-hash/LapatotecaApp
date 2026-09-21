@@ -19,6 +19,8 @@ import {
   DESCRIPCIONES_INCIDENTE,
   NOMBRES,
   NOMBRES_PERRO,
+  ALIMENTACION_PERRO,
+  INDICACIONES_PERRO,
   NOTAS_PERRO,
   NOTAS_REPORTE,
   PRODUCTOS,
@@ -229,6 +231,14 @@ export function generarSeed(
       fechaNacimiento: sumarDias(hoy, -azar.entero(365, 4_400)),
       vacunas: generarVacunas(i),
       diaDePrueba,
+      // La mayoría tiene comida anotada; las indicaciones son la excepción,
+      // como en la vida real.
+      alimentacion: azar.probabilidad(0.75)
+        ? azar.elegir(ALIMENTACION_PERRO)
+        : undefined,
+      indicaciones: azar.probabilidad(0.3)
+        ? azar.elegir(INDICACIONES_PERRO)
+        : undefined,
       notas: azar.probabilidad(0.6) ? azar.elegir(NOTAS_PERRO) : undefined,
       // Desparasitación: la mayoría al día, algunos vencidos o sin registro.
       desparasitadoHasta:

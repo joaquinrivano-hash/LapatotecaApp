@@ -223,7 +223,8 @@ public/        manifest.webmanifest · sw.js · marca/ (logo e íconos)
 
 ### Modelo de datos
 
-`Cliente` · `Perro` (con `Vacuna[]` y `diaDePrueba`) · `ReservaHotel` ·
+`Cliente` · `Perro` (con `Vacuna[]`, `diaDePrueba`, `alimentacion`,
+`indicaciones` y `notas`) · `ReservaHotel` ·
 `EstadiaJardin` · `PlanComprado` · `Suscripcion` · `ServicioAgendado` ·
 `Pago` · `Producto` · `OrdenTienda` · `Reporte` · `Incidente`
 
@@ -280,6 +281,20 @@ Sobre los planes: el día del pack se descuenta cuando se **agenda** la
 estadía, no cuando el perro llega. El check-in no toca el saldo. En un ingreso
 no planificado agendar y llegar son el mismo momento, así que ahí sí se
 descuenta al registrar.
+
+### La ficha del perro
+
+`components/staff/ficha-perro.tsx`, la misma en Hoy y en Buscar. Se abre
+tocando el cuerpo de la tarjeta; el botón grande de la derecha sigue siendo la
+acción del día, así que marcar una llegada nunca abre la ficha.
+
+El orden es el de las preguntas que aparecen con el perro en brazos: quién es,
+qué come, qué cuidado especial tiene y si ya pasó algo antes. Por eso
+`alimentacion` e `indicaciones` son campos propios y no un párrafo dentro de
+`notas`: a la hora de almuerzo nadie lee un párrafo buscando la ración.
+
+Los incidentes se muestran como historial de los últimos 6 meses, con el conteo
+arriba ("2 anotados, 1 sobre leve") y los últimos cuatro en detalle.
 
 ### El perro que llega sin reserva
 

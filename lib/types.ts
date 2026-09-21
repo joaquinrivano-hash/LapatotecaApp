@@ -62,6 +62,15 @@ export interface Perro {
   /** El folleto lo exige explícitamente. `undefined` = sin evaluar. */
   sociable?: boolean;
   diaDePrueba: DiaDePrueba;
+  /**
+   * Qué come, cuánto y a qué hora. Va separado de `notas` porque es la
+   * pregunta que el staff hace todos los días a la hora de almuerzo, y
+   * buscarla dentro de un párrafo de texto libre no sirve.
+   */
+  alimentacion?: string;
+  /** Remedios, mañas y cuidados especiales: lo que no se puede olvidar. */
+  indicaciones?: string;
+  /** Todo lo demás, en texto libre. */
   notas?: string;
   creadoEn: InstanteISO;
 }

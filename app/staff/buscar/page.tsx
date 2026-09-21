@@ -2,32 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  CalendarDays,
-  LogIn,
-  LogOut,
-  Phone,
-  Scale,
-  Search,
-  Syringe,
-} from "lucide-react";
+import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
+import { FichaPerro } from "@/components/staff/ficha-perro";
 import { itemsDelDia } from "@/components/staff/items";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
-import { vacunasFaltantes } from "@/lib/rules/admision";
 import {
   cargarDiaDeStaff,
   hoyDelStaff,
@@ -36,9 +20,7 @@ import {
   registrarSalidaHotel,
   registrarSalidaJardin,
 } from "@/lib/servicios/asistencia";
-import { formatearHora } from "@/lib/utils/fecha";
 import { formatearCLP } from "@/lib/utils/moneda";
-import { formatearTelefono } from "@/lib/utils/telefono";
 import type { Perro } from "@/lib/types";
 
 export default function Buscar() {
@@ -191,7 +173,7 @@ export default function Buscar() {
       <Sheet open={abierto !== null} onOpenChange={(v) => !v && setAbierto(null)}>
         <SheetContent>
           {abierto && (
-            <FichaRapida
+            <FichaPerro
               perro={abierto}
               cliente={clienteDe(abierto)}
               item={itemDe(abierto.id)}
@@ -203,107 +185,5 @@ export default function Buscar() {
         </SheetContent>
       </Sheet>
     </div>
-  );
-}
-
-function FichaRapida({
-  perro,
-  cliente,
-  item,
-  hoy,
-  ocupado,
-  onAccion,
-}: {
-  perro: Perro;
-  cliente?: { nombre: string; apellido: string; telefono: string };
-  item?: ReturnType<typeof itemsDelDia>[number];
-  hoy: string;
-  ocupado: boolean;
-  onAccion: (accion: "llego" | "se_fue") => void;
-}) {
-  const faltantes = vacunasFaltantes(perro, hoy);
-
-  return (
-    <>
-      <SheetHeader>
-        <div className="flex items-center gap-3">
-          <PerroAvatar
-            id={perro.id}
-            nombre={perro.nombre}
-            fotoUrl={perro.fotoUrl}
-            tamano="xl"
-          />
-          <div className="min-w-0">
-            <SheetTitle>{perro.nombre}</SheetTitle>
-            <SheetDescription>
-              {perro.raza}
-              {cliente && ` · ${cliente.nombre} ${cliente.apellido}`}
-            </SheetDescription>
-          </div>
-        </div>
-      </SheetHeader>
-
-      <div className="space-y-3 px-5">
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="secondary">
-            <Scale />
-            {perro.pesoKg} kg
-          </Badge>
-          {cliente && (
-            <Badge variant="secondary">
-              <Phone />
-              {formatearTelefono(cliente.telefono)}
-            </Badge>
-          )}
-          {item && (
-            <Badge variant={item.linea === "hotel" ? "hotel" : "jardin"}>
-              <CalendarDays />
-              {formatearHora(item.inicioProgramado)} a{" "}
-              {formatearHora(item.finProgramado)}
-            </Badge>
-          )}
-        </div>
-
-        {faltantes.length > 0 && (
-          <p className="bg-warning/12 text-warning flex items-start gap-2 rounded-xl p-3 text-sm">
-            <Syringe className="mt-0.5 size-4 shrink-0" />
-            <span>
-              Tiene vencida la vacuna {faltantes.join(", ")}. Avísale al dueño.
-            </span>
-          </p>
-        )}
-
-        {perro.notas && (
-          <p className="bg-secondary/60 rounded-xl p-3 text-sm text-pretty">
-            {perro.notas}
-          </p>
-        )}
-      </div>
-
-      <SheetFooter>
-        {item?.estado === "esperado" && (
-          <Button size="xl" disabled={ocupado} onClick={() => onAccion("llego")}>
-            <LogIn />
-            Marcar que llegó
-          </Button>
-        )}
-        {item?.estado === "presente" && (
-          <Button
-            size="xl"
-            variant="accent"
-            disabled={ocupado}
-            onClick={() => onAccion("se_fue")}
-          >
-            <LogOut />
-            Marcar que se fue
-          </Button>
-        )}
-        {!item && (
-          <p className="text-muted-foreground py-2 text-center text-sm">
-            Hoy no tiene reserva ni jardín agendado.
-          </p>
-        )}
-      </SheetFooter>
-    </>
   );
 }

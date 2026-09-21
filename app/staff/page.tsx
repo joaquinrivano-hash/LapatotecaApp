@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DoorOpen, PawPrint, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { OcupacionFranjas } from "@/components/shared/ocupacion-franjas";
@@ -14,6 +15,7 @@ import {
   type ItemAsistencia,
 } from "@/components/staff/fila-asistencia";
 import { AgregarPerro } from "@/components/staff/agregar-perro";
+import { FichaPerro } from "@/components/staff/ficha-perro";
 import { itemsDelDia } from "@/components/staff/items";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import {
@@ -32,11 +34,16 @@ export default function Hoy() {
   const hoy = hoyDelStaff();
   const dia = useConsulta((repo) => cargarDiaDeStaff(repo, hoy), [hoy]);
   const { ocupado, ejecutar } = useAccion();
+  /** Qué perro tiene la ficha abierta. Se guarda el id, no el item: después
+      de un check-in el item cambia y el guardado quedaría viejo. */
+  const [fichaDe, setFichaDe] = useState<string | null>(null);
 
   const items = useMemo(
     () => (dia.datos ? itemsDelDia(dia.datos) : []),
     [dia.datos],
   );
+
+  const ficha = items.find((i) => i.perro.id === fichaDe);
 
   const porLlegar = items.filter((i) => i.estado === "esperado");
   const adentro = items.filter((i) => i.estado === "presente");
@@ -162,6 +169,7 @@ export default function Hoy() {
                 item={item}
                 ocupado={ocupado}
                 onLlego={llego}
+                onAbrir={(i) => setFichaDe(i.perro.id)}
               />
             ))
           )}
@@ -181,6 +189,7 @@ export default function Hoy() {
                 ocupado={ocupado}
                 onSeFue={seFue}
                 onDeshacer={item.linea === "jardin" ? deshacer : undefined}
+                onAbrir={(i) => setFichaDe(i.perro.id)}
               />
             ))
           )}
@@ -194,11 +203,37 @@ export default function Hoy() {
             />
           ) : (
             cerrados.map((item) => (
-              <FilaAsistencia key={`${item.linea}-${item.id}`} item={item} />
+              <FilaAsistencia
+                key={`${item.linea}-${item.id}`}
+                item={item}
+                onAbrir={(i) => setFichaDe(i.perro.id)}
+              />
             ))
           )}
         </TabsContent>
       </Tabs>
+
+      <Sheet
+        open={ficha !== undefined}
+        onOpenChange={(v) => !v && setFichaDe(null)}
+      >
+        <SheetContent>
+          {ficha && (
+            <FichaPerro
+              perro={ficha.perro}
+              cliente={ficha.cliente}
+              item={ficha}
+              hoy={hoy}
+              ocupado={ocupado}
+              onAccion={(accion) => {
+                setFichaDe(null);
+                if (accion === "llego") void llego(ficha);
+                else void seFue(ficha);
+              }}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

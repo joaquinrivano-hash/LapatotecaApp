@@ -33,6 +33,9 @@ export interface ItemAsistencia {
  *
  * El staff usa esto con el celular en una mano y el perro en la otra: el botón
  * ocupa todo lo que puede y la acción es siempre la misma, "llegó" o "se fue".
+ *
+ * El resto de la tarjeta abre la ficha del perro (comida, indicaciones,
+ * incidentes). Son dos blancos separados: tocar "Llegó" nunca abre la ficha.
  */
 export function FilaAsistencia({
   item,
@@ -40,17 +43,19 @@ export function FilaAsistencia({
   onLlego,
   onSeFue,
   onDeshacer,
+  onAbrir,
 }: {
   item: ItemAsistencia;
   ocupado?: boolean;
   onLlego?: (item: ItemAsistencia) => void;
   onSeFue?: (item: ItemAsistencia) => void;
   onDeshacer?: (item: ItemAsistencia) => void;
+  onAbrir?: (item: ItemAsistencia) => void;
 }) {
   const esHotel = item.linea === "hotel";
 
-  return (
-    <div className="bg-card flex items-center gap-3 rounded-2xl border border-border/70 p-3 shadow-sm">
+  const ficha = (
+    <div className="flex min-w-0 flex-1 items-center gap-3">
       <PerroAvatar
         id={item.perro.id}
         nombre={item.perro.nombre}
@@ -82,6 +87,23 @@ export function FilaAsistencia({
           <Horario item={item} />
         </p>
       </div>
+    </div>
+  );
+
+  return (
+    <div className="bg-card flex items-center gap-3 rounded-2xl border border-border/70 p-3 shadow-sm">
+      {onAbrir ? (
+        <button
+          type="button"
+          onClick={() => onAbrir(item)}
+          aria-label={`Ver la ficha de ${item.perro.nombre}`}
+          className="flex min-w-0 flex-1 items-center rounded-xl text-left transition-opacity active:opacity-70"
+        >
+          {ficha}
+        </button>
+      ) : (
+        ficha
+      )}
 
       <div className="flex shrink-0 flex-col items-end gap-1">
         {item.estado === "esperado" && onLlego && (
