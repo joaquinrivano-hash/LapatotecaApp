@@ -15,8 +15,12 @@ import { useSesion } from "@/lib/store/sesion";
 import { cn } from "@/lib/utils";
 import type { Rol } from "@/lib/types";
 
+/**
+ * A dónde va cada rol al entrar. El cliente NO se queda en la landing: esa es
+ * la página pública, y ahí no hay forma de saber si la sesión quedó abierta.
+ */
 const DESTINO: Record<Rol, string> = {
-  cliente: "/",
+  cliente: "/mi-cuenta",
   staff: "/staff",
   admin: "/admin",
 };
