@@ -1,14 +1,18 @@
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-/** Fondos cálidos para los perros sin foto. Siempre el mismo por perro. */
+/**
+ * Fondos para los perros sin foto, derivados de los tres colores de marca
+ * (rosa, ámbar y azul marino) en distintas profundidades. Siempre el mismo por
+ * perro, para que el equipo lo reconozca de lejos.
+ */
 const FONDOS = [
-  "bg-[#f7d9c4] text-[#8a4a24]",
-  "bg-[#e9f3e5] text-[#3d6b33]",
-  "bg-[#e6eefa] text-[#27508c]",
-  "bg-[#fbe8c8] text-[#8a6420]",
-  "bg-[#f2e2ef] text-[#7a4a70]",
-  "bg-[#dff0ee] text-[#2c6460]",
+  "bg-[#fde4ec] text-[#a3204f]",
+  "bg-[#fdf0d9] text-[#8a5600]",
+  "bg-[#e6ebf7] text-[#24458f]",
+  "bg-[#fbd9e4] text-[#8f1c48]",
+  "bg-[#fae7cd] text-[#7a4d00]",
+  "bg-[#dde4f3] text-[#1b3573]",
 ];
 
 function fondoDe(semilla: string): string {

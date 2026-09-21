@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 
 /*
- * La Patoteca — tema cálido y hogareño.
+ * La Patoteca — tema tomado del folleto de marca.
  * Sin modo oscuro a propósito: el prototipo es una casa con luz, no un panel.
  * Todos los colores se definen acá; los componentes usan los tokens semánticos.
  */
@@ -10,59 +10,73 @@
 :root {
   --radius: 1rem;
 
-  --background: #fff8f0;
-  --foreground: #4a3b32;
+  /*
+   * Paleta tomada del folleto de marca (agosto 2026).
+   * Los valores se muestrearon del PDF, no se estimaron a ojo.
+   *
+   * La marca son TRES colores: rosa, azul marino y ámbar, sobre crema.
+   */
+
+  /* El rosa del círculo del logo. Es DECORATIVO: con 2,97:1 contra blanco no
+     puede llevar texto encima. Para botones está --primary. */
+  --marca-rosa: #fe5c82;
+  --marca-azul: #1b2f63;
+  --marca-ambar: #f59c00;
+  --marca-crema: #fdf6ec;
+
+  --background: #fdf6ec;
+  --foreground: #1b2f63;
 
   --card: #ffffff;
-  --card-foreground: #4a3b32;
+  --card-foreground: #1b2f63;
   --popover: #ffffff;
-  --popover-foreground: #4a3b32;
+  --popover-foreground: #1b2f63;
 
-  /* Terracota: el color de la marca, botones y acciones principales */
-  --primary: #e2703a;
-  --primary-foreground: #fff8f0;
+  /* Fucsia del folleto, profundizado hasta 5,09:1 para que el texto blanco de
+     los botones sea legible. El del folleto tal cual quedaba en 4,49:1. */
+  --primary: #d6175a;
+  --primary-foreground: #ffffff;
 
-  --secondary: #f3e7da;
-  --secondary-foreground: #6b4f3f;
-  --muted: #f6ece1;
-  --muted-foreground: #8a7263;
-  --accent: #6fa287;
-  --accent-foreground: #ffffff;
+  --secondary: #fbe7ea;
+  --secondary-foreground: #a3204f;
+  --muted: #fbf1e6;
+  --muted-foreground: #5c6b95;
 
-  --destructive: #c0392b;
+  /* El ámbar lleva texto marino, nunca blanco: con blanco queda en 2,18:1. */
+  --accent: #f59c00;
+  --accent-foreground: #1b2f63;
+
+  --destructive: #a4161a;
   --destructive-foreground: #ffffff;
-  --success: #4f8a5b;
+  --success: #2e7d32;
   --success-foreground: #ffffff;
-  --warning: #d98324;
+  --warning: #b06d00;
   --warning-foreground: #ffffff;
 
-  --border: #ead9c7;
-  --input: #ead9c7;
-  --ring: #e2703a;
+  --border: #f2e3d4;
+  --input: #e8d9c9;
+  --ring: #d6175a;
 
   /*
-   * Hotel = noche = azul · Jardín = día = verde.
-   * Son los DOS colores de serie del producto y están validados como paleta
-   * categórica contra el fondo crema: ΔE 25,8 a vista normal y 24,9 en
-   * protanopía, chroma sobre el piso y contraste sobre 3:1.
+   * Colores de serie: hotel = azul marino, jardín = ámbar. Los dos salen del
+   * folleto y están validados como paleta categórica contra el crema:
+   * ΔE 36,0 a vista normal y 30,1 en protanopía, chroma sobre el piso y
+   * contraste sobre 3:1.
    *
-   * Los tonos originales (#6b8cbf / #6fa287) se veían más suaves pero
-   * reprobaban: quedaban a ΔE 12 entre sí, indistinguibles incluso con visión
-   * de color completa. No los bajes de saturación sin volver a validar.
+   * El folleto pinta el jardín de rosa, pero acá el rosa es el color de
+   * ACCIÓN (botones): una barra rosa al lado de un botón rosa se lee como si
+   * fuera tocable. El ámbar también es de marca y mantiene el dato separado
+   * de la acción.
    *
-   * Un tercer color de serie NO pasa junto a estos dos: naranjo y verde
-   * colapsan en protanopía, morado y azul a vista normal. Si el dashboard
-   * necesita una tercera categoría, va en facetas o small multiples, no en un
-   * hue nuevo.
+   * Un tercer color de serie hay que volver a validarlo antes de usarlo.
    */
-  --hotel: #2f6ab8;
-  --hotel-suave: #e6eefa;
-  --jardin: #4e9a3f;
-  --jardin-suave: #e9f3e5;
+  --hotel: #24458f;
+  --hotel-suave: #e6ebf7;
+  --jardin: #c77b00;
+  --jardin-suave: #fdf0d9;
 
-  /* Mismos dos colores, con el nombre que usan los gráficos. */
-  --chart-1: #2f6ab8;
-  --chart-2: #4e9a3f;
+  --chart-1: #24458f;
+  --chart-2: #c77b00;
 }
 
 @theme inline {
@@ -97,6 +111,11 @@
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
+
+  --color-marca-rosa: var(--marca-rosa);
+  --color-marca-azul: var(--marca-azul);
+  --color-marca-ambar: var(--marca-ambar);
+  --color-marca-crema: var(--marca-crema);
 
   --font-sans: var(--font-nunito), ui-rounded, system-ui, sans-serif;
   --font-display: var(--font-baloo), ui-rounded, system-ui, sans-serif;

@@ -268,28 +268,57 @@ revienta durante el render.
 
 ---
 
-## 4. Diseño
+## 4. Marca
 
-Cálido, cercano, hogareño. Paleta amigable, tipografía redondeada, íconos de
-perritos, **mucho aire**. Mobile-first y 100% responsive — el staff lo usa en el
-celular con el perro en brazos, así que los targets táctiles van generosos.
+El patrón es el **folleto oficial (agosto 2026)**. Los colores se muestrearon
+del PDF, no se estimaron a ojo.
+
+### Logo
+
+`public/marca/` tiene el logotipo blanco con transparencia, sacado del propio
+folleto, y los iconos ya compuestos (círculo rosa + logotipo) en 512, 192, 180
+y 32 px. Se usan con `<LogoPatoteca />`; nunca rehagas el círculo con CSS.
+
+El logotipo es "LA PATOTECA" con una casita formando la A y una huella en
+lugar de la O. La bajada es **"Hotel y guardería para perros"**. El negocio es
+una guardería; "jardín" es como se llama el servicio de día.
+
+### Colores
+
+| Token | Valor | Para qué |
+|---|---|---|
+| `--marca-rosa` | `#fe5c82` | El círculo del logo. **Decorativo**: 2,97:1 contra blanco, no lleva texto. |
+| `--primary` | `#d6175a` | Botones y acciones. Es el fucsia del folleto profundizado hasta 5,09:1 para que el texto blanco se lea. |
+| `--foreground` | `#1b2f63` | Azul marino del folleto. Todo el texto. |
+| `--accent` | `#f59c00` | Ámbar del folleto. Lleva texto **marino**, nunca blanco (con blanco queda en 2,18:1). |
+| `--background` | `#fdf6ec` | Crema del folleto. |
+
+### Gráficos
+
+Hotel = **azul marino** `#24458f`, jardín = **ámbar** `#c77b00`. Los dos salen
+del folleto y están validados como paleta categórica contra el crema: ΔE 36,0 a
+vista normal y 30,1 en protanopía.
+
+El folleto pinta el jardín de rosa, pero acá el rosa es el color de **acción**:
+una barra rosa al lado de un botón rosa se lee como si fuera tocable. Por eso
+el dato usa el ámbar, que también es de marca.
+
+Un tercer color de serie hay que **volver a validarlo** con el script antes de
+usarlo. Si no pasa, la tercera categoría va en facetas o small multiples, no en
+un hue nuevo.
+
+El cupo del día es el **pico** de las franjas. Cuando lo muestres en un
+gráfico, la línea de capacidad va dibujada y el pico etiquetado.
+
+### Tono
+
+Cálido, cercano, hogareño. Tipografía redondeada, **mucho aire**. Mobile-first
+y 100% responsive — el staff lo usa en el celular con el perro en brazos, así
+que los targets táctiles van generosos.
 
 - Nada de tablas densas en `/staff`: tarjetas grandes.
 - En `/admin` las tablas están bien, pero con respiración.
 - Estados vacíos con ilustración y una frase, nunca un "No data".
-
-### Gráficos
-
-Hotel (azul) y jardín (verde) son los **dos** colores de serie del producto y
-están validados como paleta categórica contra el fondo crema. Un tercer color
-de serie no pasa junto a ellos: naranjo y verde colapsan en protanopía, morado
-y azul a vista normal. Si un gráfico necesita una tercera categoría, va en
-facetas o small multiples, **no en un hue nuevo**. Los valores y el porqué
-están comentados en `app/globals.css`.
-
-El cupo del día es el **pico** de las franjas. Cuando lo muestres en un
-gráfico, la línea de capacidad va dibujada y el pico etiquetado: son los dos
-números que se leen de una mirada.
 
 ---
 
@@ -328,7 +357,44 @@ npm run typecheck
 4. **Portal cliente**
 5. **PWA** + pulido
 
-## 8. Datos mock
+## 8. Pendiente: el folleto contradice varias reglas
+
+El folleto de agosto 2026 se incorporó como patrón de **marca**. Pero también
+trae precios y requisitos que **no coinciden** con las reglas implementadas.
+Nada de esto se cambió sin confirmación; queda listado para decidir.
+
+| Tema | Folleto | Implementado |
+|---|---|---|
+| Jardín por tiempo | `<4h $10.000` · `4-8h $16.000` · `>8h $18.000` | `≤6h $10.000` · `>6h $18.000` |
+| Planes de jardín | Mensuales, pagados por adelantado, L-V: 5-10 días `$15.000/día`, +10 días `$14.000/día`, pase libre `$220.000/mes` | Packs: 5 días `$75.000` (15 días de vigencia), 20 días `$200.000` (45 días) |
+| Descuento hotel | **Desde** 7 noches (≥) | Estricto (>7) |
+| Hotel + plan jardín | 10% adicional con plan de jardín vigente | No existe |
+| Spa, descuento cliente | Solo en **baño premium** | En express y premium |
+| Spa, tamaño | Pequeños `<10kg`, medianos `10 a 25kg` | Chico `≤10kg`, grande `>10kg` sin tope |
+| Traslados | Matriz: `0-5km` $8.000/$10.000, `5-10km` $12.000/$15.000. Punta 7-9 y 17-20 | Base + $700/km + $2.000 punta, tope $15.000. Punta 7-9:30 y 18-20 |
+| Vacunas | **Óctuple**, antirrábica, KC | Séxtuple, antirrábica, traqueobronquitis |
+| Requisitos | Además: desparasitación interna y externa al día, ser 100% sociable | No están |
+| Reportes | 2 a 3 al día, en ventanas 8:00-10:30, 13:00-15:00, 18:00-19:30 | Sin ventanas |
+
+Sí coinciden y están bien: capacidad 25, tope 20 kg, machos esterilizados, día
+de prueba $10.000, horario de jardín 7:00-19:00 con recargo de $1.000/hora,
+hotel $1.000/hora y $24.000 las 24 h, paseos de hotel $4.000 **cada uno** de
+30 min, abono 30%, devolución con 48 h de aviso, días no acumulables, y los
+paseos sueltos ($5.000 media hora / $10.000 hora, 20% a clientes).
+
+Otros datos del folleto que sirven para la landing de la etapa 4:
+
+- Ubicación: Providencia, cerca de Av. Diagonal Oriente con Manuel Montt.
+- Horario de atención (entregas y retiros): L-V 07:00-21:00, sáb-dom
+  08:30-21:00. La casa funciona 24/7 pero fuera de ese horario no se entrega
+  ni se retira.
+- Traslados cubren parte de Vitacura, Las Condes, La Reina, Peñalolén,
+  Providencia, Ñuñoa y Macul.
+- Urgencias: MediVet, Miguel Claro 2116, Ñuñoa.
+- No se aceptan perros con ansiedad por separación severa, ladrido excesivo,
+  agresividad, miedo excesivo, tendencia a escaparse o juego brusco.
+
+## 9. Datos mock
 
 Seed **determinista** (misma salida en cada corrida): ~40 clientes, ~50 perros,
 60 días de historial. Los volúmenes deben respetar los patrones reales del

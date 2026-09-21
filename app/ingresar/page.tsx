@@ -2,10 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ClipboardList, Dog, PawPrint, ShieldCheck, User } from "lucide-react";
+import { ClipboardList, Dog, ShieldCheck, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LogoPatoteca } from "@/components/shared/logo";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import { STAFF } from "@/lib/data/catalogos";
 import { useConsulta } from "@/lib/hooks/use-consulta";
@@ -37,15 +38,11 @@ export default function Ingresar() {
   return (
     <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-8 px-4 py-10">
       <header className="flex flex-col items-center gap-3 text-center">
-        <div className="bg-primary/12 rounded-full p-4">
-          <PawPrint className="text-primary size-8" />
-        </div>
-        <div>
-          <h1 className="font-display text-3xl font-bold">La Patoteca</h1>
-          <p className="text-muted-foreground text-pretty">
-            Hotel y jardín canino en Providencia. Sin jaulas, como en la casa.
-          </p>
-        </div>
+        <LogoPatoteca tamano={104} prioridad />
+        <p className="text-muted-foreground text-pretty">
+          Hotel y guardería para perros en Providencia. Sin jaulas ni caniles,
+          como en la casa.
+        </p>
       </header>
 
       <div className="space-y-3">

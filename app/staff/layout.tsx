@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { AlertTriangle, CameraIcon, Home, LogOut, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
+import { LogoPatoteca } from "@/components/shared/logo";
 import { useMontado } from "@/lib/hooks/use-montado";
 import { useSesion } from "@/lib/store/sesion";
 import { cn } from "@/lib/utils";
@@ -47,7 +48,8 @@ export default function StaffLayout({
     <div className="flex min-h-full flex-1 flex-col">
       <header className="bg-background/90 sticky top-0 z-30 border-b border-border/60 backdrop-blur-sm">
         <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-3 px-4 py-3">
-          <div className="min-w-0">
+          <LogoPatoteca tamano={40} className="shrink-0" prioridad />
+          <div className="min-w-0 flex-1">
             <p className="font-display truncate text-lg font-bold">
               Hola{staff ? `, ${staff}` : ""}
             </p>

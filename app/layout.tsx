@@ -16,13 +16,20 @@ const baloo = Baloo_2({
 });
 
 export const metadata: Metadata = {
-  title: "La Patoteca — Hotel y jardín canino en Providencia",
+  title: "La Patoteca — Hotel y guardería para perros",
   description:
-    "Cuidamos a tu perro en una casa, sin jaulas. Jardín de día, hotel, spa, paseos y traslados en Providencia, Santiago.",
+    "Cuidamos a tu perro en una casa, sin jaulas ni caniles. Guardería de día, hotel, spa, paseos y traslados en Providencia, Santiago.",
+  icons: {
+    icon: [
+      { url: "/marca/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/marca/icono-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: "/marca/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#e2703a",
+  themeColor: "#fe5c82",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
