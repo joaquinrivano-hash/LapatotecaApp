@@ -62,14 +62,32 @@ export const CALLES = [
 export const NOTAS_PERRO = [
   "Le cuesta compartir los juguetes, pero se relaja después de un rato.",
   "Muy sociable, se lleva bien con todos.",
-  "Come dos veces al día, trae su comida en bolsita.",
   "Tiene miedo a los ruidos fuertes.",
   "Regalón, busca upa todo el día.",
   "Juega fuerte con los grandes, ojo con los chiquititos.",
   "Duerme siesta después de almuerzo.",
-  "Toma remedio para la alergia en la mañana.",
   "Se escapa si la puerta queda abierta.",
   "Le encanta el agua.",
+] as const;
+
+/** Qué come. Lo que el staff mira a la hora de almuerzo. */
+export const ALIMENTACION_PERRO = [
+  "Trae su comida en bolsita. Una al almuerzo.",
+  "Dos veces al día: media taza en la mañana y media a las 17:00.",
+  "Come solo pellet seco, una taza al almuerzo.",
+  "Ración húmeda al almuerzo, la trae el dueño.",
+  "Una taza de pellet con un poco de agua tibia, a las 13:00.",
+  "No come hasta la tarde; si no come al almuerzo, no insistir.",
+] as const;
+
+/** Remedios y cuidados. Lo que no se puede olvidar. */
+export const INDICACIONES_PERRO = [
+  "Remedio para la alergia en la mañana, con comida.",
+  "No puede recibir snacks: está a dieta por indicación del veterinario.",
+  "Gotas en el ojo derecho al mediodía.",
+  "Usa arnés, no collar: se suelta.",
+  "Que no se moje: le queda el pelo húmedo y le da otitis.",
+  "Descansa a las 15:00 en la pieza chica; si no, se sobreexcita.",
 ] as const;
 
 export const NOTAS_REPORTE = [
