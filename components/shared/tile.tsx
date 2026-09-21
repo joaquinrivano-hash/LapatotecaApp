@@ -33,7 +33,7 @@ export function Tile({
         className,
       )}
     >
-      <div className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
+      <div className="text-muted-foreground flex items-center gap-1.5 truncate text-xs font-semibold uppercase">
         {Icono && <Icono className="size-3.5" />}
         {etiqueta}
       </div>

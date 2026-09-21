@@ -206,6 +206,50 @@ Hotel y jardín se consultan juntos a través de una vista unificada
 `OcupacionDia`, que es lo que usan capacidad, calendario y KPIs. Cuando
 agregues una línea de servicio nueva que ocupe espacio, tiene que aportar ahí.
 
+### Integraciones externas
+
+`/lib/integraciones` sigue el mismo criterio que el repositorio: la app habla
+con una interfaz, nunca con el proveedor.
+
+**Los reportes se mandan por WhatsApp Business.** Eso trae reglas que no son
+negociables y que ya están modeladas:
+
+- Para escribirle PRIMERO a un cliente (fuera de la ventana de 24 h desde su
+  último mensaje) **no se puede mandar texto libre**: hay que usar una
+  plantilla aprobada en WhatsApp Manager. Las plantillas viven en
+  `mensajeria/plantillas.ts` con parámetros posicionales `{{1}}`, `{{2}}`, y
+  hay que darlas de alta con el mismo nombre e idioma en el panel de Meta.
+- Los teléfonos se normalizan a E.164 (`+56912345678`) antes de salir.
+- Un reporte que cubre varios perros manda **un mensaje por dueño**, con sus
+  perros nombrados. Nadie recibe tres WhatsApps porque su vecino salió en la
+  foto.
+- **Todo mensaje se guarda antes de intentar enviarlo.** Si falla, queda en la
+  bandeja con su motivo y se puede reintentar; nunca se pierde un reporte
+  porque se cayó la red.
+
+El canal se elige con `NEXT_PUBLIC_CANAL_MENSAJERIA`: `simulado` (por defecto,
+no toca la red, sirve para demos sin cuenta de Meta) o `whatsapp`. El token es
+secreto y vive solo en el servidor, detrás de
+`/api/integraciones/whatsapp/enviar`. Ver `.env.example`.
+
+El webhook (`/api/integraciones/whatsapp/webhook`) traduce los estados de
+entrega de Meta, pero **no los persiste**: la bandeja vive en el localStorage
+del navegador y el servidor no la alcanza. El punto de enganche para cuando
+exista base de datos está marcado en el archivo.
+
+### Capa de servicios
+
+`/lib/servicios` junta las reglas puras con el repositorio. Las reglas siguen
+sin saber que existe el almacenamiento y las pantallas siguen sin calcular
+precios: piden una acción y reciben el resultado ya cotizado.
+
+Ahí vive, por ejemplo, que el check-out del jardín **vuelve a cotizar con la
+hora real** (de ahí sale el recargo fuera de horario) y que cerrar dos veces
+corrige el cobro en vez de duplicarlo.
+
+Sobre los planes: el día del pack se descuenta cuando se **agenda** la
+estadía, no cuando el perro llega. El check-in no toca el saldo.
+
 ### Datos que persisten
 
 `RepositorioLocal` guarda todo el set en `localStorage` bajo
@@ -233,6 +277,19 @@ celular con el perro en brazos, así que los targets táctiles van generosos.
 - Nada de tablas densas en `/staff`: tarjetas grandes.
 - En `/admin` las tablas están bien, pero con respiración.
 - Estados vacíos con ilustración y una frase, nunca un "No data".
+
+### Gráficos
+
+Hotel (azul) y jardín (verde) son los **dos** colores de serie del producto y
+están validados como paleta categórica contra el fondo crema. Un tercer color
+de serie no pasa junto a ellos: naranjo y verde colapsan en protanopía, morado
+y azul a vista normal. Si un gráfico necesita una tercera categoría, va en
+facetas o small multiples, **no en un hue nuevo**. Los valores y el porqué
+están comentados en `app/globals.css`.
+
+El cupo del día es el **pico** de las franjas. Cuando lo muestres en un
+gráfico, la línea de capacidad va dibujada y el pico etiquetado: son los dos
+números que se leen de una mirada.
 
 ---
 
@@ -264,8 +321,10 @@ npm run typecheck
 
 1. ~~**Base + reglas + datos mock**~~ — hecho: config, types, `rules/` con
    tests, repositorio y seed.
-2. **App staff** ← siguiente
-3. **Backoffice admin**
+2. ~~**App staff**~~ — hecho: Hoy con ocupación por franja, check-in/out de un
+   toque, reportes por WhatsApp e incidentes. Incluye la capa de
+   integraciones.
+3. **Backoffice admin** ← siguiente
 4. **Portal cliente**
 5. **PWA** + pulido
 
@@ -275,3 +334,13 @@ Seed **determinista** (misma salida en cada corrida): ~40 clientes, ~50 perros,
 60 días de historial. Los volúmenes deben respetar los patrones reales del
 negocio (ver sección 1) para que el dashboard muestre algo creíble: jardín
 fuerte entre semana y flojo el fin de semana, hotel al revés.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

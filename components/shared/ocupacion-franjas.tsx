@@ -39,11 +39,17 @@ export function OcupacionFranjas({
   const slotActivo = activo !== null ? slots[activo] : null;
   // El eje llega al tope de capacidad salvo que ya estemos por encima.
   const techo = Math.max(capacidad, ocupacion.pico);
-  const alto = (n: number) => `${(n / techo) * 100}%`;
+  const porcentaje = (n: number) => `${(n / techo) * 100}%`;
+
+  const indicePico = slots.findIndex(
+    (s) => s.minutoDelDia === ocupacion.picoMinutoDelDia,
+  );
 
   const horasEtiquetadas = slots
     .map((s, i) => ({ s, i }))
     .filter(({ s }) => s.minutoDelDia % 180 === 0);
+
+  const posicion = (i: number) => `${((i + 0.5) / slots.length) * 100}%`;
 
   return (
     <div className={cn("space-y-3", className)}>
@@ -52,7 +58,7 @@ export function OcupacionFranjas({
         <button
           type="button"
           onClick={() => setVerTabla((v) => !v)}
-          className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold transition-colors"
+          className="text-muted-foreground hover:text-foreground flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold whitespace-nowrap transition-colors"
         >
           <TableIcon className="size-3.5" />
           {verTabla ? "Ver gráfico" : "Ver horas"}
@@ -62,41 +68,61 @@ export function OcupacionFranjas({
       {verTabla ? (
         <TablaFranjas slots={slots} />
       ) : (
-        <div className="relative">
-          {/* Línea de capacidad: el tope que no se puede pasar. */}
-          <div
-            className="pointer-events-none absolute inset-x-0 z-10 flex items-center"
-            style={{ bottom: `calc(${alto(capacidad)} + 1.25rem)` }}
-          >
-            <div className="border-muted-foreground/35 w-full border-t border-dashed" />
-            <span className="text-muted-foreground bg-card ml-1 shrink-0 rounded px-1 text-[10px] font-semibold tabular-nums">
-              {capacidad}
-            </span>
+        <div>
+          {/* Franja para la etiqueta del pico y el globo del dato. */}
+          <div className="relative h-7">
+            {slotActivo ? (
+              <div className="bg-foreground text-background absolute top-0 left-1/2 z-20 -translate-x-1/2 rounded-xl px-3 py-1 text-xs font-semibold whitespace-nowrap shadow-lg">
+                {hhmmDesdeMinutos(slotActivo.minutoDelDia)} · {slotActivo.total}{" "}
+                {slotActivo.total === 1 ? "perro" : "perros"}
+                <span className="font-normal opacity-80">
+                  {" "}
+                  ({slotActivo.jardin} jardín · {slotActivo.hotel} hotel)
+                </span>
+              </div>
+            ) : null}
           </div>
 
-          {slotActivo && (
-            <div className="bg-foreground text-background pointer-events-none absolute -top-1 left-1/2 z-20 -translate-x-1/2 rounded-xl px-3 py-1.5 text-xs font-semibold whitespace-nowrap shadow-lg">
-              {hhmmDesdeMinutos(slotActivo.minutoDelDia)} · {slotActivo.total}{" "}
-              {slotActivo.total === 1 ? "perro" : "perros"}
-              <span className="font-normal opacity-80">
-                {" "}
-                ({slotActivo.hotel} hotel · {slotActivo.jardin} jardín)
-              </span>
-            </div>
-          )}
-
+          {/*
+            La pista de barras: su alto es el 100% contra el que se miden las
+            barras Y la línea de capacidad. Tiene que ser su propio contenedor,
+            sin el eje adentro, o los porcentajes salen corridos.
+          */}
           <div
-            className="flex h-36 items-end gap-px pt-6"
+            className="relative h-32"
             role="img"
             aria-label={`Ocupación del día. Pico de ${ocupacion.pico} perros simultáneos a las ${hhmmDesdeMinutos(ocupacion.picoMinutoDelDia)}, sobre una capacidad de ${capacidad}.`}
             onPointerLeave={() => setActivo(null)}
           >
-            {slots.map((slot, i) => {
-              const esPico =
-                slot.minutoDelDia === ocupacion.picoMinutoDelDia &&
-                ocupacion.pico > 0;
+            <div
+              className="pointer-events-none absolute inset-x-0 z-10 flex items-center gap-1"
+              style={{ bottom: porcentaje(capacidad) }}
+            >
+              <span className="text-muted-foreground bg-card shrink-0 rounded px-1 text-[10px] font-semibold tabular-nums">
+                {capacidad}
+              </span>
+              <div className="border-muted-foreground/35 w-full border-t border-dashed" />
+            </div>
 
-              return (
+            {/*
+              La etiqueta del pico va pegada a su propia barra. En una fila
+              fija arriba chocaba con la línea de capacidad cuando el pico se
+              acercaba al tope, que es justo cuando más importa leerla.
+            */}
+            {indicePico >= 0 && ocupacion.pico > 0 && activo === null && (
+              <span
+                className="text-muted-foreground pointer-events-none absolute z-10 -translate-x-1/2 text-[10px] font-bold tabular-nums"
+                style={{
+                  left: posicion(indicePico),
+                  bottom: `calc(${porcentaje(ocupacion.pico)} + 2px)`,
+                }}
+              >
+                {ocupacion.pico}
+              </span>
+            )}
+
+            <div className="absolute inset-0 flex items-end gap-px">
+              {slots.map((slot, i) => (
                 <button
                   key={slot.minutoDelDia}
                   type="button"
@@ -112,12 +138,12 @@ export function OcupacionFranjas({
                       "flex w-full flex-col-reverse gap-[2px] overflow-hidden rounded-t transition-opacity",
                       activo !== null && activo !== i && "opacity-45",
                     )}
-                    style={{ height: alto(slot.total) }}
+                    style={{ height: porcentaje(slot.total) }}
                   >
                     {slot.hotel > 0 && (
                       <div
                         className="bg-hotel w-full shrink-0 rounded-t-[2px]"
-                        style={{ height: alto(slot.hotel) }}
+                        style={{ height: porcentaje(slot.hotel) }}
                       />
                     )}
                     {slot.jardin > 0 && (
@@ -127,14 +153,9 @@ export function OcupacionFranjas({
                       />
                     )}
                   </div>
-                  {esPico && (
-                    <span className="text-muted-foreground absolute -top-0.5 left-1/2 -translate-x-1/2 text-[10px] font-bold tabular-nums">
-                      {ocupacion.pico}
-                    </span>
-                  )}
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
 
           <div className="text-muted-foreground relative mt-1 h-4 text-[10px] font-medium tabular-nums">
@@ -142,7 +163,7 @@ export function OcupacionFranjas({
               <span
                 key={s.minutoDelDia}
                 className="absolute -translate-x-1/2"
-                style={{ left: `${((i + 0.5) / slots.length) * 100}%` }}
+                style={{ left: posicion(i) }}
               >
                 {hhmmDesdeMinutos(s.minutoDelDia)}
               </span>

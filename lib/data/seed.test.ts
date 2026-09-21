@@ -273,3 +273,24 @@ describe("el seed aguanta cualquier día de referencia", () => {
     },
   );
 });
+
+describe("estados coherentes con el día de referencia", () => {
+  it("el perro que hace check-out hoy está alojado, no esperando", () => {
+    const terminanHoy = datos.reservasHotel.filter(
+      (r) => fechaISO(r.finProgramado) === HOY && fechaISO(r.inicioProgramado) < HOY,
+    );
+    expect(terminanHoy.length).toBeGreaterThan(0);
+    expect(
+      terminanHoy.every((r) => r.estado === "en_curso" || r.estado === "finalizada"),
+    ).toBe(true);
+  });
+
+  it("ninguna reserva por confirmar empezó antes de hoy", () => {
+    const porLlegar = datos.reservasHotel.filter(
+      (r) => r.estado === "confirmada" || r.estado === "pendiente",
+    );
+    expect(
+      porLlegar.every((r) => fechaISO(r.inicioProgramado) >= HOY),
+    ).toBe(true);
+  });
+});

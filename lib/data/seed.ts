@@ -400,7 +400,10 @@ export function generarSeed(
       });
 
       const yaTermino = fechaFin < hoy;
-      const enCurso = fecha <= hoy && hoy < fechaFin;
+      // El perro que hace check-out HOY sigue estando alojado: llegó antes y
+      // todavía no se va. Con `hoy < fechaFin` quedaba como "confirmada" y
+      // aparecía en la lista de los que faltan por llegar.
+      const enCurso = fecha <= hoy && hoy <= fechaFin;
 
       const reserva: ReservaHotel = {
         id: id("res", reservasHotel.length),

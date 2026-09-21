@@ -7,6 +7,9 @@ function Toaster(props: ToasterProps) {
   return (
     <Sonner
       position="top-center"
+      // Debajo del encabezado pegajoso, para no tapar el contenido.
+      offset={{ top: "5rem" }}
+      mobileOffset={{ top: "5rem" }}
       toastOptions={{
         classNames: {
           toast:
