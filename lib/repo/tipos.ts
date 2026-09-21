@@ -20,6 +20,7 @@ import type {
   FechaISO,
   ID,
   Incidente,
+  MensajeSaliente,
   OrdenTienda,
   Pago,
   Perro,
@@ -117,6 +118,15 @@ export interface IncidenteRepo extends ColeccionRepo<Incidente> {
   enRango(desde: FechaISO, hasta: FechaISO): Promise<Incidente[]>;
 }
 
+/** La bandeja de salida: qué se le mandó a cada dueño y cómo le llegó. */
+export interface MensajeRepo extends ColeccionRepo<MensajeSaliente> {
+  porCliente(clienteId: ID): Promise<MensajeSaliente[]>;
+  porReferencia(tipo: string, id: ID): Promise<MensajeSaliente[]>;
+  /** Los que quedaron fallidos y se pueden reintentar. */
+  fallidos(): Promise<MensajeSaliente[]>;
+  enRango(desde: FechaISO, hasta: FechaISO): Promise<MensajeSaliente[]>;
+}
+
 /** Utilidades que solo existen porque esto es un prototipo con datos mock. */
 export interface SistemaRepo {
   /** Día de referencia con el que se generaron los datos actuales. */
@@ -141,5 +151,6 @@ export interface RepositorioPatoteca {
   ordenes: OrdenRepo;
   reportes: ReporteRepo;
   incidentes: IncidenteRepo;
+  mensajes: MensajeRepo;
   sistema: SistemaRepo;
 }

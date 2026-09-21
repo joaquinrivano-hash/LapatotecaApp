@@ -40,17 +40,29 @@
   --input: #ead9c7;
   --ring: #e2703a;
 
-  /* Hotel = noche = azul · Jardín = día = verde. Se usa en calendario y KPIs. */
-  --hotel: #6b8cbf;
-  --hotel-suave: #e3ecf7;
-  --jardin: #6fa287;
-  --jardin-suave: #e4f0ea;
+  /*
+   * Hotel = noche = azul · Jardín = día = verde.
+   * Son los DOS colores de serie del producto y están validados como paleta
+   * categórica contra el fondo crema: ΔE 25,8 a vista normal y 24,9 en
+   * protanopía, chroma sobre el piso y contraste sobre 3:1.
+   *
+   * Los tonos originales (#6b8cbf / #6fa287) se veían más suaves pero
+   * reprobaban: quedaban a ΔE 12 entre sí, indistinguibles incluso con visión
+   * de color completa. No los bajes de saturación sin volver a validar.
+   *
+   * Un tercer color de serie NO pasa junto a estos dos: naranjo y verde
+   * colapsan en protanopía, morado y azul a vista normal. Si el dashboard
+   * necesita una tercera categoría, va en facetas o small multiples, no en un
+   * hue nuevo.
+   */
+  --hotel: #2f6ab8;
+  --hotel-suave: #e6eefa;
+  --jardin: #4e9a3f;
+  --jardin-suave: #e9f3e5;
 
-  --chart-1: #e2703a;
-  --chart-2: #6fa287;
-  --chart-3: #6b8cbf;
-  --chart-4: #f2b134;
-  --chart-5: #b07ca8;
+  /* Mismos dos colores, con el nombre que usan los gráficos. */
+  --chart-1: #2f6ab8;
+  --chart-2: #4e9a3f;
 }
 
 @theme inline {
@@ -85,9 +97,6 @@
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
 
   --font-sans: var(--font-nunito), ui-rounded, system-ui, sans-serif;
   --font-display: var(--font-baloo), ui-rounded, system-ui, sans-serif;

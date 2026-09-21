@@ -17,6 +17,7 @@ import type {
   CuentaMensualRepo,
   EstadiaJardinRepo,
   IncidenteRepo,
+  MensajeRepo,
   OrdenRepo,
   PagoRepo,
   PerroRepo,
@@ -38,6 +39,7 @@ import type {
   FechaISO,
   ID,
   Incidente,
+  MensajeSaliente,
   OrdenTienda,
   Pago,
   Perro,
@@ -358,6 +360,64 @@ class IncidentesLocal
   }
 }
 
+class MensajesLocal
+  extends ColeccionLocal<MensajeSaliente>
+  implements MensajeRepo
+{
+  porCliente(clienteId: ID) {
+    return this.filtrar((m) => m.clienteId === clienteId);
+  }
+
+  porReferencia(tipo: string, id: ID) {
+    return this.filtrar(
+      (m) => m.referencia?.tipo === tipo && m.referencia.id === id,
+    );
+  }
+
+  fallidos() {
+    return this.filtrar((m) => m.estado === "fallido");
+  }
+
+  enRango(desde: FechaISO, hasta: FechaISO) {
+    return this.filtrar((m) => {
+      const f = fechaISO(m.creadoEn);
+      return f >= desde && f <= hasta;
+    });
+  }
+}
+
+/**
+ * El set guardado puede venir de una versión anterior del prototipo, sin las
+ * colecciones que se agregaron después. En vez de borrarle los datos al
+ * usuario, se rellenan las que falten.
+ */
+function normalizarDatos(datos: DatosPatoteca): DatosPatoteca {
+  const vacias: (keyof DatosPatoteca)[] = [
+    "clientes",
+    "perros",
+    "reservasHotel",
+    "estadiasJardin",
+    "planes",
+    "suscripciones",
+    "servicios",
+    "pagos",
+    "cuentasMensuales",
+    "productos",
+    "ordenes",
+    "reportes",
+    "incidentes",
+    "mensajes",
+  ];
+
+  for (const clave of vacias) {
+    if (!Array.isArray(datos[clave])) {
+      (datos as unknown as Record<string, unknown>)[clave] = [];
+    }
+  }
+
+  return datos;
+}
+
 export interface OpcionesRepositorioLocal {
   almacen?: Almacen;
   /** Día de referencia del seed. Por defecto, hoy. */
@@ -376,7 +436,7 @@ export function crearRepositorioLocal(
 
     const guardado = almacen.leer<DatosPatoteca>(CLAVE_ALMACEN);
     if (guardado) {
-      datos = guardado;
+      datos = normalizarDatos(guardado);
       return datos;
     }
 
@@ -408,7 +468,7 @@ export function crearRepositorioLocal(
       if (!entrante || !Array.isArray(entrante.clientes)) {
         throw new ErrorRepositorio("El archivo no tiene datos de La Patoteca.");
       }
-      datos = entrante;
+      datos = normalizarDatos(entrante);
       almacen.escribir(CLAVE_ALMACEN, datos);
     },
   };
@@ -431,6 +491,7 @@ export function crearRepositorioLocal(
     ordenes: new OrdenesLocal(ctx, "orden", (d) => d.ordenes),
     reportes: new ReportesLocal(ctx, "rep", (d) => d.reportes),
     incidentes: new IncidentesLocal(ctx, "inc", (d) => d.incidentes),
+    mensajes: new MensajesLocal(ctx, "msg", (d) => d.mensajes),
     sistema,
   };
 }

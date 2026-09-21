@@ -329,6 +329,51 @@ export interface Incidente {
   creadoEn: InstanteISO;
 }
 
+/* ── Mensajería saliente ───────────────────────────────────────────── */
+
+export type CanalMensaje = "whatsapp" | "email" | "sms";
+
+/**
+ * Estados que reporta WhatsApp Business por webhook. `pendiente` y `enviando`
+ * son nuestros; el resto viene del proveedor.
+ */
+export type EstadoMensaje =
+  | "pendiente"
+  | "enviando"
+  | "enviado"
+  | "entregado"
+  | "leido"
+  | "fallido";
+
+export interface ReferenciaMensaje {
+  tipo: "reporte" | "incidente" | "reserva" | "pago";
+  id: ID;
+}
+
+export interface MensajeSaliente {
+  id: ID;
+  canal: CanalMensaje;
+  clienteId: ID;
+  /** Teléfono en E.164, como lo exige WhatsApp: +56912345678. */
+  destino: string;
+  /** Nombre de la plantilla aprobada en WhatsApp Manager. */
+  plantilla: string;
+  idioma: string;
+  /** Parámetros posicionales de la plantilla, en orden. */
+  parametros: string[];
+  /** Texto ya armado, para mostrarlo en la app sin volver a renderizar. */
+  vistaPrevia: string;
+  adjuntoUrl?: string;
+  referencia?: ReferenciaMensaje;
+  estado: EstadoMensaje;
+  intentos: number;
+  error?: string;
+  /** Id que devolvió el proveedor, para cruzar con sus webhooks. */
+  idProveedor?: string;
+  creadoEn: InstanteISO;
+  actualizadoEn: InstanteISO;
+}
+
 /* ── Ocupación ─────────────────────────────────────────────────────── */
 
 /** Un slot de 30 minutos con su carga. */

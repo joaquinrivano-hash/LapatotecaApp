@@ -26,6 +26,7 @@ import {
   STAFF,
 } from "@/lib/data/catalogos";
 import { crearAleatorio, SEMILLA_PATOTECA, type Aleatorio } from "@/lib/data/aleatorio";
+import { armarMensajesDeReporte } from "@/lib/integraciones/mensajeria/armado";
 import {
   ocupantesDeReservas,
   verificarCapacidad,
@@ -50,6 +51,7 @@ import type {
   EstadiaJardin,
   FechaISO,
   Incidente,
+  MensajeSaliente,
   OrdenTienda,
   Pago,
   Perro,
@@ -79,6 +81,7 @@ export interface DatosPatoteca {
   ordenes: OrdenTienda[];
   reportes: Reporte[];
   incidentes: Incidente[];
+  mensajes: MensajeSaliente[];
 }
 
 /** Días de historial hacia atrás y de agenda hacia adelante. */
@@ -817,6 +820,47 @@ export function generarSeed(
     };
   });
 
+  /* ── Bandeja de salida ──────────────────────────────────────────── */
+
+  // Los mensajes se arman con la MISMA función que usa la app al enviar un
+  // reporte, así que la bandeja del prototipo se ve igual que la real.
+  const mensajes: MensajeSaliente[] = [];
+
+  for (const reporte of reportes) {
+    const { mensajes: borradores } = armarMensajesDeReporte({
+      reporte,
+      perros,
+      clientes,
+      ahora: reporte.creadoEn,
+    });
+
+    for (const borrador of borradores) {
+      const suerte = azar.siguiente();
+      const estado: MensajeSaliente["estado"] =
+        suerte < 0.62
+          ? "leido"
+          : suerte < 0.9
+            ? "entregado"
+            : suerte < 0.97
+              ? "enviado"
+              : "fallido";
+
+      const fallido = estado === "fallido";
+      mensajes.push({
+        ...borrador,
+        id: id("msg", mensajes.length),
+        estado,
+        intentos: 1,
+        idProveedor: fallido
+          ? undefined
+          : `wamid.SIM${String(mensajes.length).padStart(6, "0")}`,
+        error: fallido
+          ? "El número no tiene WhatsApp o bloqueó los mensajes del negocio."
+          : undefined,
+      });
+    }
+  }
+
   return {
     hoy,
     clientes,
@@ -832,5 +876,6 @@ export function generarSeed(
     ordenes,
     reportes,
     incidentes,
+    mensajes,
   };
 }
