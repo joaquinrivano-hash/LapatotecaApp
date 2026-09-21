@@ -177,6 +177,16 @@ export function formatearDiaMes(valor: EntradaFecha): string {
   return fmt(valor, "EEE d MMM");
 }
 
+/** "lun". Para la tira de días del calendario, donde no cabe más. */
+export function formatearDiaSemanaCorto(valor: EntradaFecha): string {
+  return fmt(valor, "EEE");
+}
+
+/** "28", el número del día dentro del mes. */
+export function formatearNumeroDeDia(valor: EntradaFecha): string {
+  return fmt(valor, "d");
+}
+
 /** "21 sep", sin el día de la semana. Para ejes de gráficos. */
 export function formatearDiaMesCorto(valor: EntradaFecha): string {
   return fmt(valor, "d MMM");

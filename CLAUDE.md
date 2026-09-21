@@ -367,6 +367,35 @@ porcentaje adentro divide dos veces y el segmento de abajo sale achicado.
 // bien: height: (hotel / total) * 100%
 ```
 
+### Grillas: `grid` sin columnas explícitas desborda
+
+Una `div.grid gap-2 lg:grid-cols-2` sin `grid-cols-1` deja la columna implícita
+en `auto`, que se resuelve a **max-content**: basta una tarjeta con texto
+`truncate` (que es `nowrap`) para que la columna mida 618 px dentro de un
+contenedor de 358 y toda la página gane scroll horizontal. `min-w-0` en el hijo
+no alcanza.
+
+Siempre `grid-cols-1` junto al variante del breakpoint:
+
+```
+// mal:  <div className="grid gap-2 lg:grid-cols-2">
+// bien: <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+```
+
+El chequeo es de una línea en el navegador:
+`document.documentElement.scrollWidth > clientWidth`.
+
+### El calendario y su semáforo
+
+En la tira de días el color va al revés de un semáforo de alerta: **verde desde
+80% de ocupación, amarillo desde 50%, rojo bajo 50%**. Es la lectura de
+negocio: en el backoffice el día vacío es el problema, no el día lleno. Por eso
+la tira lleva leyenda; el color solo nunca explica esa inversión.
+
+Las tarjetas de los días tienen todas las filas de alto fijo. "28 sep" en una
+línea se corta en los teléfonos angostos y desalinea la tira completa, así que
+la fecha va en dos líneas ("lun" sobre "28") y el mes vive en el encabezado.
+
 ### Datos que persisten
 
 `RepositorioLocal` guarda todo el set en `localStorage` bajo

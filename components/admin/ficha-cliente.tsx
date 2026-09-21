@@ -97,7 +97,7 @@ export function FichaCliente({
           </div>
 
           {editando ? (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {(
                 [
                   ["nombre", "Nombre"],
@@ -130,7 +130,7 @@ export function FichaCliente({
               </Button>
             </div>
           ) : (
-            <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+            <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
               <Dato etiqueta="Email" valor={cliente.email} />
               <Dato
                 etiqueta="Teléfono"
@@ -297,7 +297,7 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
 
       {abierto && (
         <div className="mt-3 space-y-3 border-t border-border/60 pt-3">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor={`peso-${perro.id}`}>Peso (kg)</Label>
               <Input
@@ -339,7 +339,7 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
 
           <div className="space-y-1.5">
             <Label>Vacunas: hasta cuándo están vigentes</Label>
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {NEGOCIO.admision.vacunasObligatorias.map((tipo) => (
                 <div key={tipo} className="space-y-1">
                   <span className="text-muted-foreground text-xs capitalize">
