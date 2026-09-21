@@ -284,9 +284,18 @@ descuenta al registrar.
 
 ### La ficha del perro
 
-`components/staff/ficha-perro.tsx`, la misma en Hoy y en Buscar. Se abre
-tocando el cuerpo de la tarjeta; el botón grande de la derecha sigue siendo la
-acción del día, así que marcar una llegada nunca abre la ficha.
+`components/shared/detalle-perro.tsx` es **una sola ficha para las tres
+caras**: el staff la abre desde Hoy y Buscar, el admin la ve dentro de la ficha
+del cliente. Mismo orden, mismos bloques. Quien usa las dos caras no tiene por
+qué aprender dos formatos, y editar es lo que agrega el admin, no otra manera
+de mirar los datos.
+
+En el staff se abre tocando el cuerpo de la tarjeta; el botón grande de la
+derecha sigue siendo la acción del día, así que marcar una llegada nunca abre
+la ficha.
+
+**La foto la sube el dueño** cuando crea la cuenta, no el equipo con el perro
+en brazos. El admin la cambia desde la ficha del cliente si quedó mala.
 
 El orden es el de las preguntas que aparecen con el perro en brazos: quién es,
 qué come, qué cuidado especial tiene y si ya pasó algo antes. Por eso

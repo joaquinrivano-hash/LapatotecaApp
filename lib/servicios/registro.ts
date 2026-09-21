@@ -62,6 +62,8 @@ export interface DatosDePerro {
    */
   vacunas?: { tipo: TipoVacuna; fechaVencimiento: FechaISO }[];
   desparasitadoHasta?: FechaISO;
+  /** La foto la sube el dueño al crear la cuenta; el admin la corrige después. */
+  fotoUrl?: string;
   alimentacion?: string;
   indicaciones?: string;
   notas?: string;
@@ -136,6 +138,7 @@ export async function crearCuenta(
       fechaVencimiento: v.fechaVencimiento,
     })),
     desparasitadoHasta: datos.perro.desparasitadoHasta,
+    fotoUrl: datos.perro.fotoUrl,
     diaDePrueba: { estado: "pendiente" },
     alimentacion: datos.perro.alimentacion?.trim() || undefined,
     indicaciones: datos.perro.indicaciones?.trim() || undefined,
