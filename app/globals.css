@@ -1,0 +1,155 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * La Patoteca — tema tomado del folleto de marca.
+ * Sin modo oscuro a propósito: el prototipo es una casa con luz, no un panel.
+ * Todos los colores se definen acá; los componentes usan los tokens semánticos.
+ */
+
+:root {
+  --radius: 1rem;
+
+  /*
+   * Paleta tomada del folleto de marca (agosto 2026).
+   * Los valores se muestrearon del PDF, no se estimaron a ojo.
+   *
+   * La marca son TRES colores: rosa, azul marino y ámbar, sobre crema.
+   */
+
+  /* El rosa del círculo del logo. Es DECORATIVO: con 2,97:1 contra blanco no
+     puede llevar texto encima. Para botones está --primary. */
+  --marca-rosa: #fe5c82;
+  --marca-azul: #1b2f63;
+  --marca-ambar: #f59c00;
+  --marca-crema: #fdf6ec;
+
+  --background: #fdf6ec;
+  --foreground: #1b2f63;
+
+  --card: #ffffff;
+  --card-foreground: #1b2f63;
+  --popover: #ffffff;
+  --popover-foreground: #1b2f63;
+
+  /* Fucsia del folleto, profundizado hasta 5,09:1 para que el texto blanco de
+     los botones sea legible. El del folleto tal cual quedaba en 4,49:1. */
+  --primary: #d6175a;
+  --primary-foreground: #ffffff;
+
+  --secondary: #fbe7ea;
+  --secondary-foreground: #a3204f;
+  --muted: #fbf1e6;
+  --muted-foreground: #5c6b95;
+
+  /* El ámbar lleva texto marino, nunca blanco: con blanco queda en 2,18:1. */
+  --accent: #f59c00;
+  --accent-foreground: #1b2f63;
+
+  --destructive: #a4161a;
+  --destructive-foreground: #ffffff;
+  --success: #2e7d32;
+  --success-foreground: #ffffff;
+  --warning: #b06d00;
+  --warning-foreground: #ffffff;
+
+  --border: #f2e3d4;
+  --input: #e8d9c9;
+  --ring: #d6175a;
+
+  /*
+   * Colores de serie: hotel = azul marino, jardín = ámbar. Los dos salen del
+   * folleto y están validados como paleta categórica contra el crema:
+   * ΔE 36,0 a vista normal y 30,1 en protanopía, chroma sobre el piso y
+   * contraste sobre 3:1.
+   *
+   * El folleto pinta el jardín de rosa, pero acá el rosa es el color de
+   * ACCIÓN (botones): una barra rosa al lado de un botón rosa se lee como si
+   * fuera tocable. El ámbar también es de marca y mantiene el dato separado
+   * de la acción.
+   *
+   * Un tercer color de serie hay que volver a validarlo antes de usarlo.
+   */
+  --hotel: #24458f;
+  --hotel-suave: #e6ebf7;
+  --jardin: #c77b00;
+  --jardin-suave: #fdf0d9;
+
+  --chart-1: #24458f;
+  --chart-2: #c77b00;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-hotel: var(--hotel);
+  --color-hotel-suave: var(--hotel-suave);
+  --color-jardin: var(--jardin);
+  --color-jardin-suave: var(--jardin-suave);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+
+  --color-marca-rosa: var(--marca-rosa);
+  --color-marca-azul: var(--marca-azul);
+  --color-marca-ambar: var(--marca-ambar);
+  --color-marca-crema: var(--marca-crema);
+
+  --font-sans: var(--font-nunito), ui-rounded, system-ui, sans-serif;
+  --font-display: var(--font-baloo), ui-rounded, system-ui, sans-serif;
+
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  /* El staff usa esto en la calle, con el perro en brazos: nada de zoom al tocar un input. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
