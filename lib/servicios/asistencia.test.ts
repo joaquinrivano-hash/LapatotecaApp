@@ -12,9 +12,14 @@ import type {
   PlanComprado,
   ReservaHotel,
 } from "@/lib/types";
+import { NEGOCIO } from "@/lib/config/negocio";
 import {
   cargarDiaDeStaff,
   deshacerLlegadaJardin,
+  IngresoBloqueado,
+  opcionesDeRetiro,
+  registrarIngreso,
+  revisarIngreso,
   registrarLlegadaHotel,
   registrarLlegadaJardin,
   registrarSalidaHotel,
@@ -286,5 +291,208 @@ describe("cargarDiaDeStaff", () => {
     // Mismo perro en las dos líneas: el pico no lo cuenta dos veces por serie,
     // pero sí suma las dos ocupaciones simultáneas.
     expect(dia.ocupacion.pico).toBe(2);
+  });
+});
+
+describe("ingreso no planificado", () => {
+  const SIN_ESTADIAS = { estadiasJardin: [], reservasHotel: [] };
+
+  function perroAdmisible(sobrescribir: Partial<Perro> = {}): Perro {
+    return {
+      ...PELUSA,
+      vacunas: NEGOCIO.admision.vacunasObligatorias.map((tipo) => ({
+        tipo,
+        fechaAplicacion: "2026-01-01",
+        fechaVencimiento: "2027-01-01",
+      })),
+      ...sobrescribir,
+    };
+  }
+
+  beforeEach(() => {
+    montar({ ...SIN_ESTADIAS, perros: [perroAdmisible()] });
+  });
+
+  it("registra al perro que llegó sin reserva, ya adentro", async () => {
+    const { estadia } = await registrarIngreso(repo, {
+      perroId: PELUSA.id,
+      ahora: en("10:00"),
+    });
+
+    expect(estadia.estado).toBe("presente");
+    expect(estadia.inicioReal).toBe(en("10:00"));
+    expect(estadia.fecha).toBe(DIA);
+    expect(estadia.origen).toBe("dia_suelto");
+  });
+
+  it("la jornada termina al cierre si no le dicen otra cosa", async () => {
+    const { estadia } = await registrarIngreso(repo, {
+      perroId: PELUSA.id,
+      ahora: en("10:00"),
+    });
+    expect(estadia.finProgramado).toBe(en("19:00"));
+  });
+
+  it("respeta la hora de retiro que indique el staff", async () => {
+    const { estadia } = await registrarIngreso(repo, {
+      perroId: PELUSA.id,
+      ahora: en("10:00"),
+      finEstimadoMinutos: 14 * 60,
+    });
+    expect(estadia.finProgramado).toBe(en("14:00"));
+    expect(estadia.cotizacion?.total).toBe(10_000);
+  });
+
+  it("usa el plan del perro y le descuenta el día", async () => {
+    montar({ ...SIN_ESTADIAS, perros: [perroAdmisible()], planes: [PLAN] });
+
+    const { estadia, planUsado } = await registrarIngreso(repo, {
+      perroId: PELUSA.id,
+      ahora: en("10:00"),
+    });
+
+    expect(estadia.origen).toBe("plan");
+    expect(estadia.planId).toBe(PLAN.id);
+    expect(estadia.cotizacion?.total).toBe(0);
+    expect(planUsado?.diasUsados).toBe(PLAN.diasUsados + 1);
+  });
+
+  it("después queda listo para el check-out normal", async () => {
+    const { estadia } = await registrarIngreso(repo, {
+      perroId: PELUSA.id,
+      ahora: en("10:00"),
+    });
+    const { recargo, pago } = await registrarSalidaJardin(
+      repo,
+      estadia.id,
+      en("20:30"),
+    );
+    expect(recargo).toBe(2_000);
+    expect(pago?.monto).toBe(20_000);
+  });
+
+  it("no deja registrar dos veces al mismo perro el mismo día", async () => {
+    await registrarIngreso(repo, { perroId: PELUSA.id, ahora: en("10:00") });
+    await expect(
+      registrarIngreso(repo, { perroId: PELUSA.id, ahora: en("11:00") }),
+    ).rejects.toThrow(IngresoBloqueado);
+  });
+
+  it("no lo deja pasar si no cumple admisión, pero dice por qué", async () => {
+    montar({
+      ...SIN_ESTADIAS,
+      perros: [perroAdmisible({ diaDePrueba: { estado: "pendiente" } })],
+    });
+
+    const revision = await revisarIngreso(repo, {
+      perroId: PELUSA.id,
+      ahora: en("10:00"),
+    });
+    expect(revision.sinReparos).toBe(false);
+    expect(revision.admision.problemas[0].motivo).toBe("dia_de_prueba");
+
+    await expect(
+      registrarIngreso(repo, { perroId: PELUSA.id, ahora: en("10:00") }),
+    ).rejects.toThrow(IngresoBloqueado);
+  });
+
+  it("con reparos igual se puede forzar: el perro ya está en la puerta", async () => {
+    montar({
+      ...SIN_ESTADIAS,
+      perros: [perroAdmisible({ diaDePrueba: { estado: "pendiente" } })],
+    });
+
+    const { estadia } = await registrarIngreso(repo, {
+      perroId: PELUSA.id,
+      ahora: en("10:00"),
+      forzar: true,
+    });
+    expect(estadia.estado).toBe("presente");
+  });
+
+  it("avisa cuando no queda cupo", async () => {
+    const llenos: EstadiaJardin[] = Array.from({ length: 25 }, (_, i) => ({
+      ...estadia(),
+      id: `est-${i}`,
+      perroId: `otro-${i}`,
+      estado: "presente" as const,
+      inicioProgramado: en("08:00"),
+      finProgramado: en("18:00"),
+    }));
+    montar({ estadiasJardin: llenos, perros: [perroAdmisible()] });
+
+    const revision = await revisarIngreso(repo, {
+      perroId: PELUSA.id,
+      ahora: en("10:00"),
+    });
+
+    expect(revision.cuposDisponibles).toBe(0);
+    expect(revision.capacidad.hayCupo).toBe(false);
+    expect(revision.sinReparos).toBe(false);
+  });
+
+  it("muestra cuántos cupos quedan de verdad", async () => {
+    const algunos: EstadiaJardin[] = Array.from({ length: 10 }, (_, i) => ({
+      ...estadia(),
+      id: `est-${i}`,
+      perroId: `otro-${i}`,
+      estado: "presente" as const,
+    }));
+    montar({ estadiasJardin: algunos, perros: [perroAdmisible()] });
+
+    const revision = await revisarIngreso(repo, {
+      perroId: PELUSA.id,
+      ahora: en("10:00"),
+    });
+    expect(revision.cuposDisponibles).toBe(15);
+  });
+
+  it("el segundo perro del mismo dueño lleva su descuento", async () => {
+    const otroPerro: Perro = { ...perroAdmisible(), id: "perro-002", nombre: "Rocco" };
+    montar({
+      estadiasJardin: [{ ...estadia(), estado: "presente" }],
+      perros: [perroAdmisible(), otroPerro],
+    });
+
+    const revision = await revisarIngreso(repo, {
+      perroId: "perro-002",
+      ahora: en("10:00"),
+    });
+    expect(revision.cotizacionEstimada.descuentos[0].porcentaje).toBe(0.2);
+  });
+});
+
+describe("opcionesDeRetiro", () => {
+  it("redondea la media jornada a la media hora siguiente", () => {
+    // 13:08 + 5 h = 18:08, redondeado a 18:30. Son 5 h 22 min: queda bajo el
+    // tramo de 6 h, que es lo que define el precio barato.
+    const opciones = opcionesDeRetiro(en("13:08"));
+    expect(opciones[0].minutos).toBe(18 * 60 + 30);
+    expect(opciones.at(-1)!.minutos).toBe(19 * 60);
+  });
+
+  it("la media jornada siempre cae dentro del tramo corto", () => {
+    for (const hora of ["07:00", "08:31", "10:15", "11:59", "12:30"]) {
+      const [primera] = opcionesDeRetiro(en(hora));
+      const minutosDentro = primera.minutos - (Number(hora.slice(0, 2)) * 60 + Number(hora.slice(3)));
+      expect(minutosDentro).toBeLessThanOrEqual(
+        NEGOCIO.jardin.horasJornadaCorta * 60,
+      );
+    }
+  });
+
+  it("la media jornada nunca pasa del cierre", () => {
+    const opciones = opcionesDeRetiro(en("16:00"));
+    expect(opciones.every((o) => o.minutos <= 19 * 60)).toBe(true);
+  });
+
+  it("no repite la misma hora dos veces", () => {
+    const opciones = opcionesDeRetiro(en("17:00"));
+    const minutos = opciones.map((o) => o.minutos);
+    expect(new Set(minutos).size).toBe(minutos.length);
+  });
+
+  it("no ofrece horas que ya pasaron", () => {
+    expect(opcionesDeRetiro(en("19:30"))).toHaveLength(0);
   });
 });

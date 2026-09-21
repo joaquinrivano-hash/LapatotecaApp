@@ -248,7 +248,27 @@ hora real** (de ahí sale el recargo fuera de horario) y que cerrar dos veces
 corrige el cobro en vez de duplicarlo.
 
 Sobre los planes: el día del pack se descuenta cuando se **agenda** la
-estadía, no cuando el perro llega. El check-in no toca el saldo.
+estadía, no cuando el perro llega. El check-in no toca el saldo. En un ingreso
+no planificado agendar y llegar son el mismo momento, así que ahí sí se
+descuenta al registrar.
+
+### El perro que llega sin reserva
+
+Pasa: el dueño se complicó y aparece en la puerta. La app **no bloquea** el
+registro, aunque falten requisitos o no quede cupo. Muestra los reparos y pide
+un toque explícito ("Registrar de todas formas").
+
+El motivo: si el sistema se niega, el perro igual está adentro y la ocupación
+del día queda mal contada. Eso es peor que el problema que el bloqueo intenta
+evitar. La decisión la toma quien está mirando al perro; la app le pone
+enfrente lo que necesita saber —cupos libres, vacunas vencidas, plan con
+saldo, cuánto sale— y después registra la realidad.
+
+Lo único que sí se bloquea es registrar dos veces al mismo perro el mismo día:
+eso no es una decisión, es un error.
+
+Solo aplica a perros que ya son clientes. Uno nuevo necesita su día de prueba
+antes de quedarse, así que no puede entrar por esta vía.
 
 ### Datos que persisten
 

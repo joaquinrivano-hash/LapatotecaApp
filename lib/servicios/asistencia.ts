@@ -11,11 +11,15 @@
  */
 
 import { NEGOCIO } from "@/lib/config/negocio";
+import { evaluarAdmision, type ResultadoAdmision } from "@/lib/rules/admision";
+import { elegirPlanParaUsar } from "@/lib/rules/planes";
 import {
   calcularOcupacionDia,
   ocupantesDeEstadias,
   ocupantesDeReservas,
+  verificarCapacidad,
   type OcupanteRango,
+  type ResultadoCapacidad,
 } from "@/lib/rules/capacidad";
 import { calcularPrecioHotel } from "@/lib/rules/precio-hotel";
 import {
@@ -23,9 +27,10 @@ import {
   calcularRecargoFueraDeHorario,
 } from "@/lib/rules/precio-jardin";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
-import { fechaISO } from "@/lib/utils/fecha";
+import { fechaISO, instanteEn, minutosDelDia } from "@/lib/utils/fecha";
 import type {
   Cliente,
+  Cotizacion,
   EstadiaJardin,
   FechaISO,
   ID,
@@ -33,6 +38,7 @@ import type {
   OcupacionDia,
   Pago,
   Perro,
+  PlanComprado,
   ReservaHotel,
 } from "@/lib/types";
 
@@ -263,6 +269,209 @@ export async function registrarSalidaHotel(
     saldoPorCobrar,
     pago,
   };
+}
+
+/* ── Ingreso no planificado ────────────────────────────────────────── */
+
+/**
+ * El perro que llega sin reserva.
+ *
+ * Pasa: el dueño se complicó y aparece con el perro en la puerta. La decisión
+ * de aceptarlo la toma una persona que está mirando al perro, no el sistema.
+ * Lo que hace la app es mostrarle lo que necesita saber antes de decidir
+ * —si queda cupo, si las vacunas están al día, si tiene plan con saldo— y
+ * después registrar la realidad.
+ *
+ * Si el sistema bloqueara el registro, el perro igual estaría adentro y la
+ * ocupación del día quedaría mal contada. Eso es peor que el problema que el
+ * bloqueo intenta evitar.
+ */
+
+export interface OpcionesIngreso {
+  perroId: ID;
+  ahora?: InstanteISO;
+  /** Hora estimada de retiro, en minutos del día. Por defecto, el cierre. */
+  finEstimadoMinutos?: number;
+}
+
+export interface RevisionIngreso {
+  perro: Perro;
+  cliente: Cliente | null;
+  /** Si ya tenía una estadía hoy: entonces no es un ingreso nuevo. */
+  estadiaExistente: EstadiaJardin | null;
+  admision: ResultadoAdmision;
+  capacidad: ResultadoCapacidad;
+  cuposDisponibles: number;
+  /** Plan vigente con saldo, si lo tiene: la jornada sale gratis. */
+  planDisponible: PlanComprado | null;
+  cotizacionEstimada: Cotizacion;
+  inicio: InstanteISO;
+  fin: InstanteISO;
+  /** true si no hay ningún reparo. Con reparos igual se puede forzar. */
+  sinReparos: boolean;
+}
+
+/** Todo lo que el staff necesita ver antes de dejar entrar a un perro. */
+export async function revisarIngreso(
+  repo: RepositorioPatoteca,
+  { perroId, ahora = new Date().toISOString(), finEstimadoMinutos }: OpcionesIngreso,
+): Promise<RevisionIngreso> {
+  const perro = await repo.perros.obtener(perroId);
+  if (!perro) throw new Error(`No existe el perro ${perroId}`);
+
+  const fecha = fechaISO(ahora);
+  const [cliente, estadiasDelDia, reservas, planes] = await Promise.all([
+    repo.clientes.obtener(perro.clienteId),
+    repo.estadiasJardin.porFecha(fecha),
+    repo.reservasHotel.enRango(fecha, fecha),
+    repo.planes.porPerro(perroId),
+  ]);
+
+  const fin = instanteEn(fecha, finEstimadoMinutos ?? NEGOCIO.jardin.horaCierre * 60);
+  const planDisponible = elegirPlanParaUsar(planes, perroId, fecha);
+  const origen: EstadiaJardin["origen"] = planDisponible ? "plan" : "dia_suelto";
+
+  // El segundo perro del mismo dueño en el día tiene su descuento.
+  const indicePerro = estadiasDelDia.filter(
+    (e) => e.clienteId === perro.clienteId && e.estado !== "cancelada",
+  ).length;
+
+  const existentes: OcupanteRango[] = [
+    ...ocupantesDeReservas(reservas),
+    ...ocupantesDeEstadias(estadiasDelDia),
+  ];
+
+  const capacidad = verificarCapacidad(
+    [{ perroId, linea: "jardin", inicio: ahora, fin }],
+    existentes,
+  );
+
+  const admision = evaluarAdmision(perro, { fecha });
+
+  return {
+    perro,
+    cliente,
+    estadiaExistente:
+      estadiasDelDia.find(
+        (e) => e.perroId === perroId && e.estado !== "cancelada",
+      ) ?? null,
+    admision,
+    capacidad,
+    cuposDisponibles: Math.max(
+      0,
+      NEGOCIO.capacidad.maximoSimultaneo -
+        calcularOcupacionDia(fecha, existentes).pico,
+    ),
+    planDisponible,
+    cotizacionEstimada: calcularPrecioJardin({
+      inicio: ahora,
+      fin,
+      origen,
+      indicePerro,
+    }),
+    inicio: ahora,
+    fin,
+    sinReparos: admision.admitido && capacidad.hayCupo,
+  };
+}
+
+export interface ResultadoIngreso {
+  estadia: EstadiaJardin;
+  /** El plan al que se le descontó el día, si se usó uno. */
+  planUsado: PlanComprado | null;
+  revision: RevisionIngreso;
+}
+
+export class IngresoBloqueado extends Error {
+  constructor(
+    mensaje: string,
+    readonly revision: RevisionIngreso,
+  ) {
+    super(mensaje);
+    this.name = "IngresoBloqueado";
+  }
+}
+
+/**
+ * Registra al perro que llegó sin reserva, ya adentro y con la hora real.
+ *
+ * Con reparos (admisión o cupo) hay que pasar `forzar`: así el override queda
+ * siendo una decisión explícita de quien está mirando al perro, y no un
+ * descuido del sistema.
+ */
+export async function registrarIngreso(
+  repo: RepositorioPatoteca,
+  opciones: OpcionesIngreso & { forzar?: boolean },
+): Promise<ResultadoIngreso> {
+  const revision = await revisarIngreso(repo, opciones);
+
+  if (revision.estadiaExistente) {
+    throw new IngresoBloqueado(
+      `${revision.perro.nombre} ya está agendado hoy.`,
+      revision,
+    );
+  }
+
+  if (!revision.sinReparos && !opciones.forzar) {
+    throw new IngresoBloqueado(
+      `${revision.perro.nombre} no cumple algún requisito o no hay cupo.`,
+      revision,
+    );
+  }
+
+  const { perro, planDisponible, inicio, fin, cotizacionEstimada } = revision;
+
+  // El día del pack se descuenta al agendar, y acá agendar y llegar son el
+  // mismo momento.
+  let planUsado: PlanComprado | null = null;
+  if (planDisponible) {
+    planUsado = await repo.planes.actualizar(planDisponible.id, {
+      diasUsados: planDisponible.diasUsados + 1,
+    });
+  }
+
+  const estadia = await repo.estadiasJardin.crear({
+    clienteId: perro.clienteId,
+    perroId: perro.id,
+    fecha: fechaISO(inicio),
+    inicioProgramado: inicio,
+    finProgramado: fin,
+    inicioReal: inicio,
+    origen: planDisponible ? "plan" : "dia_suelto",
+    planId: planDisponible?.id,
+    estado: "presente",
+    cotizacion: cotizacionEstimada,
+    creadaEn: inicio,
+  });
+
+  return { estadia, planUsado, revision };
+}
+
+/**
+ * Opciones de hora de retiro para el ingreso no planificado.
+ *
+ * La media jornada se redondea a la media hora siguiente: nadie dice "lo paso
+ * a buscar a las 17:08". Además el tramo corto define el precio, así que la
+ * hora tiene que ser una que el dueño pueda cumplir.
+ */
+export function opcionesDeRetiro(
+  ahora: InstanteISO = new Date().toISOString(),
+): { etiqueta: string; minutos: number }[] {
+  const cierre = NEGOCIO.jardin.horaCierre * 60;
+  const ahoraMin = minutosDelDia(ahora);
+  const media = Math.min(
+    cierre,
+    Math.ceil((ahoraMin + NEGOCIO.jardin.horasJornadaCorta * 60 - 60) / 30) * 30,
+  );
+
+  return [
+    { etiqueta: "Media jornada", minutos: media },
+    { etiqueta: "Jornada completa", minutos: cierre },
+  ].filter(
+    (opcion, i, todas) =>
+      opcion.minutos > ahoraMin &&
+      todas.findIndex((o) => o.minutos === opcion.minutos) === i,
+  );
 }
 
 /** Marca que el perro no llegó. No cobra nada. */

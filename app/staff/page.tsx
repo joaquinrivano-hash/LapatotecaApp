@@ -13,6 +13,7 @@ import {
   FilaAsistencia,
   type ItemAsistencia,
 } from "@/components/staff/fila-asistencia";
+import { AgregarPerro } from "@/components/staff/agregar-perro";
 import { itemsDelDia } from "@/components/staff/items";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import {
@@ -124,6 +125,8 @@ export default function Hoy() {
           <OcupacionFranjas ocupacion={ocupacion} capacidad={capacidad} />
         </CardContent>
       </Card>
+
+      <AgregarPerro />
 
       <Tabs defaultValue="por-llegar">
         <TabsList>
