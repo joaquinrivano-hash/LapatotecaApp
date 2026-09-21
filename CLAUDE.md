@@ -80,6 +80,11 @@ Se validan antes de permitir cualquier reserva:
 
 - **$24.000 por bloque de 24h**, con **2 horas de tolerancia** en el check-out;
   pasada la tolerancia se cobra **$1.000 por hora iniciada**.
+- **Toda estadía paga al menos un bloque.** Dejar al perro tres horas es una
+  noche de hotel, no tres horas sueltas: el cobro por hora existe solo para el
+  que se pasa de un bloque ya empezado. Por construcción el recargo nunca llega
+  a costar más que una noche (22h × $1.000 < $24.000), así que alargarse
+  siempre sale más barato que reservar un día de más.
 - Descuentos por duración: **sobre 7 días -10%**, **sobre 14 días -15%**
   (umbrales estrictos: 8+ bloques y 15+ bloques).
 - Paseo opcional: **$4.000**.
@@ -156,6 +161,14 @@ mutaciones en localStorage.
 Si para implementar una pantalla necesitas saltarte el repo, el que está mal es
 el repo: agrégale el método.
 
+### shadcn/ui sin CLI
+
+El entorno remoto no alcanza `ui.shadcn.com`, así que los primitivos de
+`components/ui` están **escritos a mano sobre Radix + cva**, con la misma API
+y los mismos nombres de archivo que generaría el CLI. `components.json` está
+configurado, así que desde una máquina con red `npx shadcn add <componente>`
+funciona normal y se integra sin conflictos.
+
 ### Estructura
 
 ```
@@ -193,6 +206,22 @@ Hotel y jardín se consultan juntos a través de una vista unificada
 `OcupacionDia`, que es lo que usan capacidad, calendario y KPIs. Cuando
 agregues una línea de servicio nueva que ocupe espacio, tiene que aportar ahí.
 
+### Datos que persisten
+
+`RepositorioLocal` guarda todo el set en `localStorage` bajo
+`patoteca:datos:v1`. La primera visita siembra el seed; de ahí en adelante los
+datos son del usuario y **nunca se regeneran solos** — solo con
+`sistema.reiniciar()`, que es destructivo y va detrás de una confirmación.
+`sistema.exportar()` e `importar()` existen para no perder una demo.
+
+El seed se ancla al día de hoy, así que el dashboard siempre muestra "los
+últimos 60 días" sin envejecer. Es determinista: misma semilla y mismo
+anclaje, mismos datos.
+
+Como `localStorage` no existe en el servidor, las pantallas que leen datos son
+**componentes cliente**. En el servidor el almacén cae a memoria, así que nada
+revienta durante el render.
+
 ---
 
 ## 4. Diseño
@@ -220,16 +249,27 @@ celular con el perro en brazos, así que los targets táctiles van generosos.
 - Commits pequeños y descriptivos, en español.
 - Al cierre de cada etapa: `build`, `lint` y `test` verdes antes de avanzar.
 
-## 6. Orden de construcción
+## 6. Comandos
 
-1. **Base + reglas + datos mock** — config, types, `rules/` con tests, repo,
-   seed. Sin UI.
-2. **App staff**
+```
+npm run dev        # servidor de desarrollo
+npm run build      # build de producción (incluye typecheck)
+npm run lint
+npm test           # reglas de negocio, seed y repositorio
+npm run test:watch
+npm run typecheck
+```
+
+## 7. Orden de construcción
+
+1. ~~**Base + reglas + datos mock**~~ — hecho: config, types, `rules/` con
+   tests, repositorio y seed.
+2. **App staff** ← siguiente
 3. **Backoffice admin**
 4. **Portal cliente**
 5. **PWA** + pulido
 
-## 7. Datos mock
+## 8. Datos mock
 
 Seed **determinista** (misma salida en cada corrida): ~40 clientes, ~50 perros,
 60 días de historial. Los volúmenes deben respetar los patrones reales del

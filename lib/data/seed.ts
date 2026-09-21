@@ -12,7 +12,6 @@
  */
 
 import { NEGOCIO } from "@/lib/config/negocio";
-import { PRECIOS } from "@/lib/config/precios";
 import {
   APELLIDOS,
   CALLES,
