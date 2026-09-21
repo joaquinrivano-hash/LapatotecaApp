@@ -10,6 +10,7 @@ import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { OcupacionFranjas } from "@/components/shared/ocupacion-franjas";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import { Tile } from "@/components/shared/tile";
+import { NEGOCIO } from "@/lib/config/negocio";
 import { useConsulta } from "@/lib/hooks/use-consulta";
 import { hoyDelStaff } from "@/lib/servicios/asistencia";
 import { cargarCalendario, cargarDetalleDia } from "@/lib/servicios/calendario";
@@ -18,11 +19,28 @@ import {
   diaDeSemana,
   fechaISO,
   formatearDiaMesCorto,
+  formatearDiaSemanaCorto,
   formatearFechaLarga,
   formatearHora,
+  formatearNumeroDeDia,
   sumarDias,
 } from "@/lib/utils/fecha";
 import type { MovimientoDia } from "@/lib/servicios/calendario";
+
+/**
+ * Color de la ocupación del día, leído como negocio: verde es la casa llena.
+ *
+ * Es al revés de un semáforo de alerta a propósito. En el calendario del
+ * backoffice un día vacío es el problema, no el día lleno.
+ */
+function colorDeOcupacion(porcentaje: number): {
+  barra: string;
+  texto: string;
+} {
+  if (porcentaje >= 80) return { barra: "bg-success", texto: "text-success" };
+  if (porcentaje >= 50) return { barra: "bg-warning", texto: "text-warning" };
+  return { barra: "bg-destructive", texto: "text-destructive" };
+}
 
 /** Lunes de la semana a la que pertenece la fecha. */
 function lunesDe(fecha: string): string {
@@ -48,6 +66,9 @@ export default function Calendario() {
           <h1 className="font-display text-2xl font-bold">Calendario</h1>
           <p className="text-muted-foreground text-sm">
             El número grande es el momento más lleno de cada día.
+          </p>
+          <p className="text-muted-foreground text-sm font-semibold first-letter:uppercase">
+            {formatearDiaMesCorto(semana)} al {formatearDiaMesCorto(fin)}
           </p>
         </div>
 
@@ -81,29 +102,37 @@ export default function Calendario() {
           {(dias.datos ?? []).map((dia) => {
             const lleno = dia.cuposLibres === 0;
             const abierto = diaAbierto === dia.fecha;
-            const altura = Math.round(
-              (dia.ocupacion.pico / Math.max(1, dia.ocupacion.pico + dia.cuposLibres)) * 100,
-            );
+            const capacidad = Math.max(1, dia.ocupacion.pico + dia.cuposLibres);
+            const porcentaje = Math.round((dia.ocupacion.pico / capacidad) * 100);
+            const color = colorDeOcupacion(porcentaje);
 
             return (
               <button
                 key={dia.fecha}
                 type="button"
                 onClick={() => setDiaAbierto(abierto ? null : dia.fecha)}
+                aria-label={`${formatearFechaLarga(dia.fecha)}: ${porcentaje}% de ocupación`}
                 className={cn(
                   "bg-card flex flex-col items-center gap-1.5 rounded-2xl border-2 p-2 transition-all",
                   abierto ? "border-primary shadow-sm" : "border-border/70",
                   dia.esFinDeSemana && !abierto && "bg-secondary/30",
                 )}
               >
-                <span className="text-muted-foreground text-[10px] font-semibold">
-                  {formatearDiaMesCorto(`${dia.fecha}T12:00:00Z`)}
+                {/* Dos líneas fijas: "28 sep" en una sola se corta en los
+                    teléfonos angostos y desalinea toda la tira. */}
+                <span className="text-muted-foreground flex h-7 flex-col justify-center text-[10px] leading-tight font-semibold">
+                  <span className="first-letter:uppercase">
+                    {formatearDiaSemanaCorto(dia.fecha)}
+                  </span>
+                  <span className="tabular-nums">
+                    {formatearNumeroDeDia(dia.fecha)}
+                  </span>
                 </span>
 
                 <span
                   className={cn(
-                    "font-display text-xl font-bold tabular-nums",
-                    lleno && "text-destructive",
+                    "font-display flex h-7 items-center text-xl font-bold tabular-nums",
+                    color.texto,
                   )}
                 >
                   {dia.ocupacion.pico}
@@ -115,22 +144,42 @@ export default function Calendario() {
                   aria-hidden
                 >
                   <span
-                    className={cn(
-                      "w-full rounded-full",
-                      lleno ? "bg-destructive" : "bg-jardin",
-                    )}
-                    style={{ height: `${altura}%` }}
+                    className={cn("w-full rounded-full", color.barra)}
+                    style={{ height: `${porcentaje}%` }}
                   />
                 </span>
 
-                <span className="text-muted-foreground text-[10px] tabular-nums">
-                  {dia.fecha === hoy ? "hoy" : `${dia.cuposLibres} libres`}
+                <span className="text-muted-foreground flex h-4 items-center text-[10px] tabular-nums">
+                  {dia.fecha === hoy
+                    ? "hoy"
+                    : lleno
+                      ? "lleno"
+                      : `${dia.cuposLibres} libres`}
                 </span>
               </button>
             );
           })}
         </div>
       )}
+
+      <p className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        <span className="flex items-center gap-1.5">
+          <span className="bg-success size-2 rounded-full" />
+          80% o más
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="bg-warning size-2 rounded-full" />
+          50% a 79%
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="bg-destructive size-2 rounded-full" />
+          bajo 50%
+        </span>
+        <span>
+          Ocupación medida contra los {NEGOCIO.capacidad.maximoSimultaneo}{" "}
+          cupos.
+        </span>
+      </p>
 
       {diaAbierto && <DetalleDelDia fecha={diaAbierto} />}
     </div>

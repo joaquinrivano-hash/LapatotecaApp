@@ -267,7 +267,7 @@ function NuevoCliente({ onListo }: { onListo: () => void }) {
       </SheetHeader>
 
       <div className="space-y-4 overflow-y-auto px-5 pb-4">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {CAMPOS_CLIENTE.map(([campo, etiqueta]) => (
             <div key={campo} className="space-y-1.5">
               <Label htmlFor={`nuevo-${campo}`}>
@@ -289,7 +289,7 @@ function NuevoCliente({ onListo }: { onListo: () => void }) {
 
         <div className="space-y-3 rounded-2xl border border-dashed border-border p-3">
           <p className="text-sm font-semibold">Su primer perro (opcional)</p>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {(
               [
                 ["nombre", "Nombre"],

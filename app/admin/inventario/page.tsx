@@ -97,7 +97,7 @@ export default function Inventario() {
             <h2 className="font-display font-bold">
               {ETIQUETA_CATEGORIA[categoria as CategoriaProducto]}
             </h2>
-            <div className="grid gap-2 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
               {lista.map((producto) => (
                 <FilaProducto key={producto.id} producto={producto} />
               ))}
@@ -128,7 +128,11 @@ function FilaProducto({ producto }: { producto: Producto }) {
     <Card className={cn(agotado && "border-destructive/40")}>
       <CardContent className="flex items-center gap-3 p-3">
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold">{producto.nombre}</p>
+          {/* El nombre se parte en dos líneas antes que recortarse: en el
+              celular "Alimento premium adu…" no distingue adulto de cachorro. */}
+          <p className="line-clamp-2 font-semibold text-pretty">
+            {producto.nombre}
+          </p>
           <p className="text-muted-foreground truncate text-sm">
             <PrecioCLP monto={producto.precio} tamano="sm" /> ·{" "}
             {producto.descripcion}

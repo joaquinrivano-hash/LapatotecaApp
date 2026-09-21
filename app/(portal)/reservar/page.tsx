@@ -370,7 +370,7 @@ function ComprarPlan({ perro }: { perro: Perro }) {
           </div>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <Button
             size="xl"
             disabled={ocupado}
@@ -463,7 +463,7 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {/*
             El selector nativo muestra la fecha en el formato del navegador,
             que puede no ser el chileno. La leyenda de abajo la deja escrita
@@ -648,7 +648,7 @@ function ServicioSpot({ perro }: { perro: Perro }) {
           ))}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="fecha-servicio">Día</Label>
             <Input

@@ -249,7 +249,7 @@ export default function Landing() {
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {SERVICIOS.map(
               ({ icono: Icono, titulo, foto, alt, bajada, filas, nota }) => (
                 <Card key={titulo} className="overflow-hidden pt-0">
