@@ -116,7 +116,8 @@ export interface ReservaHotel {
   finProgramado: InstanteISO;
   inicioReal?: InstanteISO;
   finReal?: InstanteISO;
-  conPaseo: boolean;
+  /** Cantidad de paseos contratados durante la estadía, a $4.000 cada uno. */
+  paseosContratados: number;
   estado: EstadoReserva;
   cotizacion: Cotizacion;
   abonoPagado: boolean;
@@ -166,6 +167,11 @@ export interface PlanComprado {
   compradoEn: InstanteISO;
   venceEn: FechaISO;
   precio: number;
+  /**
+   * Los días no son acumulables: comprar un pack nuevo cierra el anterior.
+   * Acá queda cuándo se cerró, para que el historial no mienta.
+   */
+  cerradoEn?: InstanteISO;
   /** Si vino de una suscripción recurrente que se recarga el día 1. */
   suscripcionId?: ID;
 }
