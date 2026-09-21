@@ -231,6 +231,12 @@ export interface Pago {
   concepto: ConceptoPago;
   /** Id de la reserva, estadía, plan, servicio u orden que originó el cobro. */
   referenciaId?: ID;
+  /**
+   * Si este cobro ya quedó incluido en una cuenta mensual. Deja de ser
+   * cobrable por su cuenta: se cobra a través de la cuenta, y contarlo en la
+   * cobranza sería cobrarlo dos veces.
+   */
+  cuentaMensualId?: ID;
   monto: number;
   estado: EstadoPago;
   metodo?: MetodoPago;

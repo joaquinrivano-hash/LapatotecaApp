@@ -294,3 +294,29 @@ describe("estados coherentes con el día de referencia", () => {
     ).toBe(true);
   });
 });
+
+describe("invariantes del modelo", () => {
+  it("la fecha de la estadía coincide con sus instantes", () => {
+    // La ocupación se calcula con los instantes. Si `fecha` apunta a otro día,
+    // el calendario y los KPIs muestran números que no existen.
+    for (const e of datos.estadiasJardin) {
+      expect(fechaISO(e.inicioProgramado)).toBe(e.fecha);
+      if (e.inicioReal) expect(fechaISO(e.inicioReal)).toBe(e.fecha);
+    }
+  });
+
+  it("ninguna estadía termina antes de empezar", () => {
+    for (const e of datos.estadiasJardin) {
+      expect(e.finProgramado > e.inicioProgramado).toBe(true);
+      if (e.inicioReal && e.finReal) {
+        expect(e.finReal > e.inicioReal).toBe(true);
+      }
+    }
+  });
+
+  it("ninguna reserva de hotel termina antes de empezar", () => {
+    for (const r of datos.reservasHotel) {
+      expect(r.finProgramado > r.inicioProgramado).toBe(true);
+    }
+  });
+});

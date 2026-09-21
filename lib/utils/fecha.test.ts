@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   diasEntre,
+  formatearDiaMesCorto,
   esFinDeSemana,
   fechaISO,
   formatearDuracion,
@@ -94,5 +95,11 @@ describe("horas", () => {
     expect(formatearDuracion(45)).toBe("45 min");
     expect(formatearDuracion(300)).toBe("5 h");
     expect(formatearDuracion(210)).toBe("3 h 30 min");
+  });
+});
+
+describe("formato para ejes", () => {
+  it("omite el día de la semana y deja el mes en minúscula", () => {
+    expect(formatearDiaMesCorto("2026-09-21T15:00:00.000Z")).toBe("21 sep");
   });
 });

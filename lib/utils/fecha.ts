@@ -164,6 +164,11 @@ export function formatearDiaMes(valor: EntradaFecha): string {
   return fmt(valor, "EEE d MMM");
 }
 
+/** "21 sep", sin el día de la semana. Para ejes de gráficos. */
+export function formatearDiaMesCorto(valor: EntradaFecha): string {
+  return fmt(valor, "d MMM");
+}
+
 /** "07:30" */
 export function formatearHora(valor: EntradaFecha): string {
   return fmt(valor, "HH:mm");

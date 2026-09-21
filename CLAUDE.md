@@ -270,6 +270,39 @@ eso no es una decisión, es un error.
 Solo aplica a perros que ya son clientes. Uno nuevo necesita su día de prueba
 antes de quedarse, así que no puede entrar por esta vía.
 
+### El backoffice y sus definiciones
+
+`/lib/servicios/panel.ts`, `calendario.ts`, `cobranza.ts` y `clientes.ts`.
+Tres definiciones que se confunden fácil y están fijadas ahí:
+
+- **Ocupación** se mide contra el PICO simultáneo del día, no contra los
+  perros que pasaron. Un día con 22 perros que nunca coincidieron más de 17
+  está al 68%, no al 88%.
+- **Ingreso por cupo disponible** divide por los 25 cupos, no por los
+  ocupados. Es el RevPAR del negocio: cuánto rinde el espacio que tienes.
+- **Renovación de planes** es recompra: de los planes comprados en el periodo,
+  cuántos son de un perro que ya había comprado antes.
+
+El ingreso se cuenta cuando se **emite** el cobro, no cuando se paga. Y
+`cuenta_mensual` no es una línea de ingreso: es una consolidación de cobros que
+ya están contados, sumarla los duplicaría.
+
+**La cuenta del día 1 es idempotente.** Emitir dos veces el mismo periodo sería
+cobrarle dos veces al cliente, así que si el periodo ya existe no se vuelve a
+emitir. Los cobros sueltos que entran en una cuenta quedan marcados con
+`cuentaMensualId` y dejan de ser cobrables por separado.
+
+### Gráficos de barras apiladas: el error que ya se cometió dos veces
+
+El alto de un segmento se mide contra **la barra**, no contra el techo de la
+escala. La barra ya está escalada (`pico / techo`), así que usar el mismo
+porcentaje adentro divide dos veces y el segmento de abajo sale achicado.
+
+```
+// mal:  height: (hotel / techo) * 100%
+// bien: height: (hotel / total) * 100%
+```
+
 ### Datos que persisten
 
 `RepositorioLocal` guarda todo el set en `localStorage` bajo
@@ -373,8 +406,10 @@ npm run typecheck
 2. ~~**App staff**~~ — hecho: Hoy con ocupación por franja, check-in/out de un
    toque, reportes por WhatsApp e incidentes. Incluye la capa de
    integraciones.
-3. **Backoffice admin** ← siguiente
-4. **Portal cliente**
+3. ~~**Backoffice admin**~~ — hecho: KPIs, calendario de ocupación, clientes
+   y perros con alertas, cobranza con la cuenta del día 1, planes e
+   inventario.
+4. **Portal cliente** ← siguiente
 5. **PWA** + pulido
 
 ## 8. Pendiente: el folleto contradice varias reglas
