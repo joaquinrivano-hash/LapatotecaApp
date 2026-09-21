@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Nunito, Baloo_2 } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
+import {
+  AvisoDeInstalacion,
+  RegistrarServiceWorker,
+} from "@/components/shared/pwa";
 import "./globals.css";
 
 const nunito = Nunito({
@@ -19,6 +23,12 @@ export const metadata: Metadata = {
   title: "La Patoteca — Hotel y guardería para perros",
   description:
     "Cuidamos a tu perro en una casa, sin jaulas ni caniles. Guardería de día, hotel, spa, paseos y traslados en Providencia, Santiago.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "La Patoteca",
+    statusBarStyle: "default",
+  },
   icons: {
     icon: [
       { url: "/marca/favicon-32.png", sizes: "32x32", type: "image/png" },
@@ -44,6 +54,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         {children}
         <Toaster />
+        <RegistrarServiceWorker />
+        <AvisoDeInstalacion />
       </body>
     </html>
   );

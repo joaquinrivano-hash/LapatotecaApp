@@ -1,0 +1,46 @@
+{
+  "name": "La Patoteca — Hotel y guardería para perros",
+  "short_name": "La Patoteca",
+  "description": "Reserva el jardín o el hotel, compra en la tienda y mira los reportes de tu perro.",
+  "lang": "es-CL",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fdf6ec",
+  "theme_color": "#fe5c82",
+  "categories": ["lifestyle", "business"],
+  "icons": [
+    {
+      "src": "/marca/icono-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/marca/icono-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/marca/icono-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Reservar",
+      "url": "/reservar",
+      "icons": [{ "src": "/marca/icono-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Hoy (equipo)",
+      "url": "/staff",
+      "icons": [{ "src": "/marca/icono-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
