@@ -195,23 +195,30 @@ funciona normal y se integra sin conflictos.
 
 ```
 app/
-  (cliente)/   landing · ingresar · mi-cuenta · reservar/{hotel,jardin}
-               servicios · tienda · mis-reservas
+  (portal)/    landing · reservar (hotel, jardín, planes, servicios)
+               tienda · mi-cuenta
+  ingresar/    login mock con selector de rol
   staff/       Hoy · buscar · reportes · incidentes
-  admin/       KPIs · clientes · calendario · pagos · planes · inventario
+  admin/       KPIs · calendario · clientes · pagos · planes · inventario
+               datos (respaldo y reinicio)
+  offline/     pantalla de caída del service worker
+  api/integraciones/whatsapp/   enviar · webhook
 components/
-  ui/          shadcn
-  shared/      PrecioCLP, PerroAvatar, EstadoBadge, CupoMeter…
-  cliente/ staff/ admin/
+  ui/          shadcn escrito a mano
+  shared/      PrecioCLP, PerroAvatar, EstadoBadge, LogoPatoteca, PWA…
+  staff/ admin/
 lib/
   config/      precios.ts · negocio.ts   ← única fuente de constantes
   types.ts
   rules/       funciones puras + *.test.ts colocados
+  servicios/   reglas + repositorio (asistencia, reservas, panel, cobranza…)
   repo/        interfaces + impl local + factory
+  integraciones/  mensajería (plantillas, canales, bandeja)
   data/        seed determinista
   store/       zustand + persist
-  utils/       fecha (America/Santiago) · formato CLP
-public/        manifest.json · sw.js · íconos
+  hooks/       useConsulta · useAccion · useMontado
+  utils/       fecha (America/Santiago) · formato CLP · teléfono · imagen
+public/        manifest.webmanifest · sw.js · marca/ (logo e íconos)
 ```
 
 ### Modelo de datos
@@ -351,7 +358,9 @@ porcentaje adentro divide dos veces y el segmento de abajo sale achicado.
 `patoteca:datos:v1`. La primera visita siembra el seed; de ahí en adelante los
 datos son del usuario y **nunca se regeneran solos** — solo con
 `sistema.reiniciar()`, que es destructivo y va detrás de una confirmación.
-`sistema.exportar()` e `importar()` existen para no perder una demo.
+`sistema.exportar()` e `importar()` existen para no perder una demo, y
+`/admin/datos` es la pantalla que los expone: muestra el anclaje y el peso del
+set, descarga el respaldo, lo restaura y regenera el seed anclado a hoy.
 
 El seed se ancla al día de hoy, así que el dashboard siempre muestra "los
 últimos 60 días" sin envejecer. Es determinista: misma semilla y mismo
@@ -362,6 +371,31 @@ Como `localStorage` no existe en el servidor, las pantallas que leen datos son
 revienta durante el render.
 
 ---
+
+### La PWA
+
+`public/manifest.webmanifest` y `public/sw.js`. El service worker se registra
+**solo en producción** (`components/shared/pwa.tsx`): en desarrollo se pelea
+con el recargado en caliente de Next y sirve pantallas viejas, así que para
+probarlo hay que correr `npm run build && npm start`.
+
+Estrategia de caché: navegación red primero con caída a `/offline`, estáticos
+(`/_next/static/`, `/marca/`) caché primero, y **nada de `/api/`** — esas
+respuestas son envíos reales de WhatsApp y servirlas desde caché sería mentir
+sobre un mensaje que nunca salió.
+
+El aviso de instalación se decide en el render, no en un efecto. iOS no dispara
+`beforeinstallprompt`, así que ahí el aviso explica el botón "Agregar a inicio"
+en vez de ofrecer un botón que no existe.
+
+### Una fecha sin hora es un día, no un instante
+
+`"2026-09-21"` es un día del calendario de Santiago. Si se lo deja leer como
+ISO se entiende como medianoche del reloj de quien mira, y desde cualquier zona
+al este de Chile (un servidor en UTC, un dueño de viaje en Madrid) la pantalla
+muestra el día anterior. `enZona()` lo ancla al **mediodía** de Santiago —al
+mediodía y no a la medianoche porque en Chile el cambio de horario ocurre a las
+24:00 y hay días cuya medianoche no existe.
 
 ## 4. Marca
 
@@ -454,7 +488,9 @@ npm run typecheck
 4. ~~**Portal cliente**~~ — hecho: landing con precios de config, reserva de
    hotel y jardín con precio en vivo, compra de planes, servicios spot,
    tienda con carrito y la cuenta con perros, planes, reservas y reportes.
-5. **PWA** + pulido ← siguiente
+5. ~~**PWA** + pulido~~ — hecho: manifest, service worker con pantalla sin
+   conexión, aviso de instalación y la pantalla de datos del backoffice
+   (respaldo, restauración y reinicio del seed).
 
 ## 8. Del folleto
 
