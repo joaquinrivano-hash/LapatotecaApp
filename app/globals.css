@@ -1,0 +1,127 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * La Patoteca — tema cálido y hogareño.
+ * Sin modo oscuro a propósito: el prototipo es una casa con luz, no un panel.
+ * Todos los colores se definen acá; los componentes usan los tokens semánticos.
+ */
+
+:root {
+  --radius: 1rem;
+
+  --background: #fff8f0;
+  --foreground: #4a3b32;
+
+  --card: #ffffff;
+  --card-foreground: #4a3b32;
+  --popover: #ffffff;
+  --popover-foreground: #4a3b32;
+
+  /* Terracota: el color de la marca, botones y acciones principales */
+  --primary: #e2703a;
+  --primary-foreground: #fff8f0;
+
+  --secondary: #f3e7da;
+  --secondary-foreground: #6b4f3f;
+  --muted: #f6ece1;
+  --muted-foreground: #8a7263;
+  --accent: #6fa287;
+  --accent-foreground: #ffffff;
+
+  --destructive: #c0392b;
+  --destructive-foreground: #ffffff;
+  --success: #4f8a5b;
+  --success-foreground: #ffffff;
+  --warning: #d98324;
+  --warning-foreground: #ffffff;
+
+  --border: #ead9c7;
+  --input: #ead9c7;
+  --ring: #e2703a;
+
+  /* Hotel = noche = azul · Jardín = día = verde. Se usa en calendario y KPIs. */
+  --hotel: #6b8cbf;
+  --hotel-suave: #e3ecf7;
+  --jardin: #6fa287;
+  --jardin-suave: #e4f0ea;
+
+  --chart-1: #e2703a;
+  --chart-2: #6fa287;
+  --chart-3: #6b8cbf;
+  --chart-4: #f2b134;
+  --chart-5: #b07ca8;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-hotel: var(--hotel);
+  --color-hotel-suave: var(--hotel-suave);
+  --color-jardin: var(--jardin);
+  --color-jardin-suave: var(--jardin-suave);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --font-sans: var(--font-nunito), ui-rounded, system-ui, sans-serif;
+  --font-display: var(--font-baloo), ui-rounded, system-ui, sans-serif;
+
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  /* El staff usa esto en la calle, con el perro en brazos: nada de zoom al tocar un input. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
