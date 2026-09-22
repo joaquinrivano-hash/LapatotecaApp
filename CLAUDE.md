@@ -546,6 +546,25 @@ que los targets táctiles van generosos.
 - Commits pequeños y descriptivos, en español.
 - Al cierre de cada etapa: `build`, `lint` y `test` verdes antes de avanzar.
 
+### Las ramas
+
+Tres niveles, para que probar algo nuevo nunca toque la app que el dueño está
+usando en su celular:
+
+| Rama | Qué es | Vercel |
+|---|---|---|
+| `main` | **Producción.** Solo entra lo que ya se probó. | Despliegue de producción |
+| `pruebas` | **Integración.** Acá se junta y se prueba lo que viene. | Vista previa fija |
+| `prueba/<algo>` | Una funcionalidad en curso, sale de `pruebas` y vuelve ahí. | Vista previa por rama |
+| `v0.01` | Foto congelada del prototipo terminado (las 5 etapas). No se le commitea. | Vista previa fija |
+
+El flujo es `prueba/<algo>` → `pruebas` → `main`. Nada llega a `main` sin haber
+pasado por `pruebas` y sin `build`, `lint` y `test` verdes.
+
+Ojo con el nombre: la rama de una funcionalidad es `prueba/` en **singular**.
+Git no deja que exista `pruebas` y `pruebas/whatsapp` a la vez —una referencia
+no puede ser archivo y carpeta al mismo tiempo— y el error que tira no dice eso.
+
 ## 6. Comandos
 
 ```
