@@ -257,6 +257,22 @@ negociables y que ya están modeladas:
   bandeja con su motivo y se puede reintentar; nunca se pierde un reporte
   porque se cayó la red.
 
+Dos cosas que solo aparecen cuando se manda de verdad, y que ya están
+resueltas en el código:
+
+- **El idioma de la plantilla tiene que coincidir exacto.** Meta tiene una
+  lista cerrada de idiomas y el español chileno no está en ella. Con un código
+  que no existe el envío falla con "template name does not exist in the
+  translation" aunque el nombre esté perfecto, que es un error que no se
+  entiende leyéndolo. Por eso el idioma es una constante única,
+  `IDIOMA_PLANTILLAS`, y no cuatro literales sueltos.
+- **La foto del reporte se sube antes de mandar el mensaje.** El equipo la saca
+  en el celular y se guarda como data URL; el encabezado de imagen de WhatsApp
+  pide un link HTTPS que descarga **el servidor de Meta**, y un data URL no lo
+  es. La ruta de envío la sube a la API de medios y el mensaje la nombra por
+  id. Si algún día las fotos viven en un bucket público, el link vuelve a
+  servir y el código ya lo distingue solo.
+
 El canal se elige con `NEXT_PUBLIC_CANAL_MENSAJERIA`: `simulado` (por defecto,
 no toca la red, sirve para demos sin cuenta de Meta) o `whatsapp`. El token es
 secreto y vive solo en el servidor, detrás de
