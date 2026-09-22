@@ -14,13 +14,17 @@ import {
   credencialesWhatsApp,
   whatsAppConfigurado,
 } from "@/lib/integraciones/config";
+import { esDataUrl, leerDataUrl } from "@/lib/integraciones/mensajeria/media";
 import type { ResultadoEnvio } from "@/lib/integraciones/tipos";
 import type { MensajeSaliente } from "@/lib/types";
+
+type Credenciales = ReturnType<typeof credencialesWhatsApp>;
 
 interface ParametroWhatsApp {
   type: "text" | "image";
   text?: string;
-  image?: { link: string };
+  /** El link sirve para una URL pública; el id, para una foto ya subida. */
+  image?: { link?: string; id?: string };
 }
 
 interface ComponenteWhatsApp {
@@ -28,13 +32,22 @@ interface ComponenteWhatsApp {
   parameters: ParametroWhatsApp[];
 }
 
-function construirPayload(mensaje: MensajeSaliente) {
+function grafo({ base, version }: Credenciales, recurso: string): string {
+  return `${base}/${version}/${recurso}`;
+}
+
+function construirPayload(mensaje: MensajeSaliente, idMedia?: string) {
   const componentes: ComponenteWhatsApp[] = [];
 
   if (mensaje.adjuntoUrl) {
     componentes.push({
       type: "header",
-      parameters: [{ type: "image", image: { link: mensaje.adjuntoUrl } }],
+      parameters: [
+        {
+          type: "image",
+          image: idMedia ? { id: idMedia } : { link: mensaje.adjuntoUrl },
+        },
+      ],
     });
   }
 
@@ -57,6 +70,48 @@ function construirPayload(mensaje: MensajeSaliente) {
       components: componentes,
     },
   };
+}
+
+/**
+ * Sube la foto a Meta y devuelve su id.
+ *
+ * Va aparte del envío porque son dos llamadas distintas y el error de cada una
+ * se lee distinto: acá el problema es la foto, allá el mensaje.
+ */
+async function subirFoto(
+  dataUrl: string,
+  credenciales: Credenciales,
+): Promise<string> {
+  const { tipo, bytes, nombreArchivo } = leerDataUrl(dataUrl);
+
+  const formulario = new FormData();
+  formulario.append("messaging_product", "whatsapp");
+  formulario.append("type", tipo);
+  formulario.append("file", new Blob([bytes], { type: tipo }), nombreArchivo);
+
+  const respuesta = await fetch(
+    grafo(credenciales, `${credenciales.phoneNumberId}/media`),
+    {
+      method: "POST",
+      // Sin Content-Type a mano: fetch le pone el boundary del multipart.
+      headers: { Authorization: `Bearer ${credenciales.accessToken}` },
+      body: formulario,
+    },
+  );
+
+  const cuerpo = (await respuesta.json()) as {
+    id?: string;
+    error?: { message?: string };
+  };
+
+  if (!respuesta.ok || !cuerpo.id) {
+    throw new Error(
+      cuerpo.error?.message ??
+        `No pudimos subir la foto: WhatsApp respondió ${respuesta.status}.`,
+    );
+  }
+
+  return cuerpo.id;
 }
 
 export async function POST(request: Request) {
@@ -93,18 +148,25 @@ export async function POST(request: Request) {
     );
   }
 
-  const { phoneNumberId, accessToken, version } = credencialesWhatsApp();
+  const credenciales = credencialesWhatsApp();
 
   try {
+    // La foto del reporte viaja como data URL: Meta no puede descargarla, así
+    // que primero se la subimos y después la nombramos por id.
+    const idMedia =
+      mensaje.adjuntoUrl && esDataUrl(mensaje.adjuntoUrl)
+        ? await subirFoto(mensaje.adjuntoUrl, credenciales)
+        : undefined;
+
     const respuesta = await fetch(
-      `https://graph.facebook.com/${version}/${phoneNumberId}/messages`,
+      grafo(credenciales, `${credenciales.phoneNumberId}/messages`),
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${credenciales.accessToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(construirPayload(mensaje)),
+        body: JSON.stringify(construirPayload(mensaje, idMedia)),
       },
     );
 
@@ -119,8 +181,7 @@ export async function POST(request: Request) {
           ok: false,
           simulado: false,
           error:
-            cuerpo.error?.message ??
-            `WhatsApp respondió ${respuesta.status}.`,
+            cuerpo.error?.message ?? `WhatsApp respondió ${respuesta.status}.`,
         },
         { status: 502 },
       );

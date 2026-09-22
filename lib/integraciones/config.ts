@@ -28,6 +28,9 @@ export function credencialesWhatsApp() {
     businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ?? "",
     verifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN ?? "",
     version: process.env.WHATSAPP_API_VERSION ?? "v21.0",
+    // Configurable para poder apuntar a un Meta de mentira y probar el envío
+    // completo —el multipart de la foto incluido— sin cuenta ni red.
+    base: process.env.WHATSAPP_API_BASE ?? "https://graph.facebook.com",
   };
 }
 
