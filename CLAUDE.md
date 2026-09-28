@@ -196,11 +196,11 @@ funciona normal y se integra sin conflictos.
 ```
 app/
   (portal)/    landing · reservar (hotel, jardín, planes, servicios)
-               tienda · mi-cuenta
+               dia-de-prueba · tienda · mi-cuenta
   ingresar/    login mock con selector de rol
   staff/       Hoy · buscar · reportes · incidentes
   admin/       KPIs · calendario · clientes · pagos · planes · inventario
-               datos (respaldo y reinicio)
+               reglas (qué se le exige a una ficha) · datos
   offline/     pantalla de caída del service worker
   api/integraciones/whatsapp/   enviar · webhook
 components/
@@ -420,9 +420,59 @@ las vacunas**: el día de prueba ya es una jornada completa en la casa con otros
 perros, así que la admisión se aplica igual. Lo único que impide crear la
 cuenta es lo que no tiene vuelta: el peso y la esterilización de los machos.
 
-El día de prueba se agenda como una `EstadiaJardin` con `origen:
-"dia_de_prueba"` y deja al perro en `diaDePrueba.estado = "agendado"`. No emite
-cobro: igual que el día suelto, se cobra al cerrar la jornada.
+### El día de prueba
+
+Es **media jornada** de un día de jardín normal —6 horas, la mitad de las 12
+que abre el jardín— con **hora de llegada a elección en bloques de 30
+minutos**. Por bloque entra **un solo perro nuevo**, aparte del cupo de 25 de
+la casa: dos primerizos llegando juntos es una presentación que nadie alcanza
+a acompañar.
+
+El calendario muestra disponibilidad de verdad. Dejar elegir cualquier día y
+fallar al confirmar es peor que mostrar el día lleno desde el principio.
+
+A diferencia del día suelto de jardín, **se cobra al agendar**: es la
+evaluación de un perro que todavía no es cliente y el cupo queda tomado desde
+ese momento. El cobro nace **pendiente** —no hay pasarela, y en la realidad los
+primeros meses se paga por transferencia—; Administración lo marca pagado desde
+la pantalla de pagos.
+
+Se agenda como una `EstadiaJardin` con `origen: "dia_de_prueba"` y deja al
+perro en `diaDePrueba.estado = "agendado"`.
+
+**Cancelar y reprogramar**, con 24 horas de corte:
+
+| | Cancelar | Cambiar la fecha |
+|---|---|---|
+| Con 24 h o más | El cobro se anula | Sin costo |
+| Con menos de 24 h | El cobro pasa a $5.000 | Se suma un cargo de $5.000 |
+
+Como el cobro está pendiente, **anularlo es la devolución**: no hay plata que
+devolver, hay un cobro que dejar de existir. Y no se borra, se marca
+reembolsado en cero: un cobro que desaparece no deja rastro de que existió, y
+la cobranza del mes tiene que poder explicarse.
+
+Las condiciones se muestran **antes de pagar**, no detrás de un enlace.
+Enterarse después es la manera segura de que se sientan letra chica.
+
+### El dueño corrige su ficha, y Administración se entera
+
+`lib/servicios/perros.ts`. El dueño puede cambiar los datos de su perro sin
+pedir permiso —son suyos y nadie los conoce mejor—, pero cada cambio deja una
+`Notificacion` con el **antes y el después de cada campo**.
+
+"Cambió la ficha" no le sirve a nadie: un peso que sube de 8 a 21 kg o una
+castración que se desmarca cambian si el perro puede quedarse. Por eso la
+comparación es en palabras (`"9 kg"` → `"12 kg"`, `"sí"` → `"no"`) y no entre
+propiedades: lo que importa es lo que cambió a la vista.
+
+Dos detalles que costaron un bug cada uno:
+
+- Las fechas se comparan con `formatearFechaCorta`, que **lleva el año**. Con
+  `formatearFecha` una vacuna renovada al año siguiente se veía idéntica y el
+  cambio no generaba aviso.
+- Guardar sin cambiar nada **no avisa**. Una bandeja con avisos vacíos se deja
+  de leer, y entonces el que importa también pasa de largo.
 
 ### Avisar no es bloquear
 
