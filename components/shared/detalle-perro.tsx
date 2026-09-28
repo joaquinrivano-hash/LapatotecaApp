@@ -16,7 +16,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useConsulta } from "@/lib/hooks/use-consulta";
-import { vacunasFaltantes } from "@/lib/rules/admision";
+import { nombreVacuna, vacunasFaltantes } from "@/lib/rules/admision";
+import { describirAlimentacion } from "@/lib/rules/perro";
 import { formatearDiaMes, sumarDias } from "@/lib/utils/fecha";
 import { formatearTelefono } from "@/lib/utils/telefono";
 import type { Cliente, GravedadIncidente, Perro } from "@/lib/types";
@@ -99,7 +100,8 @@ export function DatosPerro({
         <p className="bg-warning/12 text-warning flex items-start gap-2 rounded-xl p-3 text-sm">
           <Syringe className="mt-0.5 size-4 shrink-0" />
           <span>
-            Tiene vencida la vacuna {faltantes.join(", ")}. Avísale al dueño.
+            Tiene vencida la vacuna {faltantes.map(nombreVacuna).join(", ")}.
+            Avísale al dueño.
           </span>
         </p>
       )}
@@ -107,7 +109,7 @@ export function DatosPerro({
       <Dato
         icono={Bone}
         titulo="Comida"
-        texto={perro.alimentacion}
+        texto={describirAlimentacion(perro.alimentacion) ?? undefined}
         vacio="Sin indicaciones de comida."
         className="bg-jardin-suave"
       />
