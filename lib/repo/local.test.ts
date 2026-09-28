@@ -302,7 +302,7 @@ describe("configuración de Administración", () => {
     );
 
     const restaurada = await otraVisita.configuracion.restaurar();
-    expect(restaurada.camposObligatorios).toEqual(["foto"]);
+    expect(restaurada.camposObligatorios).toContain("foto");
   });
 });
 

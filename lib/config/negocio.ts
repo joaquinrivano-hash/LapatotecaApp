@@ -95,7 +95,12 @@ export const NEGOCIO = {
    * exigir algo que no se puede llenar deja el alta trancada sin explicación.
    */
   altaDePerro: {
-    camposObligatorios: ["foto"],
+    camposObligatorios: [
+      "fechaNacimiento",
+      "foto",
+      "carnetVacunas",
+      "alimentacion",
+    ],
   },
 
   admision: {

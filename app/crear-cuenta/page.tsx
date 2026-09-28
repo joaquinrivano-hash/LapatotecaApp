@@ -1,39 +1,43 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import Image from "next/image";
-import { Camera, Dog, PawPrint, TriangleAlert, User, X } from "lucide-react";
+import { Dog, PawPrint, TriangleAlert, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CabeceraPublica } from "@/components/shared/cabecera-publica";
-import { NEGOCIO } from "@/lib/config/negocio";
+import {
+  aBorrador,
+  aDatosDePerro,
+  Campo,
+  estadoVacio,
+  FormularioPerro,
+  type EstadoPerro,
+} from "@/components/shared/formulario-perro";
 import { PRECIOS } from "@/lib/config/precios";
-import { nombreVacuna } from "@/lib/rules/admision";
-import { useAccion } from "@/lib/hooks/use-consulta";
+import { NEGOCIO } from "@/lib/config/negocio";
+import { revisarAltaDePerro, type FaltanteDeAlta } from "@/lib/rules/alta-perro";
+import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
+import { hoyDelStaff } from "@/lib/servicios/asistencia";
 import {
   crearCuenta,
   RegistroRechazado,
   reparosParaEntrar,
 } from "@/lib/servicios/registro";
 import { useSesion } from "@/lib/store/sesion";
-import { comprimirImagen } from "@/lib/utils/imagen";
 import { formatearCLP } from "@/lib/utils/moneda";
 import { esTelefonoValido } from "@/lib/utils/telefono";
-import type { Sexo, TipoVacuna } from "@/lib/types";
-
-const VACUNAS = NEGOCIO.admision.vacunasObligatorias;
 
 export default function CrearCuenta() {
   const router = useRouter();
+  const hoy = hoyDelStaff();
   const entrar = useSesion((s) => s.entrar);
   const { ocupado, ejecutar } = useAccion();
+
+  const configuracion = useConsulta((repo) => repo.configuracion.obtener(), []);
 
   const [cuenta, setCuenta] = useState({
     nombre: "",
@@ -42,78 +46,44 @@ export default function CrearCuenta() {
     telefono: "",
     comuna: "Providencia",
   });
-  const [perro, setPerro] = useState({
-    nombre: "",
-    raza: "",
-    pesoKg: "",
-    sexo: "hembra" as Sexo,
-    esterilizado: true,
-    alimentacion: "",
-  });
-  const [vencimientos, setVencimientos] = useState<
-    Partial<Record<TipoVacuna, string>>
-  >({});
-  const [desparasitadoHasta, setDesparasitadoHasta] = useState("");
-  const [foto, setFoto] = useState<string | undefined>();
-  const archivo = useRef<HTMLInputElement>(null);
+  const [perro, setPerro] = useState<EstadoPerro>(estadoVacio);
+  // Los reparos del formulario se muestran recién cuando intenta guardar: ir
+  // marcando en rojo lo que todavía no alcanza a escribir es hostil.
+  const [faltantes, setFaltantes] = useState<FaltanteDeAlta[]>([]);
 
-  const peso = Number(perro.pesoKg.replace(",", "."));
-  const pesoValido = Number.isFinite(peso) && peso > 0;
-
-  const reparos = pesoValido
+  const borrador = aBorrador(perro);
+  const reparos = borrador.pesoKg
     ? reparosParaEntrar({
         nombre: perro.nombre,
         raza: perro.raza,
-        pesoKg: peso,
-        sexo: perro.sexo,
-        esterilizado: perro.esterilizado,
+        pesoKg: borrador.pesoKg,
+        sexo: borrador.sexo ?? "hembra",
+        esterilizado: borrador.esterilizado,
       })
     : [];
 
-  const completo =
+  const datosDelDueno =
     cuenta.nombre.trim() !== "" &&
     cuenta.apellido.trim() !== "" &&
     cuenta.email.trim() !== "" &&
     esTelefonoValido(cuenta.telefono) &&
-    cuenta.comuna.trim() !== "" &&
-    perro.nombre.trim() !== "" &&
-    perro.raza.trim() !== "" &&
-    pesoValido;
-
-  const puedeCrear = completo && reparos.length === 0;
-
-  async function elegirFoto(evento: React.ChangeEvent<HTMLInputElement>) {
-    const entrante = evento.target.files?.[0];
-    evento.target.value = "";
-    if (!entrante) return;
-    try {
-      setFoto(await comprimirImagen(entrante));
-    } catch {
-      toast.error("No pudimos procesar esa foto.");
-    }
-  }
+    cuenta.comuna.trim() !== "";
 
   async function crear() {
+    if (!configuracion.datos) return;
+
+    const revision = revisarAltaDePerro(borrador, configuracion.datos, hoy);
+    setFaltantes(revision);
+    if (revision.length > 0) {
+      toast.error("Falta completar la ficha.", {
+        description: revision[0].mensaje,
+      });
+      return;
+    }
+
     try {
       const { cliente, perro: creado } = await ejecutar((repo) =>
-        crearCuenta(repo, {
-          cuenta,
-          perro: {
-            nombre: perro.nombre,
-            raza: perro.raza,
-            pesoKg: peso,
-            sexo: perro.sexo,
-            esterilizado: perro.esterilizado,
-            alimentacion: perro.alimentacion.trim()
-              ? { comidas: [], notas: perro.alimentacion }
-              : undefined,
-            desparasitadoHasta: desparasitadoHasta || undefined,
-            fotoUrl: foto,
-            vacunas: VACUNAS.filter((tipo) => vencimientos[tipo]).map(
-              (tipo) => ({ tipo, fechaVencimiento: vencimientos[tipo]! }),
-            ),
-          },
-        }),
+        crearCuenta(repo, { cuenta, perro: aDatosDePerro(perro) }),
       );
 
       entrar({ rol: "cliente", clienteId: cliente.id });
@@ -143,8 +113,8 @@ export default function CrearCuenta() {
           <p className="text-muted-foreground text-sm text-pretty">
             Primero nos conocemos: con la cuenta lista agendas el{" "}
             <strong className="text-foreground">día de prueba</strong> (
-            {formatearCLP(PRECIOS.diaDePrueba)}), que es una jornada completa de
-            jardín. Después de eso puedes reservar hotel o días de jardín.
+            {formatearCLP(PRECIOS.diaDePrueba)}), que es media jornada de
+            jardín. Después de eso puedes reservar hotel o días completos.
           </p>
         </div>
 
@@ -208,172 +178,23 @@ export default function CrearCuenta() {
         </Card>
 
         <Card>
-          <CardContent className="space-y-3 p-5">
+          <CardContent className="space-y-4 p-5">
             <h2 className="font-display flex items-center gap-2 text-lg font-bold">
               <Dog className="size-5" />
               Tu perro
             </h2>
 
-            <div className="space-y-2">
-              {foto ? (
-                <div className="relative">
-                  <Image
-                    src={foto}
-                    alt="Foto del perro"
-                    width={640}
-                    height={480}
-                    unoptimized
-                    className="h-44 w-full rounded-2xl object-cover"
-                  />
-                  <Button
-                    size="icon"
-                    variant="secondary"
-                    aria-label="Quitar la foto"
-                    className="absolute top-2 right-2"
-                    onClick={() => setFoto(undefined)}
-                  >
-                    <X />
-                  </Button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => archivo.current?.click()}
-                  className="text-muted-foreground hover:border-primary hover:text-primary flex h-28 w-full flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-border transition-colors"
-                >
-                  <Camera className="size-6" />
-                  <span className="text-sm font-semibold">
-                    Ponle una foto (opcional)
-                  </span>
-                  <span className="text-xs">
-                    Así el equipo lo reconoce apenas llega.
-                  </span>
-                </button>
-              )}
-              <input
-                ref={archivo}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={elegirFoto}
+            {configuracion.datos ? (
+              <FormularioPerro
+                estado={perro}
+                onCambio={setPerro}
+                configuracion={configuracion.datos}
+                faltantes={faltantes}
+                hoy={hoy}
               />
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Campo
-                id="perro-nombre"
-                etiqueta="Cómo se llama"
-                valor={perro.nombre}
-                onCambio={(v) => setPerro({ ...perro, nombre: v })}
-              />
-              <Campo
-                id="raza"
-                etiqueta="Raza"
-                valor={perro.raza}
-                onCambio={(v) => setPerro({ ...perro, raza: v })}
-                ayuda="Si es quiltro, escribe quiltro."
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Campo
-                id="peso"
-                etiqueta="Cuánto pesa (kg)"
-                tipo="number"
-                valor={perro.pesoKg}
-                onCambio={(v) => setPerro({ ...perro, pesoKg: v })}
-                ayuda={`Recibimos hasta ${NEGOCIO.admision.pesoMaximoKg} kg.`}
-              />
-
-              <div className="space-y-1.5">
-                <Label>Sexo</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["hembra", "macho"] as const).map((sexo) => (
-                    <Button
-                      key={sexo}
-                      type="button"
-                      variant={perro.sexo === sexo ? "default" : "outline"}
-                      onClick={() => setPerro({ ...perro, sexo })}
-                      className="capitalize"
-                    >
-                      {sexo}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <label className="flex items-center justify-between gap-3 rounded-xl border border-border/70 p-3">
-              <span className="text-sm">
-                <span className="font-semibold">Está esterilizado</span>
-                <span className="text-muted-foreground block text-xs">
-                  Obligatorio en los machos.
-                </span>
-              </span>
-              <Switch
-                checked={perro.esterilizado}
-                onCheckedChange={(v) => setPerro({ ...perro, esterilizado: v })}
-              />
-            </label>
-
-            <div className="space-y-2">
-              <div>
-                <Label>Vacunas: hasta cuándo están vigentes</Label>
-                <p className="text-muted-foreground text-xs text-pretty">
-                  Míralas en el carnet. Puedes dejarlas para después, pero sin
-                  vacunas al día no podemos recibirlo el día de prueba.
-                </p>
-              </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                {VACUNAS.map((tipo) => (
-                  <div key={tipo} className="space-y-1">
-                    <Label htmlFor={`vacuna-${tipo}`} className="text-xs">
-                      {nombreVacuna(tipo)}
-                    </Label>
-                    <Input
-                      id={`vacuna-${tipo}`}
-                      type="date"
-                      value={vencimientos[tipo] ?? ""}
-                      onChange={(e) =>
-                        setVencimientos({
-                          ...vencimientos,
-                          [tipo]: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="desparasitacion">
-                Desparasitación vigente hasta (opcional)
-              </Label>
-              <Input
-                id="desparasitacion"
-                type="date"
-                value={desparasitadoHasta}
-                onChange={(e) => setDesparasitadoHasta(e.target.value)}
-              />
-              <p className="text-muted-foreground text-xs">
-                Interna y externa. Si no la tienes a mano, la anotamos el día
-                de la visita.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="alimentacion">Qué come (opcional)</Label>
-              <Textarea
-                id="alimentacion"
-                value={perro.alimentacion}
-                onChange={(e) =>
-                  setPerro({ ...perro, alimentacion: e.target.value })
-                }
-                placeholder="Ej: una taza de pellet al almuerzo, la trae en bolsita."
-                rows={2}
-              />
-            </div>
+            ) : (
+              <Skeleton className="h-96 rounded-2xl" />
+            )}
           </CardContent>
         </Card>
 
@@ -395,12 +216,17 @@ export default function CrearCuenta() {
         <Button
           size="xl"
           className="w-full"
-          disabled={!puedeCrear || ocupado}
+          disabled={!datosDelDueno || reparos.length > 0 || ocupado}
           onClick={crear}
         >
           <PawPrint />
           {ocupado ? "Creando…" : "Crear cuenta y agendar"}
         </Button>
+
+        <p className="text-muted-foreground text-center text-xs text-pretty">
+          Recibimos perritos de hasta {NEGOCIO.admision.pesoMaximoKg} kg, con
+          las vacunas al día y machos castrados.
+        </p>
 
         <p className="text-muted-foreground text-center text-sm">
           ¿Ya eres cliente?{" "}
@@ -410,44 +236,5 @@ export default function CrearCuenta() {
         </p>
       </main>
     </>
-  );
-}
-
-function Campo({
-  id,
-  etiqueta,
-  valor,
-  onCambio,
-  tipo = "text",
-  ayuda,
-  error,
-  autoComplete,
-}: {
-  id: string;
-  etiqueta: string;
-  valor: string;
-  onCambio: (valor: string) => void;
-  tipo?: string;
-  ayuda?: string;
-  error?: string;
-  autoComplete?: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id}>{etiqueta}</Label>
-      <Input
-        id={id}
-        type={tipo}
-        inputMode={tipo === "number" ? "decimal" : undefined}
-        value={valor}
-        autoComplete={autoComplete}
-        onChange={(e) => onCambio(e.target.value)}
-      />
-      {error ? (
-        <p className="text-destructive text-xs">{error}</p>
-      ) : ayuda ? (
-        <p className="text-muted-foreground text-xs">{ayuda}</p>
-      ) : null}
-    </div>
   );
 }

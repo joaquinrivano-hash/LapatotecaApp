@@ -32,8 +32,17 @@ const PERRO = {
   pesoKg: 11.5,
   sexo: "hembra" as const,
   esterilizado: true,
-  // La foto es obligatoria desde que Administración puede exigirla.
+  // Los campos que Administración exige por defecto: sin ellos crearCuenta
+  // rechaza la ficha, que es justamente lo que queremos que haga.
+  fechaNacimiento: "2022-03-10",
   fotoUrl: "data:image/jpeg;base64,aG9sYQ==",
+  carnetVacunasUrl: "data:image/jpeg;base64,aG9sYQ==",
+  alimentacion: {
+    marca: "Proplan",
+    cantidad: 1,
+    unidad: "taza" as const,
+    comidas: ["almuerzo" as const],
+  },
   vacunas: NEGOCIO.admision.vacunasObligatorias.map((tipo) => ({
     tipo,
     fechaVencimiento: "2027-01-01",
