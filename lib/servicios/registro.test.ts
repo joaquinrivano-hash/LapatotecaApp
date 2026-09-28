@@ -9,13 +9,19 @@ import { instanteEnHora } from "@/lib/utils/fecha";
 import type { EstadiaJardin } from "@/lib/types";
 import {
   agendarDiaDePrueba,
+  cancelarDiaDePrueba,
   cotizarDiaDePrueba,
   crearCuenta,
+  disponibilidadDeUnDia,
   reparosParaEntrar,
+  reprogramarDiaDePrueba,
   RegistroRechazado,
 } from "./registro";
 
 const LUNES = "2026-06-15";
+const MARTES = "2026-06-16";
+/** Un instante del día anterior, para agendar "con tiempo". */
+const DOMINGO = "2026-06-14T12:00:00.000Z";
 const en = (hora: string, dia = LUNES) => instanteEnHora(dia, hora);
 
 const CUENTA = {
@@ -32,6 +38,17 @@ const PERRO = {
   pesoKg: 11.5,
   sexo: "hembra" as const,
   esterilizado: true,
+  // Los campos que Administración exige por defecto: sin ellos crearCuenta
+  // rechaza la ficha, que es justamente lo que queremos que haga.
+  fechaNacimiento: "2022-03-10",
+  fotoUrl: "data:image/jpeg;base64,aG9sYQ==",
+  carnetVacunasUrl: "data:image/jpeg;base64,aG9sYQ==",
+  alimentacion: {
+    marca: "Proplan",
+    cantidad: 1,
+    unidad: "taza" as const,
+    comidas: ["almuerzo" as const],
+  },
   vacunas: NEGOCIO.admision.vacunasObligatorias.map((tipo) => ({
     tipo,
     fechaVencimiento: "2027-01-01",
@@ -118,21 +135,23 @@ describe("crearCuenta", () => {
 });
 
 describe("día de prueba", () => {
-  it("se agenda como jornada de jardín y deja al perro agendado", async () => {
+  const A_LAS_9 = 9 * 60;
+
+  it("se agenda como media jornada desde la hora elegida", async () => {
     const { perro } = await crearCuenta(repo, { cuenta: CUENTA, perro: PERRO });
 
     const { estadia, perro: actualizado } = await agendarDiaDePrueba(
       repo,
       perro.id,
       LUNES,
-      en("10:00"),
+      A_LAS_9,
     );
 
     expect(estadia.origen).toBe("dia_de_prueba");
     expect(estadia.estado).toBe("esperada");
-    expect(estadia.cotizacion?.total).toBe(PRECIOS.diaDePrueba);
-    expect(estadia.inicioProgramado).toBe(
-      en(`${NEGOCIO.jardin.horaApertura}:00`),
+    expect(estadia.inicioProgramado).toBe(en("9:00"));
+    expect(estadia.finProgramado).toBe(
+      en(`${9 + NEGOCIO.diaDePrueba.horasDeEstadia}:00`),
     );
     expect(actualizado.diaDePrueba).toEqual({
       estado: "agendado",
@@ -140,9 +159,22 @@ describe("día de prueba", () => {
     });
   });
 
+  it("cobra al agendar, y el cobro nace pendiente", async () => {
+    const { cliente, perro } = await crearCuenta(repo, {
+      cuenta: CUENTA,
+      perro: PERRO,
+    });
+    const { pago } = await agendarDiaDePrueba(repo, perro.id, LUNES, A_LAS_9);
+
+    expect(pago.monto).toBe(PRECIOS.diaDePrueba);
+    expect(pago.estado).toBe("pendiente");
+    expect(pago.concepto).toBe("dia_de_prueba");
+    expect(await repo.pagos.porCliente(cliente.id)).toHaveLength(1);
+  });
+
   it("no lo pide a sí mismo: un perro sin día de prueba igual puede tomarlo", async () => {
     const { perro } = await crearCuenta(repo, { cuenta: CUENTA, perro: PERRO });
-    const previa = await cotizarDiaDePrueba(repo, perro.id, LUNES);
+    const previa = await cotizarDiaDePrueba(repo, perro.id, LUNES, A_LAS_9);
 
     expect(previa.admision.admitido).toBe(true);
     expect(previa.sePuede).toBe(true);
@@ -150,36 +182,172 @@ describe("día de prueba", () => {
 
   it("no deja tomarlo dos veces", async () => {
     const { perro } = await crearCuenta(repo, { cuenta: CUENTA, perro: PERRO });
-    await agendarDiaDePrueba(repo, perro.id, LUNES);
+    await agendarDiaDePrueba(repo, perro.id, LUNES, A_LAS_9);
 
-    await expect(agendarDiaDePrueba(repo, perro.id, LUNES)).rejects.toThrow(
-      RegistroRechazado,
-    );
+    await expect(
+      agendarDiaDePrueba(repo, perro.id, LUNES, A_LAS_9),
+    ).rejects.toThrow(RegistroRechazado);
   });
 
-  it("respeta el tope de cupos del día", async () => {
+  it("respeta el tope de cupos de la casa", async () => {
     montar({ estadiasJardin: llenarJardin(NEGOCIO.capacidad.maximoSimultaneo) });
     const { perro } = await crearCuenta(repo, { cuenta: CUENTA, perro: PERRO });
 
-    const previa = await cotizarDiaDePrueba(repo, perro.id, LUNES);
-    expect(previa.capacidad.hayCupo).toBe(false);
-    expect(previa.sePuede).toBe(false);
+    const dia = await disponibilidadDeUnDia(repo, perro.id, LUNES, DOMINGO);
+    expect(dia.libres).toBe(0);
 
-    // Un solo motivo con la franja, no 24 líneas: el mensaje es el titular.
     await expect(
-      agendarDiaDePrueba(repo, perro.id, LUNES),
+      agendarDiaDePrueba(repo, perro.id, LUNES, A_LAS_9, DOMINGO),
     ).rejects.toMatchObject({
-      motivos: ["Ese día ya está lleno entre las 07:00 y las 18:30."],
+      motivos: ["La casa está llena a esa hora, elige otra hora."],
     });
   });
 
-  it("no cobra al agendar: el día de prueba se cobra al cerrar la jornada", async () => {
+  it("no deja dos días de prueba en el mismo bloque", async () => {
+    const primero = await crearCuenta(repo, { cuenta: CUENTA, perro: PERRO });
+    await agendarDiaDePrueba(repo, primero.perro.id, LUNES, A_LAS_9);
+
+    const segundo = await crearCuenta(repo, {
+      cuenta: { ...CUENTA, email: "otro@ejemplo.cl" },
+      perro: { ...PERRO, nombre: "Mora" },
+    });
+
+    const dia = await disponibilidadDeUnDia(
+      repo,
+      segundo.perro.id,
+      LUNES,
+      DOMINGO,
+    );
+    expect(dia.bloques.find((b) => b.minutoDelDia === A_LAS_9)?.motivo).toBe(
+      "tomado",
+    );
+
+    // Media hora después sí se puede.
+    await expect(
+      agendarDiaDePrueba(repo, segundo.perro.id, LUNES, A_LAS_9 + 30),
+    ).resolves.toBeTruthy();
+  });
+});
+
+describe("cambiar o cancelar el día de prueba", () => {
+  const A_LAS_9 = 9 * 60;
+
+  /** Dos días antes: aviso de sobra. */
+  const CON_TIEMPO = DOMINGO;
+  /** La misma mañana: menos de 24 horas. */
+  const ENCIMA = en("6:00");
+
+  async function conDiaAgendado() {
     const { cliente, perro } = await crearCuenta(repo, {
       cuenta: CUENTA,
       perro: PERRO,
     });
-    await agendarDiaDePrueba(repo, perro.id, LUNES);
+    await agendarDiaDePrueba(repo, perro.id, LUNES, A_LAS_9, CON_TIEMPO);
+    return { cliente, perro };
+  }
 
-    expect(await repo.pagos.porCliente(cliente.id)).toHaveLength(0);
+  it("con 24 horas o más, cancelar no cuesta nada y anula el cobro", async () => {
+    const { cliente, perro } = await conDiaAgendado();
+
+    const { politica } = await cancelarDiaDePrueba(repo, perro.id, CON_TIEMPO);
+
+    expect(politica.sinCosto).toBe(true);
+    expect(politica.costo).toBe(0);
+
+    const pagos = await repo.pagos.porCliente(cliente.id);
+    expect(pagos[0].estado).toBe("reembolsado");
+    expect(pagos[0].monto).toBe(0);
+  });
+
+  it("con menos de 24 horas se cobra la cancelación tardía", async () => {
+    const { cliente, perro } = await conDiaAgendado();
+
+    const { politica } = await cancelarDiaDePrueba(repo, perro.id, ENCIMA);
+
+    expect(politica.sinCosto).toBe(false);
+    expect(politica.costo).toBe(PRECIOS.cancelacionTardiaDiaDePrueba);
+
+    const pagos = await repo.pagos.porCliente(cliente.id);
+    expect(pagos[0].monto).toBe(PRECIOS.cancelacionTardiaDiaDePrueba);
+    expect(pagos[0].estado).toBe("pendiente");
+  });
+
+  it("cancelar devuelve al perro a la fila: puede volver a agendar", async () => {
+    const { perro } = await conDiaAgendado();
+    await cancelarDiaDePrueba(repo, perro.id, CON_TIEMPO);
+
+    expect((await repo.perros.obtener(perro.id))!.diaDePrueba.estado).toBe(
+      "pendiente",
+    );
+    await expect(
+      agendarDiaDePrueba(repo, perro.id, MARTES, A_LAS_9, CON_TIEMPO),
+    ).resolves.toBeTruthy();
+  });
+
+  it("y libera el bloque para otro perrito", async () => {
+    const { perro } = await conDiaAgendado();
+    await cancelarDiaDePrueba(repo, perro.id, CON_TIEMPO);
+
+    const otro = await crearCuenta(repo, {
+      cuenta: { ...CUENTA, email: "otro@ejemplo.cl" },
+      perro: { ...PERRO, nombre: "Mora" },
+    });
+    const dia = await disponibilidadDeUnDia(
+      repo,
+      otro.perro.id,
+      LUNES,
+      CON_TIEMPO,
+    );
+
+    expect(dia.bloques.find((b) => b.minutoDelDia === A_LAS_9)?.disponible).toBe(
+      true,
+    );
+  });
+
+  it("reprogramar con tiempo mueve la hora sin cobrar de más", async () => {
+    const { cliente, perro } = await conDiaAgendado();
+
+    const { estadia, politica } = await reprogramarDiaDePrueba(
+      repo,
+      perro.id,
+      MARTES,
+      11 * 60,
+      CON_TIEMPO,
+    );
+
+    expect(politica.sinCosto).toBe(true);
+    expect(estadia.fecha).toBe(MARTES);
+    expect(await repo.pagos.porCliente(cliente.id)).toHaveLength(1);
+  });
+
+  it("reprogramar encima de la hora suma el cargo por el cambio", async () => {
+    const { cliente, perro } = await conDiaAgendado();
+
+    await reprogramarDiaDePrueba(repo, perro.id, MARTES, 11 * 60, ENCIMA);
+
+    const pagos = await repo.pagos.porCliente(cliente.id);
+    expect(pagos).toHaveLength(2);
+    expect(pagos[1].monto).toBe(PRECIOS.cancelacionTardiaDiaDePrueba);
+  });
+
+  it("no deja mover el día a una hora ocupada", async () => {
+    const { perro } = await conDiaAgendado();
+    const otro = await crearCuenta(repo, {
+      cuenta: { ...CUENTA, email: "otro@ejemplo.cl" },
+      perro: { ...PERRO, nombre: "Mora" },
+    });
+    await agendarDiaDePrueba(repo, otro.perro.id, MARTES, 11 * 60, CON_TIEMPO);
+
+    await expect(
+      reprogramarDiaDePrueba(repo, perro.id, MARTES, 11 * 60, CON_TIEMPO),
+    ).rejects.toThrow(RegistroRechazado);
+  });
+
+  it("sin día agendado, cancelar avisa en vez de reventar", async () => {
+    const { perro } = await crearCuenta(repo, { cuenta: CUENTA, perro: PERRO });
+
+    await expect(cancelarDiaDePrueba(repo, perro.id)).rejects.toThrow(
+      RegistroRechazado,
+    );
   });
 });

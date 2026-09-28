@@ -196,11 +196,11 @@ funciona normal y se integra sin conflictos.
 ```
 app/
   (portal)/    landing · reservar (hotel, jardín, planes, servicios)
-               tienda · mi-cuenta
+               dia-de-prueba · tienda · mi-cuenta
   ingresar/    login mock con selector de rol
   staff/       Hoy · buscar · reportes · incidentes
   admin/       KPIs · calendario · clientes · pagos · planes · inventario
-               datos (respaldo y reinicio)
+               reglas (qué se le exige a una ficha) · datos
   offline/     pantalla de caída del service worker
   api/integraciones/whatsapp/   enviar · webhook
 components/
@@ -224,7 +224,8 @@ public/        manifest.webmanifest · sw.js · marca/ (logo e íconos)
 ### Modelo de datos
 
 `Cliente` · `Perro` (con `Vacuna[]`, `diaDePrueba`, `alimentacion`,
-`indicaciones` y `notas`) · `ReservaHotel` ·
+`antiparasitario`, `medicamentos`, `alergias`, `indicaciones` y `notas`) ·
+`ConfiguracionAdmision` · `Notificacion` · `ReservaHotel` ·
 `EstadiaJardin` · `PlanComprado` · `Suscripcion` · `ServicioAgendado` ·
 `Pago` · `Producto` · `OrdenTienda` · `Reporte` · `Incidente`
 
@@ -256,6 +257,22 @@ negociables y que ya están modeladas:
 - **Todo mensaje se guarda antes de intentar enviarlo.** Si falla, queda en la
   bandeja con su motivo y se puede reintentar; nunca se pierde un reporte
   porque se cayó la red.
+
+Dos cosas que solo aparecen cuando se manda de verdad, y que ya están
+resueltas en el código:
+
+- **El idioma de la plantilla tiene que coincidir exacto.** Meta tiene una
+  lista cerrada de idiomas y el español chileno no está en ella. Con un código
+  que no existe el envío falla con "template name does not exist in the
+  translation" aunque el nombre esté perfecto, que es un error que no se
+  entiende leyéndolo. Por eso el idioma es una constante única,
+  `IDIOMA_PLANTILLAS`, y no cuatro literales sueltos.
+- **La foto del reporte se sube antes de mandar el mensaje.** El equipo la saca
+  en el celular y se guarda como data URL; el encabezado de imagen de WhatsApp
+  pide un link HTTPS que descarga **el servidor de Meta**, y un data URL no lo
+  es. La ruta de envío la sube a la API de medios y el mensaje la nombra por
+  id. Si algún día las fotos viven en un bucket público, el link vuelve a
+  servir y el código ya lo distingue solo.
 
 El canal se elige con `NEXT_PUBLIC_CANAL_MENSAJERIA`: `simulado` (por defecto,
 no toca la red, sirve para demos sin cuenta de Meta) o `whatsapp`. El token es
@@ -304,6 +321,50 @@ qué come, qué cuidado especial tiene y si ya pasó algo antes. Por eso
 
 Los incidentes se muestran como historial de los últimos 6 meses, con el conteo
 arriba ("2 anotados, 1 sobre leve") y los últimos cuatro en detalle.
+
+### Lo que se calcula y lo que se pide
+
+Tres datos de la ficha se **derivan** en vez de preguntarse, porque pedirlos
+sería pedirle al dueño que haga una cuenta que la app puede hacer sola:
+
+- La **edad** sale de `fechaNacimiento`, y el cumpleaños también.
+- `desparasitadoHasta` sale del **antiparasitario**: el dueño dice cuándo se lo
+  dio y cada cuánto se repite. La vigencia la calcula
+  `vigenciaAntiparasitario`. `desparasitadoHasta` se conserva porque es lo que
+  mira la admisión, que no tiene por qué saber de periodicidades.
+- La **comida** dejó de ser un párrafo: son marca, ración y en qué comidas.
+  `describirAlimentacion` la arma en una línea para la ficha. Lo que estaba
+  escrito antes no se tira, queda como `notas`.
+
+### Qué es obligatorio lo decide Administración
+
+`ConfiguracionAdmision`, en el repositorio, no en `NEGOCIO`. La constante sirve
+para lo que no cambia nunca —los 25 cupos—, no para algo que la dueña quiera
+ajustar un martes.
+
+`revisarAltaDePerro` (en `lib/rules/alta-perro.ts`) recibe esa configuración en
+vez de leerla, así que sigue siendo una función pura y se puede probar con
+cualquier combinación. La valida `crearCuenta`, no el formulario: la pantalla
+adelanta el aviso, pero la que no deja pasar una ficha incompleta es la capa de
+servicios, que es por donde entra todo el mundo.
+
+**Un campo entra en `camposObligatorios` recién cuando el formulario sabe
+pedirlo.** Exigir algo que no se puede llenar deja el alta trancada sin
+explicación.
+
+Y `esterilizado` no tiene valor por defecto en el formulario: predeterminarlo
+en "sí" hace que un macho sin castrar pase sin que nadie lo note, y en "no" que
+la mitad de las fichas nazcan mal.
+
+### Los datos guardados se migran, no se botan
+
+`normalizarDatos()` pone al día lo que ya está en `localStorage` y **lo vuelve
+a escribir**. Si la migración viviera solo en memoria, cada carga la repetiría
+y un respaldo descargado saldría con la forma vieja.
+
+Cada paso tiene que poder correr dos veces sin hacer daño: esto se ejecuta en
+cada carga. Y nunca se cambia la clave del almacén para "empezar limpio" — los
+datos que alguien tiene en su celular son su demo.
 
 ### El perro que llega sin reserva
 
@@ -359,9 +420,59 @@ las vacunas**: el día de prueba ya es una jornada completa en la casa con otros
 perros, así que la admisión se aplica igual. Lo único que impide crear la
 cuenta es lo que no tiene vuelta: el peso y la esterilización de los machos.
 
-El día de prueba se agenda como una `EstadiaJardin` con `origen:
-"dia_de_prueba"` y deja al perro en `diaDePrueba.estado = "agendado"`. No emite
-cobro: igual que el día suelto, se cobra al cerrar la jornada.
+### El día de prueba
+
+Es **media jornada** de un día de jardín normal —6 horas, la mitad de las 12
+que abre el jardín— con **hora de llegada a elección en bloques de 30
+minutos**. Por bloque entra **un solo perro nuevo**, aparte del cupo de 25 de
+la casa: dos primerizos llegando juntos es una presentación que nadie alcanza
+a acompañar.
+
+El calendario muestra disponibilidad de verdad. Dejar elegir cualquier día y
+fallar al confirmar es peor que mostrar el día lleno desde el principio.
+
+A diferencia del día suelto de jardín, **se cobra al agendar**: es la
+evaluación de un perro que todavía no es cliente y el cupo queda tomado desde
+ese momento. El cobro nace **pendiente** —no hay pasarela, y en la realidad los
+primeros meses se paga por transferencia—; Administración lo marca pagado desde
+la pantalla de pagos.
+
+Se agenda como una `EstadiaJardin` con `origen: "dia_de_prueba"` y deja al
+perro en `diaDePrueba.estado = "agendado"`.
+
+**Cancelar y reprogramar**, con 24 horas de corte:
+
+| | Cancelar | Cambiar la fecha |
+|---|---|---|
+| Con 24 h o más | El cobro se anula | Sin costo |
+| Con menos de 24 h | El cobro pasa a $5.000 | Se suma un cargo de $5.000 |
+
+Como el cobro está pendiente, **anularlo es la devolución**: no hay plata que
+devolver, hay un cobro que dejar de existir. Y no se borra, se marca
+reembolsado en cero: un cobro que desaparece no deja rastro de que existió, y
+la cobranza del mes tiene que poder explicarse.
+
+Las condiciones se muestran **antes de pagar**, no detrás de un enlace.
+Enterarse después es la manera segura de que se sientan letra chica.
+
+### El dueño corrige su ficha, y Administración se entera
+
+`lib/servicios/perros.ts`. El dueño puede cambiar los datos de su perro sin
+pedir permiso —son suyos y nadie los conoce mejor—, pero cada cambio deja una
+`Notificacion` con el **antes y el después de cada campo**.
+
+"Cambió la ficha" no le sirve a nadie: un peso que sube de 8 a 21 kg o una
+castración que se desmarca cambian si el perro puede quedarse. Por eso la
+comparación es en palabras (`"9 kg"` → `"12 kg"`, `"sí"` → `"no"`) y no entre
+propiedades: lo que importa es lo que cambió a la vista.
+
+Dos detalles que costaron un bug cada uno:
+
+- Las fechas se comparan con `formatearFechaCorta`, que **lleva el año**. Con
+  `formatearFecha` una vacuna renovada al año siguiente se veía idéntica y el
+  cambio no generaba aviso.
+- Guardar sin cambiar nada **no avisa**. Una bandeja con avisos vacíos se deja
+  de leer, y entonces el que importa también pasa de largo.
 
 ### Avisar no es bloquear
 

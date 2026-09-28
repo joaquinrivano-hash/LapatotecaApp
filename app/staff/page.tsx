@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CumpleanosDeHoy } from "@/components/shared/cumpleanos";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { OcupacionFranjas } from "@/components/shared/ocupacion-franjas";
 import { Tile } from "@/components/shared/tile";
@@ -101,6 +102,8 @@ export default function Hoy() {
 
   return (
     <div className="space-y-4">
+      <CumpleanosDeHoy hoy={hoy} />
+
       <div className="grid grid-cols-3 gap-2">
         <Tile etiqueta="Adentro" valor={presentes} icono={PawPrint} />
         <Tile

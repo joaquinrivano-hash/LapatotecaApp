@@ -71,6 +71,33 @@ export const NOTAS_PERRO = [
 ] as const;
 
 /** Qué come. Lo que el staff mira a la hora de almuerzo. */
+/** Marcas que se ven de verdad en Chile, para que el seed no parezca inventado. */
+export const MARCAS_COMIDA = [
+  "Proplan",
+  "Royal Canin",
+  "Hill's",
+  "Master Dog",
+  "Cannes",
+  "Eukanuba",
+  "Comida casera",
+] as const;
+
+/**
+ * Raciones creíbles. Van en pares: la cantidad y la unidad se eligen juntas
+ * para que no salga "1 g" ni "200 tazas".
+ */
+export const RACIONES = [
+  { cantidad: 1, unidad: "taza" },
+  { cantidad: 1.5, unidad: "taza" },
+  { cantidad: 2, unidad: "taza" },
+  { cantidad: 1, unidad: "scoop" },
+  { cantidad: 2, unidad: "scoop" },
+  { cantidad: 120, unidad: "g" },
+  { cantidad: 200, unidad: "g" },
+  { cantidad: 300, unidad: "g" },
+] as const;
+
+/** Notas de comida: lo que no cabe en marca, cantidad y horario. */
 export const ALIMENTACION_PERRO = [
   "Trae su comida en bolsita. Una al almuerzo.",
   "Dos veces al día: media taza en la mañana y media a las 17:00.",

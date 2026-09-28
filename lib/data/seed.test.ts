@@ -36,18 +36,31 @@ const enJardin = (fecha: string) =>
     (e) => e.fecha === fecha && e.origen !== "dia_de_prueba",
   ).length;
 
+/**
+ * Generar el seed cuesta más de un segundo, así que estos dos tests comparan
+ * contra el `datos` del módulo en vez de generarlo dos veces cada uno: cuatro
+ * corridas se pasaban del límite de 5 segundos y fallaban por lentitud, no por
+ * indeterminismo. El margen ancho es para que no vuelva a pasar en una máquina
+ * cargada.
+ */
 describe("determinismo", () => {
-  it("dos corridas con la misma fecha dan exactamente lo mismo", () => {
-    expect(JSON.stringify(generarSeed(HOY))).toBe(
-      JSON.stringify(generarSeed(HOY)),
-    );
-  });
+  it(
+    "dos corridas con la misma fecha dan exactamente lo mismo",
+    () => {
+      expect(JSON.stringify(generarSeed(HOY))).toBe(JSON.stringify(datos));
+    },
+    30_000,
+  );
 
-  it("otra semilla da otros datos", () => {
-    expect(JSON.stringify(generarSeed(HOY, 1))).not.toBe(
-      JSON.stringify(generarSeed(HOY)),
-    );
-  });
+  it(
+    "otra semilla da otros datos",
+    () => {
+      expect(JSON.stringify(generarSeed(HOY, 1))).not.toBe(
+        JSON.stringify(datos),
+      );
+    },
+    30_000,
+  );
 });
 
 describe("volumen", () => {

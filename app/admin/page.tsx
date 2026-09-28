@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Info, PawPrint, Ticket, TrendingUp, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CumpleanosDelMes } from "@/components/shared/cumpleanos";
+import { AvisosDeDuenos } from "@/components/admin/avisos-de-duenos";
 import { PrecioCLP } from "@/components/shared/precio";
 import { Tile } from "@/components/shared/tile";
 import { BarraParticipacion } from "@/components/admin/barra-participacion";
@@ -193,6 +195,10 @@ export default function Numeros() {
           </Card>
         </div>
       </div>
+
+      <AvisosDeDuenos />
+
+      <CumpleanosDelMes hoy={hoy} />
 
       <p className="text-muted-foreground flex items-center justify-center gap-2 text-center text-xs">
         <Info className="size-3.5 shrink-0" />

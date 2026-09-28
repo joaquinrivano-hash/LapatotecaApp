@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# El ejemplo sí se versiona: es la lista de variables que hay que llenar, y sin
+# él nadie que clone el repo sabe qué pedirle a Meta.
+!.env.example
 
 # vercel
 .vercel

@@ -1,15 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { Camera, Pencil, Save, Trash2, TriangleAlert } from "lucide-react";
+import { Pencil, Save, Trash2, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import {
   SheetDescription,
   SheetFooter,
@@ -18,18 +16,24 @@ import {
 } from "@/components/ui/sheet";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import {
+  aBorrador,
+  cambiosDePerro,
+  estadoDesde,
+  FormularioPerro,
+  type EstadoPerro,
+} from "@/components/shared/formulario-perro";
+import { revisarAltaDePerro, type FaltanteDeAlta } from "@/lib/rules/alta-perro";
+import {
+  CarnetDeVacunas,
   DatosPerro,
   FotoPerro,
   HistorialIncidentes,
 } from "@/components/shared/detalle-perro";
-import { useAccion } from "@/lib/hooks/use-consulta";
-import { NEGOCIO } from "@/lib/config/negocio";
-import { nombreVacuna } from "@/lib/rules/admision";
+import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { alertasDePerro, type ClienteConPerros } from "@/lib/servicios/clientes";
 import { cn } from "@/lib/utils";
-import { comprimirImagen } from "@/lib/utils/imagen";
 import { formatearTelefono } from "@/lib/utils/telefono";
-import type { EstadoDiaDePrueba, Perro, TipoVacuna } from "@/lib/types";
+import type { EstadoDiaDePrueba, Perro } from "@/lib/types";
 
 const ESTADOS_PRUEBA: { valor: EstadoDiaDePrueba; etiqueta: string }[] = [
   { valor: "pendiente", etiqueta: "Pendiente" },
@@ -201,69 +205,42 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
   const { ocupado, ejecutar } = useAccion();
   const [abierto, setAbierto] = useState(false);
   const [editando, setEditando] = useState(false);
-  const archivo = useRef<HTMLInputElement>(null);
 
-  const [pesoKg, setPesoKg] = useState(String(perro.pesoKg));
-  const [esterilizado, setEsterilizado] = useState(perro.esterilizado);
-  const [alimentacion, setAlimentacion] = useState(perro.alimentacion ?? "");
-  const [indicaciones, setIndicaciones] = useState(perro.indicaciones ?? "");
-  const [notas, setNotas] = useState(perro.notas ?? "");
+  // El mismo formulario que llena el dueño. El admin agrega el estado del día
+  // de prueba, que es lo único que no le toca decidir a él.
+  const [ficha, setFicha] = useState<EstadoPerro>(() => estadoDesde(perro));
   const [estadoPrueba, setEstadoPrueba] = useState(perro.diaDePrueba.estado);
-  const [vencimientos, setVencimientos] = useState<Record<string, string>>(
-    Object.fromEntries(
-      NEGOCIO.admision.vacunasObligatorias.map((tipo) => [
-        tipo,
-        perro.vacunas.find((v) => v.tipo === tipo)?.fechaVencimiento ?? "",
-      ]),
-    ),
-  );
+  const [faltantes, setFaltantes] = useState<FaltanteDeAlta[]>([]);
 
+  const configuracion = useConsulta((repo) => repo.configuracion.obtener(), []);
   const alertas = alertasDePerro(perro, hoy);
 
-  async function cambiarFoto(evento: React.ChangeEvent<HTMLInputElement>) {
-    const entrante = evento.target.files?.[0];
-    evento.target.value = "";
-    if (!entrante) return;
-    try {
-      const fotoUrl = await comprimirImagen(entrante);
-      await ejecutar((repo) => repo.perros.actualizar(perro.id, { fotoUrl }));
-      toast.success(`Lista la foto de ${perro.nombre}`);
-    } catch {
-      toast.error("No pudimos procesar esa foto.");
-    }
+  function empezarAEditar() {
+    // Se recarga desde el perro para no arrastrar una edición abandonada.
+    setFicha(estadoDesde(perro));
+    setFaltantes([]);
+    setEditando(true);
   }
 
   async function guardar() {
-    const peso = Number(pesoKg.replace(",", "."));
-    if (!Number.isFinite(peso) || peso <= 0) {
-      toast.error("El peso tiene que ser un número.");
+    if (!configuracion.datos) return;
+
+    const revision = revisarAltaDePerro(
+      aBorrador(ficha),
+      configuracion.datos,
+      hoy,
+    );
+    setFaltantes(revision);
+    if (revision.length > 0) {
+      toast.error("Falta completar la ficha.", {
+        description: revision[0].mensaje,
+      });
       return;
     }
 
-    // Se guarda la fecha de vencimiento, que es la que decide la admisión.
-    // La de aplicación se deriva un año antes si no había una registrada.
-    const vacunas = NEGOCIO.admision.vacunasObligatorias
-      .filter((tipo) => vencimientos[tipo])
-      .map((tipo: TipoVacuna) => {
-        const previa = perro.vacunas.find((v) => v.tipo === tipo);
-        return {
-          tipo,
-          fechaVencimiento: vencimientos[tipo],
-          fechaAplicacion:
-            previa?.fechaVencimiento === vencimientos[tipo]
-              ? previa.fechaAplicacion
-              : `${Number(vencimientos[tipo].slice(0, 4)) - 1}${vencimientos[tipo].slice(4)}`,
-        };
-      });
-
     await ejecutar((repo) =>
       repo.perros.actualizar(perro.id, {
-        pesoKg: peso,
-        esterilizado,
-        alimentacion: alimentacion.trim() || undefined,
-        indicaciones: indicaciones.trim() || undefined,
-        notas: notas.trim() || undefined,
-        vacunas,
+        ...cambiosDePerro(ficha),
         diaDePrueba: { ...perro.diaDePrueba, estado: estadoPrueba },
       }),
     );
@@ -329,25 +306,17 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
           <FotoPerro perro={perro} />
           {/* Sin el teléfono: ya está arriba, en los datos del dueño. */}
           <DatosPerro perro={perro} hoy={hoy} />
+          <CarnetDeVacunas perro={perro} />
           <HistorialIncidentes perroId={perro.id} hoy={hoy} />
 
           <div className="flex gap-2">
             <Button
               variant="outline"
               className="flex-1"
-              onClick={() => setEditando((v) => !v)}
+              onClick={() => (editando ? setEditando(false) : empezarAEditar())}
             >
               <Pencil />
               {editando ? "Dejar de editar" : "Editar datos"}
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label={`Cambiar la foto de ${perro.nombre}`}
-              disabled={ocupado}
-              onClick={() => archivo.current?.click()}
-            >
-              <Camera />
             </Button>
             <Button
               variant="ghost"
@@ -359,35 +328,19 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
             >
               <Trash2 />
             </Button>
-            <input
-              ref={archivo}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={cambiarFoto}
-            />
           </div>
 
           {editando && (
-            <div className="space-y-3 border-t border-border/60 pt-3">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor={`peso-${perro.id}`}>Peso (kg)</Label>
-                  <Input
-                    id={`peso-${perro.id}`}
-                    inputMode="decimal"
-                    value={pesoKg}
-                    onChange={(e) => setPesoKg(e.target.value)}
-                  />
-                </div>
-                <label className="bg-secondary/50 flex cursor-pointer items-center justify-between gap-3 self-end rounded-xl p-3">
-                  <span className="text-sm font-semibold">Esterilizado</span>
-                  <Switch
-                    checked={esterilizado}
-                    onCheckedChange={setEsterilizado}
-                  />
-                </label>
-              </div>
+            <div className="space-y-4 border-t border-border/60 pt-3">
+              {configuracion.datos && (
+                <FormularioPerro
+                  estado={ficha}
+                  onCambio={setFicha}
+                  configuracion={configuracion.datos}
+                  faltantes={faltantes}
+                  hoy={hoy}
+                />
+              )}
 
               <div className="space-y-1.5">
                 <Label>Día de prueba</Label>
@@ -408,62 +361,6 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
                     </button>
                   ))}
                 </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Vacunas: hasta cuándo están vigentes</Label>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  {NEGOCIO.admision.vacunasObligatorias.map((tipo) => (
-                    <div key={tipo} className="space-y-1">
-                      <span className="text-muted-foreground text-xs capitalize">
-                        {nombreVacuna(tipo)}
-                      </span>
-                      <Input
-                        type="date"
-                        value={vencimientos[tipo] ?? ""}
-                        onChange={(e) =>
-                          setVencimientos((v) => ({
-                            ...v,
-                            [tipo]: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor={`comida-${perro.id}`}>Comida</Label>
-                <Textarea
-                  id={`comida-${perro.id}`}
-                  value={alimentacion}
-                  onChange={(e) => setAlimentacion(e.target.value)}
-                  placeholder="Cuánto come, a qué hora, si trae su comida…"
-                  rows={2}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor={`indicaciones-${perro.id}`}>Indicaciones</Label>
-                <Textarea
-                  id={`indicaciones-${perro.id}`}
-                  value={indicaciones}
-                  onChange={(e) => setIndicaciones(e.target.value)}
-                  placeholder="Remedios, arnés en vez de collar, cuidados especiales…"
-                  rows={2}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor={`notas-${perro.id}`}>Notas</Label>
-                <Textarea
-                  id={`notas-${perro.id}`}
-                  value={notas}
-                  onChange={(e) => setNotas(e.target.value)}
-                  placeholder="Mañas, miedos, con quién se lleva bien…"
-                  rows={3}
-                />
               </div>
 
               <Button className="w-full" disabled={ocupado} onClick={guardar}>

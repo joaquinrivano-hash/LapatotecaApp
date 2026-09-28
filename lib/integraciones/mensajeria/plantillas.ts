@@ -11,6 +11,17 @@
  * el mismo nombre e idioma, en el panel de Meta.
  */
 
+/**
+ * El idioma con el que hay que dar de alta las plantillas en WhatsApp Manager.
+ *
+ * Meta tiene una lista cerrada de idiomas y el código tiene que coincidir
+ * EXACTO con el de la plantilla aprobada: si no, el envío falla con "template
+ * name does not exist in the translation" aunque el nombre esté perfecto. El
+ * español chileno no está en esa lista, así que usamos el español genérico.
+ * Es una constante para cambiarlo en un solo lugar si algún día aparece.
+ */
+export const IDIOMA_PLANTILLAS = "es";
+
 export interface Plantilla {
   /** Debe coincidir exactamente con el `name` aprobado en WhatsApp Manager. */
   nombre: string;
@@ -26,7 +37,7 @@ export interface Plantilla {
 export const PLANTILLAS = {
   reporte_diario: {
     nombre: "reporte_diario",
-    idioma: "es_CL",
+    idioma: IDIOMA_PLANTILLAS,
     descripcion: "El reporte del día que se manda al dueño con la foto.",
     parametros: ["nombre del dueño", "nombre de los perros", "nota del día"],
     encabezado: "imagen",
@@ -35,7 +46,7 @@ export const PLANTILLAS = {
   },
   aviso_incidente: {
     nombre: "aviso_incidente",
-    idioma: "es_CL",
+    idioma: IDIOMA_PLANTILLAS,
     descripcion: "Aviso al dueño cuando pasa algo que debe saber.",
     parametros: ["nombre del dueño", "nombre del perro", "qué pasó"],
     cuerpo:
@@ -43,7 +54,7 @@ export const PLANTILLAS = {
   },
   recordatorio_reserva: {
     nombre: "recordatorio_reserva",
-    idioma: "es_CL",
+    idioma: IDIOMA_PLANTILLAS,
     descripcion: "Recordatorio de una reserva de hotel o jardín que viene.",
     parametros: ["nombre del dueño", "nombre del perro", "cuándo"],
     cuerpo:
@@ -51,7 +62,7 @@ export const PLANTILLAS = {
   },
   cuenta_mensual: {
     nombre: "cuenta_mensual",
-    idioma: "es_CL",
+    idioma: IDIOMA_PLANTILLAS,
     descripcion: "La cuenta unificada que se emite el día 1 de cada mes.",
     parametros: ["nombre del dueño", "mes", "monto"],
     cuerpo:

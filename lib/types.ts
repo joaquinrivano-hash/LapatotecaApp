@@ -42,6 +42,61 @@ export interface DiaDePrueba {
   nota?: string;
 }
 
+/**
+ * Cada cuánto toca el antiparasitario.
+ *
+ * De acá sale `desparasitadoHasta`, que es lo que mira la admisión: el dueño
+ * dice cuándo se lo dio y cada cuánto se repite, y la vigencia se calcula
+ * (`vigenciaAntiparasitario` en `lib/rules/perro.ts`). Pedirle la fecha de
+ * vencimiento sería pedirle que haga la cuenta él.
+ */
+export type PeriodicidadAntiparasitario =
+  | "mensual"
+  | "trimestral"
+  | "semestral"
+  | "anual"
+  | "otro";
+
+export interface Antiparasitario {
+  ultimaAplicacion: FechaISO;
+  periodicidad: PeriodicidadAntiparasitario;
+  /** Solo cuando la periodicidad es "otro". */
+  cadaCuantosDias?: number;
+}
+
+export type Comida = "desayuno" | "almuerzo" | "cena";
+export type UnidadRacion = "g" | "taza" | "scoop";
+
+/**
+ * Qué come el perro, en campos y no en un párrafo.
+ *
+ * A la hora de almuerzo nadie lee un texto libre buscando la ración: se mira
+ * la marca, cuánto va y en qué comidas. `notas` queda para lo que no cabe en
+ * esos campos ("si no come al almuerzo, no insistir").
+ *
+ * Todo es opcional en el tipo porque los perros cargados antes de que esto
+ * existiera no tienen los datos; lo obligatorio al CREAR se valida en
+ * `lib/rules/alta-perro.ts`, que es donde la regla se puede cambiar.
+ */
+export interface Alimentacion {
+  marca?: string;
+  cantidad?: number;
+  unidad?: UnidadRacion;
+  comidas: Comida[];
+  notas?: string;
+}
+
+export interface Medicamento {
+  nombre: string;
+  dosis: string;
+  frecuencia: string;
+}
+
+export interface Alergias {
+  tiene: boolean;
+  detalle?: string;
+}
+
 export interface Perro {
   id: ID;
   clienteId: ID;
@@ -62,12 +117,16 @@ export interface Perro {
   /** El folleto lo exige explícitamente. `undefined` = sin evaluar. */
   sociable?: boolean;
   diaDePrueba: DiaDePrueba;
-  /**
-   * Qué come, cuánto y a qué hora. Va separado de `notas` porque es la
-   * pregunta que el staff hace todos los días a la hora de almuerzo, y
-   * buscarla dentro de un párrafo de texto libre no sirve.
-   */
-  alimentacion?: string;
+  /** Foto del carnet de vacunación, para que el equipo pueda verificarlo. */
+  carnetVacunasUrl?: string;
+  /** De dónde sale `desparasitadoHasta`. Ver `Antiparasitario`. */
+  antiparasitario?: Antiparasitario;
+  /** Qué come, cuánto y en qué comidas. Ver `Alimentacion`. */
+  alimentacion?: Alimentacion;
+  /** Remedios que toma todos los días, con dosis y frecuencia. */
+  medicamentos?: Medicamento[];
+  /** `undefined` = nunca se preguntó; `{tiene:false}` = el dueño dijo que no. */
+  alergias?: Alergias;
   /** Remedios, mañas y cuidados especiales: lo que no se puede olvidar. */
   indicaciones?: string;
   /** Todo lo demás, en texto libre. */
@@ -425,4 +484,53 @@ export interface OcupacionDia {
   perrosDistintos: number;
   perrosHotel: number;
   perrosJardin: number;
+}
+
+/* ── Configuración editable desde Administración ───────────────────── */
+
+/**
+ * Los campos del alta que Administración puede exigir o no.
+ *
+ * `NEGOCIO` es una constante de compilación: sirve para lo que no cambia
+ * nunca (el máximo de 25 cupos), pero no para algo que la dueña quiera
+ * ajustar un martes sin llamar a nadie. Por eso esto vive en el repositorio,
+ * como cualquier otro dato.
+ */
+export type CampoDeAlta =
+  | "fechaNacimiento"
+  | "foto"
+  | "carnetVacunas"
+  | "alimentacion"
+  | "antiparasitario";
+
+export interface ConfiguracionAdmision {
+  vacunasObligatorias: TipoVacuna[];
+  camposObligatorios: CampoDeAlta[];
+  actualizadoEn: InstanteISO;
+}
+
+/* ── Avisos para Administración ────────────────────────────────────── */
+
+export interface CambioDeCampo {
+  /** Cómo se llama el campo en pantalla: "Peso", "Comida"… */
+  campo: string;
+  antes?: string;
+  despues?: string;
+}
+
+/**
+ * Un aviso para Administración de algo que hizo el dueño.
+ *
+ * Guarda el antes y el después de cada campo: "cambió la ficha" no le sirve a
+ * nadie; "el peso pasó de 8 a 12 kg" es un dato que puede cambiar la
+ * admisión.
+ */
+export interface Notificacion {
+  id: ID;
+  clienteId: ID;
+  perroId?: ID;
+  titulo: string;
+  cambios: CambioDeCampo[];
+  leida: boolean;
+  creadaEn: InstanteISO;
 }
