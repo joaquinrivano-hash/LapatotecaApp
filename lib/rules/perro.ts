@@ -5,13 +5,14 @@
  * Funciones puras, como el resto de `lib/rules`: no tocan repositorio ni red.
  */
 
-import { sumarDias } from "@/lib/utils/fecha";
+import { rangoFechas, sumarDias } from "@/lib/utils/fecha";
 import type {
   Alimentacion,
   Antiparasitario,
   Comida,
   FechaISO,
   PeriodicidadAntiparasitario,
+  Perro,
 } from "@/lib/types";
 
 /* ── Edad ──────────────────────────────────────────────────────────── */
@@ -92,6 +93,38 @@ export function cumpleQueEdad(
 ): number | null {
   if (!esCumpleanos(nacimiento, fecha)) return null;
   return partes(fecha)[0] - partes(nacimiento)[0];
+}
+
+export interface CumpleanosDePerro {
+  perro: Perro;
+  fecha: FechaISO;
+  /** Cuántos cumple ese día. */
+  cumple: number;
+}
+
+/**
+ * Quién cumple años entre esas dos fechas, en orden.
+ *
+ * Se recorre día por día en vez de comparar mes y día a mano porque el rango
+ * puede cruzar el fin de año, y porque así el 29 de febrero se resuelve con la
+ * misma regla que usa `esCumpleanos` en vez de con un caso aparte.
+ */
+export function cumpleanosEntre(
+  perros: Perro[],
+  desde: FechaISO,
+  hasta: FechaISO,
+): CumpleanosDePerro[] {
+  const encontrados: CumpleanosDePerro[] = [];
+
+  for (const fecha of rangoFechas(desde, hasta)) {
+    for (const perro of perros) {
+      if (!perro.fechaNacimiento) continue;
+      const cumple = cumpleQueEdad(perro.fechaNacimiento, fecha);
+      if (cumple !== null) encontrados.push({ perro, fecha, cumple });
+    }
+  }
+
+  return encontrados;
 }
 
 /* ── Antiparasitario ───────────────────────────────────────────────── */
