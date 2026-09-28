@@ -15,12 +15,14 @@
 
 import type {
   Cliente,
+  ConfiguracionAdmision,
   CuentaMensual,
   EstadiaJardin,
   FechaISO,
   ID,
   Incidente,
   MensajeSaliente,
+  Notificacion,
   OrdenTienda,
   Pago,
   Perro,
@@ -128,6 +130,28 @@ export interface MensajeRepo extends ColeccionRepo<MensajeSaliente> {
 }
 
 /** Utilidades que solo existen porque esto es un prototipo con datos mock. */
+export interface NotificacionRepo extends ColeccionRepo<Notificacion> {
+  sinLeer(): Promise<Notificacion[]>;
+  porPerro(perroId: ID): Promise<Notificacion[]>;
+  marcarLeidas(ids: ID[]): Promise<void>;
+}
+
+/**
+ * Lo que Administración puede exigir en una ficha nueva.
+ *
+ * No es una colección: es un solo registro que siempre existe. Por eso no
+ * tiene `crear` ni `eliminar` — `obtener()` devuelve la configuración de
+ * fábrica si todavía nadie la tocó.
+ */
+export interface ConfiguracionRepo {
+  obtener(): Promise<ConfiguracionAdmision>;
+  guardar(
+    cambios: Partial<Omit<ConfiguracionAdmision, "actualizadoEn">>,
+  ): Promise<ConfiguracionAdmision>;
+  /** Vuelve a los valores de `NEGOCIO`. */
+  restaurar(): Promise<ConfiguracionAdmision>;
+}
+
 export interface SistemaRepo {
   /** Día de referencia con el que se generaron los datos actuales. */
   anclaje(): Promise<FechaISO>;
@@ -152,5 +176,7 @@ export interface RepositorioPatoteca {
   reportes: ReporteRepo;
   incidentes: IncidenteRepo;
   mensajes: MensajeRepo;
+  notificaciones: NotificacionRepo;
+  configuracion: ConfiguracionRepo;
   sistema: SistemaRepo;
 }

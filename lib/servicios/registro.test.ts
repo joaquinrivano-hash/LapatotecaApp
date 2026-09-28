@@ -32,6 +32,8 @@ const PERRO = {
   pesoKg: 11.5,
   sexo: "hembra" as const,
   esterilizado: true,
+  // La foto es obligatoria desde que Administración puede exigirla.
+  fotoUrl: "data:image/jpeg;base64,aG9sYQ==",
   vacunas: NEGOCIO.admision.vacunasObligatorias.map((tipo) => ({
     tipo,
     fechaVencimiento: "2027-01-01",

@@ -37,6 +37,26 @@ export const NEGOCIO = {
     minutosGracia: 15,
   },
 
+  diaDePrueba: {
+    /**
+     * Media jornada de un día de jardín normal: el jardín abre 12 horas
+     * (7:00-19:00) y el día de prueba es la mitad.
+     */
+    horasDeEstadia: 6,
+    /** Primera y última hora a la que puede llegar. */
+    horaPrimeraEntrada: 7,
+    horaUltimaEntrada: 13,
+    /**
+     * Las llegadas se espacian: dos perros nuevos entrando juntos es una
+     * presentación que nadie alcanza a acompañar.
+     */
+    minutosEntreEntradas: 30,
+    /** Cuántos días de prueba se aceptan en un mismo bloque de llegada. */
+    maximoPorBloque: 1,
+    /** Cancelando con al menos estas horas de aviso no se cobra nada. */
+    horasParaCancelarSinCosto: 24,
+  },
+
   hotel: {
     horasPorBloque: 24,
     /** Atraso perdonado en el check-out antes de cobrar horas extra. */
@@ -61,6 +81,21 @@ export const NEGOCIO = {
     vigenciaHastaFinDeMes: true,
     /** Los días del plan se usan de lunes a viernes. */
     soloDiasHabiles: true,
+  },
+
+  /**
+   * Lo que se le exige a una ficha nueva, por defecto.
+   *
+   * Es un punto de partida: la configuración de verdad vive en el
+   * repositorio (`ConfiguracionAdmision`) para que Administración la cambie
+   * sin tocar código. Esto es lo que se usa la primera vez y cuando alguien
+   * aprieta "volver a lo de siempre".
+   *
+   * Un campo entra en esta lista recién cuando el formulario sabe pedirlo:
+   * exigir algo que no se puede llenar deja el alta trancada sin explicación.
+   */
+  altaDePerro: {
+    camposObligatorios: ["foto"],
   },
 
   admision: {

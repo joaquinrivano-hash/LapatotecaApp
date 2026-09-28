@@ -11,13 +11,16 @@
 
 import { generarSeed, type DatosPatoteca } from "@/lib/data/seed";
 import { crearAlmacenLocal, type Almacen } from "@/lib/repo/almacen";
+import { configuracionPorDefecto } from "@/lib/rules/alta-perro";
 import type {
   ClienteRepo,
   ColeccionRepo,
+  ConfiguracionRepo,
   CuentaMensualRepo,
   EstadiaJardinRepo,
   IncidenteRepo,
   MensajeRepo,
+  NotificacionRepo,
   OrdenRepo,
   PagoRepo,
   PerroRepo,
@@ -40,6 +43,7 @@ import type {
   ID,
   Incidente,
   MensajeSaliente,
+  Notificacion,
   OrdenTienda,
   Pago,
   Perro,
@@ -391,6 +395,27 @@ class MensajesLocal
  * colecciones que se agregaron después. En vez de borrarle los datos al
  * usuario, se rellenan las que falten.
  */
+class NotificacionesLocal
+  extends ColeccionLocal<Notificacion>
+  implements NotificacionRepo
+{
+  sinLeer() {
+    return this.filtrar((n) => !n.leida);
+  }
+
+  porPerro(perroId: ID) {
+    return this.filtrar((n) => n.perroId === perroId);
+  }
+
+  async marcarLeidas(ids: ID[]) {
+    const pendientes = new Set(ids);
+    for (const notificacion of this.ctx.datos().notificaciones) {
+      if (pendientes.has(notificacion.id)) notificacion.leida = true;
+    }
+    this.ctx.persistir();
+  }
+}
+
 function normalizarDatos(datos: DatosPatoteca): DatosPatoteca {
   const vacias: (keyof DatosPatoteca)[] = [
     "clientes",
@@ -407,6 +432,7 @@ function normalizarDatos(datos: DatosPatoteca): DatosPatoteca {
     "reportes",
     "incidentes",
     "mensajes",
+    "notificaciones",
   ];
 
   for (const clave of vacias) {
@@ -415,7 +441,34 @@ function normalizarDatos(datos: DatosPatoteca): DatosPatoteca {
     }
   }
 
+  if (!datos.configuracion) {
+    datos.configuracion = configuracionPorDefecto();
+  }
+
+  migrarPerros(datos.perros);
+
   return datos;
+}
+
+/**
+ * Pone al día los perros guardados antes de que existieran los campos nuevos.
+ *
+ * Se migra en el lugar en vez de cambiar la clave del almacén: los datos que
+ * alguien tiene en su celular son SU demo, y empezar de cero sería perderla.
+ * Cada paso tiene que poder correr dos veces sin hacer daño, porque esto se
+ * ejecuta en cada carga.
+ */
+function migrarPerros(perros: Perro[]): void {
+  for (const perro of perros) {
+    // La comida era un párrafo y ahora son campos. Lo escrito no se tira: se
+    // guarda como nota, que es exactamente lo que era.
+    const comida = perro.alimentacion as unknown;
+    if (typeof comida === "string") {
+      perro.alimentacion = comida.trim()
+        ? { comidas: [], notas: comida }
+        : undefined;
+    }
+  }
 }
 
 export interface OpcionesRepositorioLocal {
@@ -437,6 +490,10 @@ export function crearRepositorioLocal(
     const guardado = almacen.leer<DatosPatoteca>(CLAVE_ALMACEN);
     if (guardado) {
       datos = normalizarDatos(guardado);
+      // Se vuelve a escribir para que la migración quede hecha de verdad. Si
+      // solo viviera en memoria, cada carga la repetiría y un respaldo
+      // descargado saldría con la forma vieja.
+      almacen.escribir(CLAVE_ALMACEN, datos);
       return datos;
     }
 
@@ -473,6 +530,28 @@ export function crearRepositorioLocal(
     },
   };
 
+  const configuracion: ConfiguracionRepo = {
+    async obtener() {
+      return clonar(cargar().configuracion);
+    },
+    async guardar(cambios) {
+      const datos = cargar();
+      datos.configuracion = {
+        ...datos.configuracion,
+        ...cambios,
+        actualizadoEn: new Date().toISOString(),
+      };
+      ctx.persistir();
+      return clonar(datos.configuracion);
+    },
+    async restaurar() {
+      const datos = cargar();
+      datos.configuracion = configuracionPorDefecto();
+      ctx.persistir();
+      return clonar(datos.configuracion);
+    },
+  };
+
   return {
     clientes: new ClientesLocal(ctx, "cli", (d) => d.clientes),
     perros: new PerrosLocal(ctx, "perro", (d) => d.perros),
@@ -492,6 +571,8 @@ export function crearRepositorioLocal(
     reportes: new ReportesLocal(ctx, "rep", (d) => d.reportes),
     incidentes: new IncidentesLocal(ctx, "inc", (d) => d.incidentes),
     mensajes: new MensajesLocal(ctx, "msg", (d) => d.mensajes),
+    notificaciones: new NotificacionesLocal(ctx, "avi", (d) => d.notificaciones),
+    configuracion,
     sistema,
   };
 }

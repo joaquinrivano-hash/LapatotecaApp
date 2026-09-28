@@ -224,7 +224,8 @@ public/        manifest.webmanifest · sw.js · marca/ (logo e íconos)
 ### Modelo de datos
 
 `Cliente` · `Perro` (con `Vacuna[]`, `diaDePrueba`, `alimentacion`,
-`indicaciones` y `notas`) · `ReservaHotel` ·
+`antiparasitario`, `medicamentos`, `alergias`, `indicaciones` y `notas`) ·
+`ConfiguracionAdmision` · `Notificacion` · `ReservaHotel` ·
 `EstadiaJardin` · `PlanComprado` · `Suscripcion` · `ServicioAgendado` ·
 `Pago` · `Producto` · `OrdenTienda` · `Reporte` · `Incidente`
 
@@ -320,6 +321,50 @@ qué come, qué cuidado especial tiene y si ya pasó algo antes. Por eso
 
 Los incidentes se muestran como historial de los últimos 6 meses, con el conteo
 arriba ("2 anotados, 1 sobre leve") y los últimos cuatro en detalle.
+
+### Lo que se calcula y lo que se pide
+
+Tres datos de la ficha se **derivan** en vez de preguntarse, porque pedirlos
+sería pedirle al dueño que haga una cuenta que la app puede hacer sola:
+
+- La **edad** sale de `fechaNacimiento`, y el cumpleaños también.
+- `desparasitadoHasta` sale del **antiparasitario**: el dueño dice cuándo se lo
+  dio y cada cuánto se repite. La vigencia la calcula
+  `vigenciaAntiparasitario`. `desparasitadoHasta` se conserva porque es lo que
+  mira la admisión, que no tiene por qué saber de periodicidades.
+- La **comida** dejó de ser un párrafo: son marca, ración y en qué comidas.
+  `describirAlimentacion` la arma en una línea para la ficha. Lo que estaba
+  escrito antes no se tira, queda como `notas`.
+
+### Qué es obligatorio lo decide Administración
+
+`ConfiguracionAdmision`, en el repositorio, no en `NEGOCIO`. La constante sirve
+para lo que no cambia nunca —los 25 cupos—, no para algo que la dueña quiera
+ajustar un martes.
+
+`revisarAltaDePerro` (en `lib/rules/alta-perro.ts`) recibe esa configuración en
+vez de leerla, así que sigue siendo una función pura y se puede probar con
+cualquier combinación. La valida `crearCuenta`, no el formulario: la pantalla
+adelanta el aviso, pero la que no deja pasar una ficha incompleta es la capa de
+servicios, que es por donde entra todo el mundo.
+
+**Un campo entra en `camposObligatorios` recién cuando el formulario sabe
+pedirlo.** Exigir algo que no se puede llenar deja el alta trancada sin
+explicación.
+
+Y `esterilizado` no tiene valor por defecto en el formulario: predeterminarlo
+en "sí" hace que un macho sin castrar pase sin que nadie lo note, y en "no" que
+la mitad de las fichas nazcan mal.
+
+### Los datos guardados se migran, no se botan
+
+`normalizarDatos()` pone al día lo que ya está en `localStorage` y **lo vuelve
+a escribir**. Si la migración viviera solo en memoria, cada carga la repetiría
+y un respaldo descargado saldría con la forma vieja.
+
+Cada paso tiene que poder correr dos veces sin hacer daño: esto se ejecuta en
+cada carga. Y nunca se cambia la clave del almacén para "empezar limpio" — los
+datos que alguien tiene en su celular son su demo.
 
 ### El perro que llega sin reserva
 

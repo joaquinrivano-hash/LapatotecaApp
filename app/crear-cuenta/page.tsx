@@ -104,7 +104,9 @@ export default function CrearCuenta() {
             pesoKg: peso,
             sexo: perro.sexo,
             esterilizado: perro.esterilizado,
-            alimentacion: perro.alimentacion,
+            alimentacion: perro.alimentacion.trim()
+              ? { comidas: [], notas: perro.alimentacion }
+              : undefined,
             desparasitadoHasta: desparasitadoHasta || undefined,
             fotoUrl: foto,
             vacunas: VACUNAS.filter((tipo) => vencimientos[tipo]).map(

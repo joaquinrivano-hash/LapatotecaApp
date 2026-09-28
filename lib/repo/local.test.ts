@@ -223,3 +223,104 @@ describe("utilidades del prototipo", () => {
     );
   });
 });
+
+describe("migración de datos guardados", () => {
+  /** Un set como el que quedó guardado antes de los campos nuevos. */
+  function almacenViejo(perro: Record<string, unknown>) {
+    const almacen = crearAlmacenMemoria();
+    almacen.escribir(CLAVE_ALMACEN, {
+      ...SEED,
+      perros: [{ ...SEED.perros[0], ...perro }],
+      notificaciones: undefined,
+      configuracion: undefined,
+    });
+    return almacen;
+  }
+
+  it("convierte la comida de párrafo a campos sin perder lo escrito", async () => {
+    const repoViejo = crearRepositorioLocal({
+      almacen: almacenViejo({
+        alimentacion: "Una taza al almuerzo, la trae el dueño.",
+      }),
+      hoy: HOY,
+    });
+
+    const perro = (await repoViejo.perros.listar())[0];
+
+    expect(perro.alimentacion).toEqual({
+      comidas: [],
+      notas: "Una taza al almuerzo, la trae el dueño.",
+    });
+  });
+
+  it("no toca la comida que ya está en el formato nuevo", async () => {
+    const comida = {
+      marca: "Proplan",
+      cantidad: 1,
+      unidad: "taza" as const,
+      comidas: ["almuerzo" as const],
+    };
+    const repoViejo = crearRepositorioLocal({
+      almacen: almacenViejo({ alimentacion: comida }),
+      hoy: HOY,
+    });
+
+    expect((await repoViejo.perros.listar())[0].alimentacion).toEqual(comida);
+  });
+
+  it("le pone configuración y bandeja de avisos a un set que no los tenía", async () => {
+    const repoViejo = crearRepositorioLocal({
+      almacen: almacenViejo({}),
+      hoy: HOY,
+    });
+
+    expect(await repoViejo.notificaciones.listar()).toEqual([]);
+    expect(
+      (await repoViejo.configuracion.obtener()).vacunasObligatorias,
+    ).toEqual(["octuple", "antirrabica", "kc"]);
+  });
+});
+
+describe("configuración de Administración", () => {
+  it("guarda solo lo que cambió y deja constancia de cuándo", async () => {
+    const antes = await repo.configuracion.obtener();
+    const despues = await repo.configuracion.guardar({
+      vacunasObligatorias: ["antirrabica"],
+    });
+
+    expect(despues.vacunasObligatorias).toEqual(["antirrabica"]);
+    expect(despues.camposObligatorios).toEqual(antes.camposObligatorios);
+    expect(despues.actualizadoEn >= antes.actualizadoEn).toBe(true);
+  });
+
+  it("sobrevive al refresh y se puede restaurar", async () => {
+    await repo.configuracion.guardar({ camposObligatorios: [] });
+
+    const otraVisita = crearRepositorioLocal({ almacen, hoy: HOY });
+    expect((await otraVisita.configuracion.obtener()).camposObligatorios).toEqual(
+      [],
+    );
+
+    const restaurada = await otraVisita.configuracion.restaurar();
+    expect(restaurada.camposObligatorios).toEqual(["foto"]);
+  });
+});
+
+describe("avisos para Administración", () => {
+  it("separa los que no se han leído y los marca", async () => {
+    const aviso = await repo.notificaciones.crear({
+      clienteId: "cli-1",
+      perroId: "perro-1",
+      titulo: "Cambió la ficha de Pelusa",
+      cambios: [{ campo: "Peso", antes: "8 kg", despues: "12 kg" }],
+      leida: false,
+      creadaEn: "2026-09-21T12:00:00.000Z",
+    });
+
+    expect(await repo.notificaciones.sinLeer()).toHaveLength(1);
+    expect(await repo.notificaciones.porPerro("perro-1")).toHaveLength(1);
+
+    await repo.notificaciones.marcarLeidas([aviso.id]);
+    expect(await repo.notificaciones.sinLeer()).toEqual([]);
+  });
+});

@@ -205,7 +205,7 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
 
   const [pesoKg, setPesoKg] = useState(String(perro.pesoKg));
   const [esterilizado, setEsterilizado] = useState(perro.esterilizado);
-  const [alimentacion, setAlimentacion] = useState(perro.alimentacion ?? "");
+  const [comidaNotas, setComidaNotas] = useState(perro.alimentacion?.notas ?? "");
   const [indicaciones, setIndicaciones] = useState(perro.indicaciones ?? "");
   const [notas, setNotas] = useState(perro.notas ?? "");
   const [estadoPrueba, setEstadoPrueba] = useState(perro.diaDePrueba.estado);
@@ -260,7 +260,11 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
       repo.perros.actualizar(perro.id, {
         pesoKg: peso,
         esterilizado,
-        alimentacion: alimentacion.trim() || undefined,
+        alimentacion: {
+          ...perro.alimentacion,
+          comidas: perro.alimentacion?.comidas ?? [],
+          notas: comidaNotas.trim() || undefined,
+        },
         indicaciones: indicaciones.trim() || undefined,
         notas: notas.trim() || undefined,
         vacunas,
@@ -437,8 +441,8 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
                 <Label htmlFor={`comida-${perro.id}`}>Comida</Label>
                 <Textarea
                   id={`comida-${perro.id}`}
-                  value={alimentacion}
-                  onChange={(e) => setAlimentacion(e.target.value)}
+                  value={comidaNotas}
+                  onChange={(e) => setComidaNotas(e.target.value)}
                   placeholder="Cuánto come, a qué hora, si trae su comida…"
                   rows={2}
                 />

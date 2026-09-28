@@ -13,6 +13,11 @@
 export const PRECIOS = {
   /** Evaluación obligatoria antes de la primera reserva de un perro. */
   diaDePrueba: 10_000,
+  /**
+   * Lo que se cobra si el día de prueba se cancela con menos de 24 horas.
+   * Reemplaza al cobro del día: no se suma.
+   */
+  cancelacionTardiaDiaDePrueba: 5_000,
 
   jardin: {
     /**
