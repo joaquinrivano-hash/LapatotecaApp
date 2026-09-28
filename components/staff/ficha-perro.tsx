@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/sheet";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import {
+  CarnetDeVacunas,
   DatosPerro,
   FotoPerro,
   HistorialIncidentes,
@@ -74,6 +75,7 @@ export function FichaPerro({
               : undefined
           }
         />
+        <CarnetDeVacunas perro={perro} />
         <HistorialIncidentes perroId={perro.id} hoy={hoy} />
       </div>
 

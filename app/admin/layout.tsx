@@ -8,6 +8,7 @@ import {
   Database,
   LogOut,
   Package,
+  SlidersHorizontal,
   Ticket,
   Users,
   Wallet,
@@ -26,6 +27,7 @@ const SECCIONES = [
   { href: "/admin/pagos", etiqueta: "Pagos", icono: Wallet },
   { href: "/admin/planes", etiqueta: "Planes", icono: Ticket },
   { href: "/admin/inventario", etiqueta: "Tienda", icono: Package },
+  { href: "/admin/configuracion", etiqueta: "Reglas", icono: SlidersHorizontal },
   { href: "/admin/datos", etiqueta: "Datos", icono: Database },
 ];
 

@@ -64,6 +64,21 @@ export function hoyISO(ahora: EntradaFecha = new Date()): FechaISO {
  * Aritmética de calendario pura (en UTC a propósito: sumar días no debe
  * moverse por cambios de horario de verano).
  */
+export function primerDiaDelMes(fecha: FechaISO): FechaISO {
+  return `${fecha.slice(0, 7)}-01`;
+}
+
+/**
+ * Cuenta con `Date.UTC` y no con la zona de Santiago a propósito: cuántos días
+ * tiene un mes no depende del huso, y usar UTC evita que un cambio de horario
+ * se meta en una cuenta de calendario.
+ */
+export function ultimoDiaDelMes(fecha: FechaISO): FechaISO {
+  const [anio, mes] = fecha.split("-").map(Number);
+  const dias = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+  return `${fecha.slice(0, 7)}-${String(dias).padStart(2, "0")}`;
+}
+
 export function sumarDias(fecha: FechaISO, dias: number): FechaISO {
   const [a, m, d] = fecha.split("-").map(Number);
   const r = new Date(Date.UTC(a, m - 1, d) + dias * 86_400_000);

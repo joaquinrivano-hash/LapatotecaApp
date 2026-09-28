@@ -1,15 +1,25 @@
 "use client";
 
 import Image from "next/image";
-import { CalendarDays, Camera, PawPrint, Ticket, TriangleAlert } from "lucide-react";
+import {
+  CalendarDays,
+  Camera,
+  ChevronRight,
+  PawPrint,
+  Ticket,
+  TriangleAlert,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
+import { MiPerro } from "@/components/portal/mi-perro";
 import { PrecioCLP } from "@/components/shared/precio";
 import { BarraParticipacion } from "@/components/admin/barra-participacion";
+import { useState } from "react";
 import { useConsulta } from "@/lib/hooks/use-consulta";
 import { useCliente } from "@/lib/hooks/use-cliente";
 import { nombreDePlan, planVigente, saldoPlan } from "@/lib/rules/planes";
@@ -55,6 +65,8 @@ export default function MiCuenta() {
   );
 
   const perros = base.datos?.perros ?? [];
+  const [fichaDe, setFichaDe] = useState<string | null>(null);
+  const ficha = perros.find((p) => p.id === fichaDe);
   const datos = extra.datos;
 
   if (base.cargando && perros.length === 0) return <Skeleton className="h-96" />;
@@ -108,7 +120,13 @@ export default function MiCuenta() {
           const bloquea = alertas.some((a) => a.bloquea);
           return (
             <Card key={perro.id}>
-              <CardContent className="flex items-center gap-3 p-3">
+              <CardContent className="p-0">
+                <button
+                  type="button"
+                  aria-label={`Ver la ficha de ${perro.nombre}`}
+                  onClick={() => setFichaDe(perro.id)}
+                  className="flex w-full items-center gap-3 p-3 text-left"
+                >
                 <PerroAvatar
                   id={perro.id}
                   nombre={perro.nombre}
@@ -138,11 +156,28 @@ export default function MiCuenta() {
                     <TriangleAlert />
                   </Badge>
                 )}
+                <ChevronRight className="text-muted-foreground size-5 shrink-0" />
+                </button>
               </CardContent>
             </Card>
           );
         })}
+        <p className="text-muted-foreground px-1 text-xs">
+          Toca a tu perrito para ver o corregir su ficha.
+        </p>
       </section>
+
+      <Sheet open={ficha !== undefined} onOpenChange={() => setFichaDe(null)}>
+        <SheetContent>
+          {ficha && (
+            <MiPerro
+              perro={ficha}
+              hoy={hoy}
+              onGuardado={() => base.recargar()}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
 
       {vigentes.length > 0 && (
         <Card>

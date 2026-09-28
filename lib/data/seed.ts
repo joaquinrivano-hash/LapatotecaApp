@@ -12,6 +12,7 @@
  */
 
 import { NEGOCIO } from "@/lib/config/negocio";
+import { configuracionPorDefecto } from "@/lib/rules/alta-perro";
 import {
   APELLIDOS,
   CALLES,
@@ -20,6 +21,8 @@ import {
   NOMBRES,
   NOMBRES_PERRO,
   ALIMENTACION_PERRO,
+  MARCAS_COMIDA,
+  RACIONES,
   INDICACIONES_PERRO,
   NOTAS_PERRO,
   NOTAS_REPORTE,
@@ -49,11 +52,13 @@ import {
 } from "@/lib/utils/fecha";
 import type {
   Cliente,
+  ConfiguracionAdmision,
   CuentaMensual,
   EstadiaJardin,
   FechaISO,
   Incidente,
   MensajeSaliente,
+  Notificacion,
   OrdenTienda,
   Pago,
   Perro,
@@ -84,6 +89,9 @@ export interface DatosPatoteca {
   reportes: Reporte[];
   incidentes: Incidente[];
   mensajes: MensajeSaliente[];
+  notificaciones: Notificacion[];
+  /** Lo que Administración exige en una ficha nueva. */
+  configuracion: ConfiguracionAdmision;
 }
 
 /** Días de historial hacia atrás y de agenda hacia adelante. */
@@ -233,9 +241,24 @@ export function generarSeed(
       diaDePrueba,
       // La mayoría tiene comida anotada; las indicaciones son la excepción,
       // como en la vida real.
+      carnetVacunasUrl: undefined,
+      // La mayoría tiene la comida anotada con marca y ración; algunos solo
+      // dejaron una nota, como los perros cargados antes de que esto existiera.
       alimentacion: azar.probabilidad(0.75)
-        ? azar.elegir(ALIMENTACION_PERRO)
+        ? {
+            marca: azar.elegir(MARCAS_COMIDA),
+            ...azar.elegir(RACIONES),
+            comidas: azar.probabilidad(0.6)
+              ? (["almuerzo"] as const).slice()
+              : (["desayuno", "cena"] as const).slice(),
+            notas: azar.probabilidad(0.3)
+              ? azar.elegir(ALIMENTACION_PERRO)
+              : undefined,
+          }
         : undefined,
+      alergias: azar.probabilidad(0.15)
+        ? { tiene: true, detalle: "Al pollo. Nada de snacks con pollo." }
+        : { tiene: false },
       indicaciones: azar.probabilidad(0.3)
         ? azar.elegir(INDICACIONES_PERRO)
         : undefined,
@@ -903,5 +926,11 @@ export function generarSeed(
     reportes,
     incidentes,
     mensajes,
+    // Los avisos para Administración nacen del uso, no del seed: un aviso
+    // inventado manda a mirar un cambio que nunca ocurrió.
+    notificaciones: [],
+    configuracion: configuracionPorDefecto(
+      instanteEn(hoy, 9 * 60),
+    ),
   };
 }

@@ -3,10 +3,13 @@
 import Image from "next/image";
 import {
   Bone,
+  Cake,
   CalendarDays,
+  FileImage,
   Phone,
   Pill,
   Scale,
+  ShieldAlert,
   StickyNote,
   Syringe,
   TriangleAlert,
@@ -16,7 +19,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useConsulta } from "@/lib/hooks/use-consulta";
-import { vacunasFaltantes } from "@/lib/rules/admision";
+import { nombreVacuna, vacunasFaltantes } from "@/lib/rules/admision";
+import { describirAlimentacion, describirEdad } from "@/lib/rules/perro";
 import { formatearDiaMes, sumarDias } from "@/lib/utils/fecha";
 import { formatearTelefono } from "@/lib/utils/telefono";
 import type { Cliente, GravedadIncidente, Perro } from "@/lib/types";
@@ -51,6 +55,33 @@ export function FotoPerro({ perro }: { perro: Perro }) {
   );
 }
 
+/**
+ * El carnet va como acordeón y no abierto: es una foto de un papel, sirve
+ * para verificar una fecha y no para mirarla todos los días.
+ */
+export function CarnetDeVacunas({ perro }: { perro: Perro }) {
+  if (!perro.carnetVacunasUrl) return null;
+
+  return (
+    <details className="rounded-xl border border-border/70">
+      <summary className="flex cursor-pointer items-center gap-1.5 p-3 text-sm font-semibold">
+        <FileImage className="size-4" />
+        Carnet de vacunación
+      </summary>
+      <div className="px-3 pb-3">
+        <Image
+          src={perro.carnetVacunasUrl}
+          alt={`Carnet de vacunación de ${perro.nombre}`}
+          width={640}
+          height={480}
+          unoptimized
+          className="w-full rounded-xl object-contain"
+        />
+      </div>
+    </details>
+  );
+}
+
 export function DatosPerro({
   perro,
   cliente,
@@ -65,6 +96,9 @@ export function DatosPerro({
 }) {
   const faltantes = vacunasFaltantes(perro, hoy);
   const Sexo = perro.sexo === "macho" ? Mars : Venus;
+  const edad = perro.fechaNacimiento
+    ? describirEdad(perro.fechaNacimiento, hoy)
+    : null;
 
   return (
     <>
@@ -76,8 +110,14 @@ export function DatosPerro({
         <Badge variant="secondary">
           <Sexo />
           {perro.sexo}
-          {perro.esterilizado ? " · esterilizado" : ""}
+          {perro.esterilizado ? " · castrado" : ""}
         </Badge>
+        {edad && (
+          <Badge variant="secondary">
+            <Cake />
+            {edad}
+          </Badge>
+        )}
         {cliente && (
           <Badge variant="secondary" asChild>
             {/* En el celular el teléfono se toca para llamar. */}
@@ -99,7 +139,8 @@ export function DatosPerro({
         <p className="bg-warning/12 text-warning flex items-start gap-2 rounded-xl p-3 text-sm">
           <Syringe className="mt-0.5 size-4 shrink-0" />
           <span>
-            Tiene vencida la vacuna {faltantes.join(", ")}. Avísale al dueño.
+            Tiene vencida la vacuna {faltantes.map(nombreVacuna).join(", ")}.
+            Avísale al dueño.
           </span>
         </p>
       )}
@@ -107,17 +148,45 @@ export function DatosPerro({
       <Dato
         icono={Bone}
         titulo="Comida"
-        texto={perro.alimentacion}
+        texto={describirAlimentacion(perro.alimentacion) ?? undefined}
         vacio="Sin indicaciones de comida."
         className="bg-jardin-suave"
       />
 
+      {perro.alergias?.tiene && (
+        <Dato
+          icono={ShieldAlert}
+          titulo="Alergias"
+          texto={perro.alergias.detalle}
+          vacio="Tiene alergias, pero no quedó anotado a qué."
+          className="bg-destructive/10"
+        />
+      )}
+
+      {perro.medicamentos && perro.medicamentos.length > 0 && (
+        <div className="bg-primary/8 rounded-xl p-3">
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+            <Pill className="size-4" />
+            Medicamentos
+          </h3>
+          <ul className="mt-1 space-y-0.5 text-sm">
+            {perro.medicamentos.map((medicamento) => (
+              <li key={medicamento.nombre} className="text-pretty">
+                <span className="font-semibold">{medicamento.nombre}</span>
+                {medicamento.dosis && ` · ${medicamento.dosis}`}
+                {medicamento.frecuencia && ` · ${medicamento.frecuencia}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {perro.indicaciones && (
         <Dato
           icono={Pill}
-          titulo="Indicaciones"
+          titulo="Cuidados especiales"
           texto={perro.indicaciones}
-          className="bg-primary/8"
+          className="bg-accent/12"
         />
       )}
 
