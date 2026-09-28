@@ -12,13 +12,22 @@ import { PRECIOS } from "@/lib/config/precios";
 import { evaluarAdmision } from "@/lib/rules/admision";
 import { revisarAltaDePerro } from "@/lib/rules/alta-perro";
 import { vigenciaAntiparasitario } from "@/lib/rules/perro";
-import { verificarCapacidad } from "@/lib/rules/capacidad";
+import {
+  bloquesDeEntrada,
+  MOTIVO_EN_PALABRAS,
+  rangoDelBloque,
+  type BloqueDeEntrada,
+} from "@/lib/rules/dia-de-prueba";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
-import { fechaISO, hhmmDesdeMinutos, instanteEn } from "@/lib/utils/fecha";
+import {
+  fechaISO,
+  horasEntre,
+  minutosDelDia,
+  sumarDias,
+} from "@/lib/utils/fecha";
 import { aE164 } from "@/lib/utils/telefono";
 import { ocupantesEnRango } from "@/lib/servicios/reservas";
 import type { ResultadoAdmision } from "@/lib/rules/admision";
-import type { ResultadoCapacidad } from "@/lib/rules/capacidad";
 import type {
   Alergias,
   Alimentacion,
@@ -30,6 +39,7 @@ import type {
   ID,
   InstanteISO,
   Medicamento,
+  Pago,
   Perro,
   Sexo,
   TipoVacuna,
@@ -203,12 +213,85 @@ export async function crearCuenta(
 
 /* ── Día de prueba ─────────────────────────────────────────────────── */
 
+/**
+ * El día de prueba es **media jornada** de un día de jardín normal, con hora
+ * de llegada a elección en bloques de 30 minutos.
+ *
+ * A diferencia del día suelto, se **cobra al agendar**: es la evaluación de un
+ * perro que todavía no es cliente, y el cupo queda tomado desde ese momento.
+ * El cobro nace pendiente con instrucciones de transferencia; Administración
+ * lo marca pagado desde la pantalla de pagos.
+ */
+
+export interface DisponibilidadDelDia {
+  fecha: FechaISO;
+  bloques: BloqueDeEntrada[];
+  libres: number;
+}
+
+/** Los días de prueba ya agendados ese día, por minuto de llegada. */
+async function minutosTomados(
+  repo: RepositorioPatoteca,
+  fecha: FechaISO,
+  exceptoPerroId?: ID,
+): Promise<number[]> {
+  const estadias = await repo.estadiasJardin.porFecha(fecha);
+
+  return estadias
+    .filter(
+      (e) =>
+        e.origen === "dia_de_prueba" &&
+        e.estado !== "cancelada" &&
+        e.perroId !== exceptoPerroId,
+    )
+    .map((e) => minutosDelDia(e.inicioProgramado));
+}
+
+export async function disponibilidadDeUnDia(
+  repo: RepositorioPatoteca,
+  perroId: ID,
+  fecha: FechaISO,
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<DisponibilidadDelDia> {
+  const [ocupantes, tomados] = await Promise.all([
+    ocupantesEnRango(repo, fecha, fecha),
+    minutosTomados(repo, fecha, perroId),
+  ]);
+
+  const bloques = bloquesDeEntrada({
+    fecha,
+    // El propio perro no cuenta contra sí mismo al reprogramar.
+    ocupantes: ocupantes.filter((o) => o.perroId !== perroId),
+    diasDePruebaTomados: tomados,
+    perroId,
+    minutoActual: fechaISO(ahora) === fecha ? minutosDelDia(ahora) : undefined,
+  });
+
+  return { fecha, bloques, libres: bloques.filter((b) => b.disponible).length };
+}
+
+/** La tira del calendario: cuántas horas quedan libres cada día. */
+export async function disponibilidadDeVariosDias(
+  repo: RepositorioPatoteca,
+  perroId: ID,
+  desde: FechaISO,
+  dias: number,
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<DisponibilidadDelDia[]> {
+  const fechas = Array.from({ length: dias }, (_, i) => sumarDias(desde, i));
+  return Promise.all(
+    fechas.map((fecha) => disponibilidadDeUnDia(repo, perroId, fecha, ahora)),
+  );
+}
+
 export interface CotizacionDiaDePrueba {
   cotizacion: Cotizacion;
+  fecha: FechaISO;
+  minutoDeEntrada: number;
   inicio: InstanteISO;
   fin: InstanteISO;
   admision: ResultadoAdmision;
-  capacidad: ResultadoCapacidad;
+  bloque?: BloqueDeEntrada;
   /** Ya lo tiene agendado o aprobado: no hay nada que tomar. */
   yaLoTiene: boolean;
   sePuede: boolean;
@@ -219,7 +302,7 @@ function cotizacionDelDiaDePrueba(): Cotizacion {
     lineas: [
       {
         concepto: "Día de prueba",
-        detalle: "Una jornada completa de jardín para conocernos",
+        detalle: `Media jornada de jardín (${NEGOCIO.diaDePrueba.horasDeEstadia} horas) para conocernos`,
         monto: PRECIOS.diaDePrueba,
       },
     ],
@@ -233,19 +316,15 @@ export async function cotizarDiaDePrueba(
   repo: RepositorioPatoteca,
   perroId: ID,
   fecha: FechaISO,
+  minutoDeEntrada: number,
+  ahora: InstanteISO = new Date().toISOString(),
 ): Promise<CotizacionDiaDePrueba> {
   const perro = await repo.perros.obtener(perroId);
   if (!perro) throw new Error(`No existe el perro ${perroId}`);
 
-  const inicio = instanteEn(fecha, NEGOCIO.jardin.horaApertura * 60);
-  const fin = instanteEn(fecha, NEGOCIO.jardin.horaCierre * 60);
-
-  const existentes = await ocupantesEnRango(repo, fecha, fecha);
-
-  const capacidad = verificarCapacidad(
-    [{ perroId, linea: "jardin", inicio, fin }],
-    existentes,
-  );
+  const { inicio, fin } = rangoDelBloque(fecha, minutoDeEntrada);
+  const dia = await disponibilidadDeUnDia(repo, perroId, fecha, ahora);
+  const bloque = dia.bloques.find((b) => b.minutoDelDia === minutoDeEntrada);
 
   // El día de prueba es la excepción a "necesita día de prueba": se evalúa
   // con esa bandera para que no se pida a sí mismo.
@@ -257,59 +336,50 @@ export async function cotizarDiaDePrueba(
 
   return {
     cotizacion: cotizacionDelDiaDePrueba(),
+    fecha,
+    minutoDeEntrada,
     inicio,
     fin,
     admision,
-    capacidad,
+    bloque,
     yaLoTiene,
-    sePuede: admision.admitido && capacidad.hayCupo && !yaLoTiene,
+    sePuede: admision.admitido && Boolean(bloque?.disponible) && !yaLoTiene,
   };
-}
-
-/**
- * Un solo motivo, con la franja que chocó.
- *
- * La jornada completa son 24 slots de media hora: listarlos uno por uno sería
- * ilegible. Se dice desde cuándo hasta cuándo está lleno, que es lo que el
- * dueño necesita para elegir otro día.
- */
-function motivoDeCupo(capacidad: ResultadoCapacidad): string {
-  const minutos = capacidad.conflictos.map((c) => c.minutoDelDia);
-  const desde = hhmmDesdeMinutos(Math.min(...minutos));
-  const hasta = hhmmDesdeMinutos(Math.max(...minutos));
-  return desde === hasta
-    ? `Ese día a las ${desde} ya no quedan cupos.`
-    : `Ese día ya está lleno entre las ${desde} y las ${hasta}.`;
 }
 
 export interface DiaDePruebaAgendado {
   estadia: EstadiaJardin;
   perro: Perro;
+  pago: Pago;
 }
 
 /**
- * Agenda el día de prueba: deja la estadía de jardín esperando y marca al
- * perro como "agendado".
+ * Agenda el día de prueba y emite su cobro.
  *
- * No emite cobro. Igual que el día suelto, el día de prueba se cobra cuando
- * se cierra la jornada con la hora real.
+ * El cobro queda **pendiente**: el prototipo no tiene pasarela, y en la
+ * realidad los primeros meses se paga por transferencia. Administración lo
+ * marca pagado cuando llega la plata.
  */
 export async function agendarDiaDePrueba(
   repo: RepositorioPatoteca,
   perroId: ID,
   fecha: FechaISO,
+  minutoDeEntrada: number,
   ahora: InstanteISO = new Date().toISOString(),
 ): Promise<DiaDePruebaAgendado> {
-  const previa = await cotizarDiaDePrueba(repo, perroId, fecha);
+  const previa = await cotizarDiaDePrueba(
+    repo,
+    perroId,
+    fecha,
+    minutoDeEntrada,
+    ahora,
+  );
 
   if (!previa.sePuede) {
-    const motivos = previa.yaLoTiene
-      ? ["Este perrito ya tiene su día de prueba tomado."]
-      : [
-          ...previa.admision.bloqueos.map((p) => p.mensaje),
-          ...(previa.capacidad.hayCupo ? [] : [motivoDeCupo(previa.capacidad)]),
-        ];
-    throw new RegistroRechazado("No pudimos tomar ese día.", motivos);
+    throw new RegistroRechazado(
+      "No pudimos tomar esa hora.",
+      motivosDelRechazo(previa),
+    );
   }
 
   const perroActual = (await repo.perros.obtener(perroId))!;
@@ -326,9 +396,190 @@ export async function agendarDiaDePrueba(
     creadaEn: ahora,
   });
 
+  const pago = await repo.pagos.crear({
+    clienteId: perroActual.clienteId,
+    concepto: "dia_de_prueba",
+    referenciaId: estadia.id,
+    monto: previa.cotizacion.total,
+    estado: "pendiente",
+    emitidoEn: ahora,
+    venceEn: fecha,
+  });
+
   const perro = await repo.perros.actualizar(perroId, {
     diaDePrueba: { estado: "agendado", fecha },
   });
 
-  return { estadia, perro };
+  return { estadia, perro, pago };
+}
+
+function motivosDelRechazo(previa: CotizacionDiaDePrueba): string[] {
+  if (previa.yaLoTiene) {
+    return ["Este perrito ya tiene su día de prueba tomado."];
+  }
+
+  const motivos = previa.admision.bloqueos.map((p) => p.mensaje);
+  if (previa.bloque && !previa.bloque.disponible) {
+    motivos.push(`${MOTIVO_EN_PALABRAS[previa.bloque.motivo!]}, elige otra hora.`);
+  } else if (!previa.bloque) {
+    motivos.push("Esa hora no es una hora de llegada válida.");
+  }
+  return motivos;
+}
+
+/* ── Cambiar o cancelar ────────────────────────────────────────────── */
+
+export interface PoliticaDeCancelacion {
+  /** Horas que faltan para la llegada. Negativo si ya pasó. */
+  horasDeAviso: number;
+  /** Con aviso suficiente no se cobra nada. */
+  sinCosto: boolean;
+  /** Lo que cuesta cancelar o cambiar ahora. */
+  costo: number;
+}
+
+export function politicaDeCancelacion(
+  inicioProgramado: InstanteISO,
+  ahora: InstanteISO = new Date().toISOString(),
+): PoliticaDeCancelacion {
+  const horasDeAviso = horasEntre(ahora, inicioProgramado);
+  const sinCosto = horasDeAviso >= NEGOCIO.diaDePrueba.horasParaCancelarSinCosto;
+
+  return {
+    horasDeAviso,
+    sinCosto,
+    costo: sinCosto ? 0 : PRECIOS.cancelacionTardiaDiaDePrueba,
+  };
+}
+
+/** El día de prueba vigente de un perro, si lo tiene. */
+export async function diaDePruebaAgendado(
+  repo: RepositorioPatoteca,
+  perroId: ID,
+): Promise<EstadiaJardin | null> {
+  const estadias = await repo.estadiasJardin.porPerro(perroId);
+
+  return (
+    estadias.find(
+      (e) =>
+        e.origen === "dia_de_prueba" &&
+        e.estado !== "cancelada" &&
+        e.estado !== "finalizada",
+    ) ?? null
+  );
+}
+
+/**
+ * Cancela el día de prueba.
+ *
+ * Con 24 horas o más de aviso se anula el cobro —como el cobro está pendiente,
+ * anularlo ES la devolución—. Con menos, ese cobro se reemplaza por el de
+ * cancelación tardía: no se devuelve la jornada, pero tampoco se cobra entera.
+ */
+export async function cancelarDiaDePrueba(
+  repo: RepositorioPatoteca,
+  perroId: ID,
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<{ politica: PoliticaDeCancelacion }> {
+  const estadia = await diaDePruebaAgendado(repo, perroId);
+  if (!estadia) {
+    throw new RegistroRechazado("No hay nada que cancelar.", [
+      "Este perrito no tiene un día de prueba agendado.",
+    ]);
+  }
+
+  const politica = politicaDeCancelacion(estadia.inicioProgramado, ahora);
+
+  await repo.estadiasJardin.actualizar(estadia.id, { estado: "cancelada" });
+  await ajustarCobro(repo, estadia.id, politica.costo, ahora);
+  await repo.perros.actualizar(perroId, { diaDePrueba: { estado: "pendiente" } });
+
+  return { politica };
+}
+
+/**
+ * Mueve el día de prueba a otra hora.
+ *
+ * Con menos de 24 horas de aviso se suma el cargo por el cambio tardío: el
+ * cupo de ese día ya no se alcanza a llenar con otro perro.
+ */
+export async function reprogramarDiaDePrueba(
+  repo: RepositorioPatoteca,
+  perroId: ID,
+  fecha: FechaISO,
+  minutoDeEntrada: number,
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<{ estadia: EstadiaJardin; politica: PoliticaDeCancelacion }> {
+  const estadia = await diaDePruebaAgendado(repo, perroId);
+  if (!estadia) {
+    throw new RegistroRechazado("No hay nada que cambiar.", [
+      "Este perrito no tiene un día de prueba agendado.",
+    ]);
+  }
+
+  const dia = await disponibilidadDeUnDia(repo, perroId, fecha, ahora);
+  const bloque = dia.bloques.find((b) => b.minutoDelDia === minutoDeEntrada);
+  if (!bloque?.disponible) {
+    throw new RegistroRechazado("No pudimos tomar esa hora.", [
+      bloque
+        ? `${MOTIVO_EN_PALABRAS[bloque.motivo!]}, elige otra hora.`
+        : "Esa hora no es una hora de llegada válida.",
+    ]);
+  }
+
+  const politica = politicaDeCancelacion(estadia.inicioProgramado, ahora);
+  const { inicio, fin } = rangoDelBloque(fecha, minutoDeEntrada);
+
+  const movida = await repo.estadiasJardin.actualizar(estadia.id, {
+    fecha,
+    inicioProgramado: inicio,
+    finProgramado: fin,
+  });
+
+  if (!politica.sinCosto) {
+    await repo.pagos.crear({
+      clienteId: estadia.clienteId,
+      concepto: "dia_de_prueba",
+      referenciaId: estadia.id,
+      monto: politica.costo,
+      estado: "pendiente",
+      emitidoEn: ahora,
+      venceEn: fecha,
+    });
+  }
+
+  await repo.perros.actualizar(perroId, {
+    diaDePrueba: { estado: "agendado", fecha },
+  });
+
+  return { estadia: movida, politica };
+}
+
+/**
+ * Deja el cobro del día en el monto que corresponde tras cancelar.
+ *
+ * En cero se marca reembolsado en vez de borrarse: un cobro que desaparece no
+ * deja rastro de que existió, y la cobranza del mes tiene que poder explicarse.
+ */
+async function ajustarCobro(
+  repo: RepositorioPatoteca,
+  estadiaId: ID,
+  monto: number,
+  ahora: InstanteISO,
+): Promise<void> {
+  const pagos = await repo.pagos.listar();
+  const delDia = pagos.filter(
+    (p) => p.referenciaId === estadiaId && p.estado === "pendiente",
+  );
+
+  for (const [i, pago] of delDia.entries()) {
+    // Si hubo cargos por cambios, el monto nuevo se queda en el primero y el
+    // resto se anula: lo que se cobra es una cancelación, no varias.
+    await repo.pagos.actualizar(pago.id, {
+      monto: i === 0 ? monto : 0,
+      estado: i === 0 && monto > 0 ? "pendiente" : "reembolsado",
+      pagadoEn: undefined,
+      venceEn: i === 0 && monto > 0 ? fechaISO(ahora) : undefined,
+    });
+  }
 }
