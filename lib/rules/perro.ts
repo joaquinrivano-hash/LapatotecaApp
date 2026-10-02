@@ -5,13 +5,12 @@
  * Funciones puras, como el resto de `lib/rules`: no tocan repositorio ni red.
  */
 
-import { rangoFechas, sumarDias } from "@/lib/utils/fecha";
+import { rangoFechas } from "@/lib/utils/fecha";
 import type {
   Alimentacion,
   Antiparasitario,
   Comida,
   FechaISO,
-  PeriodicidadAntiparasitario,
   Perro,
 } from "@/lib/types";
 
@@ -129,26 +128,28 @@ export function cumpleanosEntre(
 
 /* ── Antiparasitario ───────────────────────────────────────────────── */
 
-export const DIAS_DE_PERIODICIDAD: Record<
-  Exclude<PeriodicidadAntiparasitario, "otro">,
-  number
-> = {
-  mensual: 30,
-  trimestral: 90,
-  semestral: 180,
-  anual: 365,
-};
+/**
+ * Suma meses a una fecha de calendario, sin pasarse de mes.
+ *
+ * El 31 de enero más un mes es el 28 de febrero, no el 3 de marzo: una
+ * vigencia que se corre de mes confunde a quien la lee en el carnet.
+ */
+export function sumarMeses(fecha: FechaISO, meses: number): FechaISO {
+  const [anio, mes, dia] = partes(fecha);
+  const total = (anio * 12 + (mes - 1)) + meses;
+  const anioFinal = Math.floor(total / 12);
+  const mesFinal = (total % 12) + 1;
 
-export const ETIQUETA_PERIODICIDAD: Record<
-  PeriodicidadAntiparasitario,
-  string
-> = {
-  mensual: "cada mes",
-  trimestral: "cada 3 meses",
-  semestral: "cada 6 meses",
-  anual: "una vez al año",
-  otro: "otro período",
-};
+  const diasDelMes = new Date(Date.UTC(anioFinal, mesFinal, 0)).getUTCDate();
+  const diaFinal = Math.min(dia, diasDelMes);
+
+  return `${anioFinal}-${String(mesFinal).padStart(2, "0")}-${String(diaFinal).padStart(2, "0")}`;
+}
+
+/** "cada mes" · "cada 3 meses" */
+export function describirDuracion(meses: number): string {
+  return meses === 1 ? "cada mes" : `cada ${meses} meses`;
+}
 
 /**
  * Hasta cuándo le dura. Es lo que termina guardado en `desparasitadoHasta`,
@@ -157,12 +158,43 @@ export const ETIQUETA_PERIODICIDAD: Record<
 export function vigenciaAntiparasitario(
   antiparasitario: Antiparasitario,
 ): FechaISO {
-  const dias =
-    antiparasitario.periodicidad === "otro"
-      ? (antiparasitario.cadaCuantosDias ?? 0)
-      : DIAS_DE_PERIODICIDAD[antiparasitario.periodicidad];
+  return sumarMeses(
+    antiparasitario.ultimaAplicacion,
+    antiparasitario.mesesDeDuracion,
+  );
+}
 
-  return sumarDias(antiparasitario.ultimaAplicacion, dias);
+/**
+ * Hasta cuándo vale una vacuna puesta ese día.
+ *
+ * Al dueño se le pide la fecha de aplicación —la que está escrita en el
+ * carnet— y el vencimiento se calcula con la duración que Administración
+ * tenga configurada para esa vacuna.
+ */
+export function vigenciaVacuna(
+  fechaAplicacion: FechaISO,
+  mesesDeDuracion: number,
+): FechaISO {
+  return sumarMeses(fechaAplicacion, mesesDeDuracion);
+}
+
+/**
+ * Si a esa fecha ya se le exige estar castrado.
+ *
+ * Antes de los 7 meses el veterinario todavía no la indica, así que rechazar a
+ * un cachorro sería rechazarlo por algo que ni siquiera puede hacer. Sin fecha
+ * de nacimiento se asume que ya tiene la edad: es lo prudente, y el dueño
+ * siempre puede agregar la fecha.
+ */
+export function leCorrespondeEstarCastrado(
+  nacimiento: FechaISO | undefined,
+  hoy: FechaISO,
+  mesesMinimos: number,
+): boolean {
+  if (!nacimiento) return true;
+  const edad = calcularEdad(nacimiento, hoy);
+  if (!edad) return false;
+  return edad.anios * 12 + edad.meses >= mesesMinimos;
 }
 
 /* ── Alimentación ──────────────────────────────────────────────────── */

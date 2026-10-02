@@ -5,7 +5,10 @@ import {
   describirAlimentacion,
   describirEdad,
   esCumpleanos,
+  leCorrespondeEstarCastrado,
+  sumarMeses,
   vigenciaAntiparasitario,
+  vigenciaVacuna,
 } from "@/lib/rules/perro";
 
 describe("calcularEdad", () => {
@@ -65,31 +68,62 @@ describe("esCumpleanos", () => {
   });
 });
 
+describe("sumarMeses", () => {
+  it("suma meses de calendario", () => {
+    expect(sumarMeses("2026-09-01", 3)).toBe("2026-12-01");
+    expect(sumarMeses("2026-11-15", 2)).toBe("2027-01-15");
+  });
+
+  it("no se pasa de mes: el 31 de enero más un mes es el 28 de febrero", () => {
+    expect(sumarMeses("2026-01-31", 1)).toBe("2026-02-28");
+    // 2028 sí es bisiesto.
+    expect(sumarMeses("2028-01-31", 1)).toBe("2028-02-29");
+  });
+});
+
 describe("vigenciaAntiparasitario", () => {
-  it("suma el período a la última aplicación", () => {
+  it("le suma los meses que dura el formato", () => {
     expect(
       vigenciaAntiparasitario({
         ultimaAplicacion: "2026-09-01",
-        periodicidad: "mensual",
+        mesesDeDuracion: 1,
       }),
     ).toBe("2026-10-01");
 
     expect(
       vigenciaAntiparasitario({
         ultimaAplicacion: "2026-09-01",
-        periodicidad: "trimestral",
+        mesesDeDuracion: 3,
       }),
-    ).toBe("2026-11-30");
+    ).toBe("2026-12-01");
+  });
+});
+
+describe("vigenciaVacuna", () => {
+  it("cuenta desde el día en que se puso", () => {
+    expect(vigenciaVacuna("2026-03-10", 12)).toBe("2027-03-10");
+    expect(vigenciaVacuna("2026-03-10", 6)).toBe("2026-09-10");
+  });
+});
+
+describe("leCorrespondeEstarCastrado", () => {
+  const HOY = "2026-09-28";
+
+  it("a un cachorro de cuatro meses todavía no", () => {
+    expect(leCorrespondeEstarCastrado("2026-05-28", HOY, 7)).toBe(false);
   });
 
-  it("con 'otro' usa los días que indicó el dueño", () => {
-    expect(
-      vigenciaAntiparasitario({
-        ultimaAplicacion: "2026-09-01",
-        periodicidad: "otro",
-        cadaCuantosDias: 45,
-      }),
-    ).toBe("2026-10-16");
+  it("desde los siete meses sí", () => {
+    expect(leCorrespondeEstarCastrado("2026-02-28", HOY, 7)).toBe(true);
+  });
+
+  it("justo el día que cumple los siete meses ya cuenta", () => {
+    expect(leCorrespondeEstarCastrado("2026-02-28", "2026-09-28", 7)).toBe(true);
+    expect(leCorrespondeEstarCastrado("2026-02-28", "2026-09-27", 7)).toBe(false);
+  });
+
+  it("sin fecha de nacimiento se asume que ya tiene la edad", () => {
+    expect(leCorrespondeEstarCastrado(undefined, HOY, 7)).toBe(true);
   });
 });
 
