@@ -441,9 +441,19 @@ function normalizarDatos(datos: DatosPatoteca): DatosPatoteca {
     }
   }
 
-  if (!datos.configuracion) {
-    datos.configuracion = configuracionPorDefecto();
-  }
+  // La configuración gana campos con el tiempo; los que falten se completan
+  // con los de fábrica en vez de reemplazar lo que Administración ya eligió.
+  const fabrica = configuracionPorDefecto();
+  datos.configuracion = {
+    ...fabrica,
+    ...datos.configuracion,
+    duracionVacunasMeses: {
+      ...fabrica.duracionVacunasMeses,
+      ...datos.configuracion?.duracionVacunasMeses,
+    },
+    catalogos: { ...fabrica.catalogos, ...datos.configuracion?.catalogos },
+    actualizadoEn: datos.configuracion?.actualizadoEn ?? fabrica.actualizadoEn,
+  };
 
   migrarPerros(datos.perros);
 
@@ -468,7 +478,46 @@ function migrarPerros(perros: Perro[]): void {
         ? { comidas: [], notas: comida }
         : undefined;
     }
+
+    // El carnet era una foto y ahora son las hojas que haga falta.
+    const viejo = perro as unknown as { carnetVacunasUrl?: string };
+    if (viejo.carnetVacunasUrl) {
+      perro.carnetVacunasUrls = [
+        ...(perro.carnetVacunasUrls ?? []),
+        viejo.carnetVacunasUrl,
+      ];
+      delete viejo.carnetVacunasUrl;
+    }
+
+    // El antiparasitario se declaraba con una periodicidad y ahora con los
+    // meses que dura el formato.
+    const bicho = perro.antiparasitario as unknown as
+      | { periodicidad?: string; cadaCuantosDias?: number; mesesDeDuracion?: number }
+      | undefined;
+    if (bicho && bicho.mesesDeDuracion === undefined) {
+      bicho.mesesDeDuracion = mesesDeLaPeriodicidad(bicho);
+      delete bicho.periodicidad;
+      delete bicho.cadaCuantosDias;
+    }
   }
+}
+
+/** Las periodicidades viejas, llevadas a meses. */
+function mesesDeLaPeriodicidad(viejo: {
+  periodicidad?: string;
+  cadaCuantosDias?: number;
+}): number {
+  const enMeses: Record<string, number> = {
+    mensual: 1,
+    trimestral: 3,
+    semestral: 6,
+    anual: 12,
+  };
+  if (viejo.periodicidad && enMeses[viejo.periodicidad]) {
+    return enMeses[viejo.periodicidad];
+  }
+  // "otro" se guardaba en días; se redondea al mes más cercano, mínimo uno.
+  return Math.max(1, Math.round((viejo.cadaCuantosDias ?? 30) / 30));
 }
 
 export interface OpcionesRepositorioLocal {

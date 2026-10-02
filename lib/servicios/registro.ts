@@ -10,8 +10,8 @@
 import { NEGOCIO } from "@/lib/config/negocio";
 import { PRECIOS } from "@/lib/config/precios";
 import { evaluarAdmision } from "@/lib/rules/admision";
-import { revisarAltaDePerro } from "@/lib/rules/alta-perro";
-import { vigenciaAntiparasitario } from "@/lib/rules/perro";
+import { reparosDeAlta, revisarAltaDePerro } from "@/lib/rules/alta-perro";
+import { vigenciaAntiparasitario, vigenciaVacuna } from "@/lib/rules/perro";
 import {
   bloquesDeEntrada,
   MOTIVO_EN_PALABRAS,
@@ -84,11 +84,12 @@ export interface DatosDePerro {
    * Se piden al crear la cuenta porque el día de prueba ya es una jornada en
    * la casa con otros perros: sin vacunas al día no se puede agendar.
    */
-  vacunas?: {
-    tipo: TipoVacuna;
-    fechaAplicacion?: FechaISO;
-    fechaVencimiento: FechaISO;
-  }[];
+  /**
+   * Cuándo se puso cada vacuna. El vencimiento lo calcula `crearCuenta` con la
+   * duración que Administración tenga configurada: el dueño copia del carnet,
+   * no hace la cuenta.
+   */
+  vacunas?: { tipo: TipoVacuna; fechaAplicacion: FechaISO }[];
   /** De acá sale `desparasitadoHasta`: la vigencia se calcula, no se pide. */
   antiparasitario?: Antiparasitario;
   /**
@@ -99,38 +100,12 @@ export interface DatosDePerro {
   desparasitadoHasta?: FechaISO;
   /** La foto la sube el dueño al crear la cuenta; el admin la corrige después. */
   fotoUrl?: string;
-  carnetVacunasUrl?: string;
+  carnetVacunasUrls?: string[];
   alimentacion?: Alimentacion;
   medicamentos?: Medicamento[];
   alergias?: Alergias;
   indicaciones?: string;
   notas?: string;
-}
-
-/**
- * Lo que impide de entrada que un perro sea cliente.
- *
- * Solo las reglas que no se pueden subsanar: el peso y la esterilización de
- * los machos. Las vacunas y la desparasitación se revisan para el día de
- * prueba, no para crear la cuenta — se ponen al día antes de venir.
- */
-export function reparosParaEntrar(perro: DatosDePerro): string[] {
-  const reparos: string[] = [];
-
-  if (perro.pesoKg > NEGOCIO.admision.pesoMaximoKg) {
-    reparos.push(
-      `Recibimos perritos de hasta ${NEGOCIO.admision.pesoMaximoKg} kg.`,
-    );
-  }
-  if (
-    NEGOCIO.admision.esterilizacionObligatoriaEnMachos &&
-    perro.sexo === "macho" &&
-    !perro.esterilizado
-  ) {
-    reparos.push("Los machos tienen que estar esterilizados.");
-  }
-
-  return reparos;
 }
 
 export interface CuentaCreada {
@@ -144,19 +119,23 @@ export async function crearCuenta(
   datos: { cuenta: DatosDeCuenta; perro: DatosDePerro },
   ahora: InstanteISO = new Date().toISOString(),
 ): Promise<CuentaCreada> {
-  const reparos = reparosParaEntrar(datos.perro);
-  if (reparos.length > 0) {
-    throw new RegistroRechazado("Todavía no podemos recibirlo.", reparos);
-  }
-
   // La ficha se revisa acá y no solo en el formulario: la pantalla puede
   // adelantar el aviso, pero la que no deja pasar una ficha incompleta es
   // esta función, que es por donde entra todo el mundo.
-  const faltan = revisarAltaDePerro(
-    datos.perro,
-    await repo.configuracion.obtener(),
-    fechaISO(ahora),
+  const configuracion = await repo.configuracion.obtener();
+  const hoy = fechaISO(ahora);
+
+  const bloqueos = reparosDeAlta(datos.perro, configuracion, hoy).filter(
+    (r) => r.bloquea,
   );
+  if (bloqueos.length > 0) {
+    throw new RegistroRechazado(
+      "Todavía no podemos recibirlo.",
+      bloqueos.map((r) => r.mensaje),
+    );
+  }
+
+  const faltan = revisarAltaDePerro(datos.perro, configuracion, hoy);
   if (faltan.length > 0) {
     throw new RegistroRechazado(
       "Falta completar la ficha.",
@@ -187,16 +166,18 @@ export async function crearCuenta(
     fechaNacimiento: datos.perro.fechaNacimiento,
     vacunas: (datos.perro.vacunas ?? []).map((v) => ({
       tipo: v.tipo,
-      // Sin fecha de aplicación anotada, el vencimiento es lo único que hay.
-      fechaAplicacion: v.fechaAplicacion ?? v.fechaVencimiento,
-      fechaVencimiento: v.fechaVencimiento,
+      fechaAplicacion: v.fechaAplicacion,
+      fechaVencimiento: vigenciaVacuna(
+        v.fechaAplicacion,
+        configuracion.duracionVacunasMeses[v.tipo],
+      ),
     })),
     antiparasitario: datos.perro.antiparasitario,
     desparasitadoHasta: datos.perro.antiparasitario
       ? vigenciaAntiparasitario(datos.perro.antiparasitario)
       : datos.perro.desparasitadoHasta,
     fotoUrl: datos.perro.fotoUrl,
-    carnetVacunasUrl: datos.perro.carnetVacunasUrl,
+    carnetVacunasUrls: datos.perro.carnetVacunasUrls,
     diaDePrueba: { estado: "pendiente" },
     alimentacion: datos.perro.alimentacion,
     medicamentos: datos.perro.medicamentos?.length

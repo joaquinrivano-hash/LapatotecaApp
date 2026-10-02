@@ -268,6 +268,54 @@ describe("migración de datos guardados", () => {
     expect((await repoViejo.perros.listar())[0].alimentacion).toEqual(comida);
   });
 
+  it("junta las hojas del carnet que antes era una sola foto", async () => {
+    const repoViejo = crearRepositorioLocal({
+      almacen: almacenViejo({
+        carnetVacunasUrl: "data:image/jpeg;base64,hoja",
+      }),
+      hoy: HOY,
+    });
+
+    const perro = (await repoViejo.perros.listar())[0];
+
+    expect(perro.carnetVacunasUrls).toEqual(["data:image/jpeg;base64,hoja"]);
+    expect("carnetVacunasUrl" in perro).toBe(false);
+  });
+
+  it("lleva la periodicidad del antiparasitario a meses", async () => {
+    const repoViejo = crearRepositorioLocal({
+      almacen: almacenViejo({
+        antiparasitario: {
+          ultimaAplicacion: "2026-09-01",
+          periodicidad: "trimestral",
+        },
+      }),
+      hoy: HOY,
+    });
+
+    expect((await repoViejo.perros.listar())[0].antiparasitario).toEqual({
+      ultimaAplicacion: "2026-09-01",
+      mesesDeDuracion: 3,
+    });
+  });
+
+  it('el período "otro" en días se redondea al mes más cercano', async () => {
+    const repoViejo = crearRepositorioLocal({
+      almacen: almacenViejo({
+        antiparasitario: {
+          ultimaAplicacion: "2026-09-01",
+          periodicidad: "otro",
+          cadaCuantosDias: 45,
+        },
+      }),
+      hoy: HOY,
+    });
+
+    expect(
+      (await repoViejo.perros.listar())[0].antiparasitario?.mesesDeDuracion,
+    ).toBe(2);
+  });
+
   it("le pone configuración y bandeja de avisos a un set que no los tenía", async () => {
     const repoViejo = crearRepositorioLocal({
       almacen: almacenViejo({}),
@@ -275,9 +323,35 @@ describe("migración de datos guardados", () => {
     });
 
     expect(await repoViejo.notificaciones.listar()).toEqual([]);
-    expect(
-      (await repoViejo.configuracion.obtener()).vacunasObligatorias,
-    ).toEqual(["octuple", "antirrabica", "kc"]);
+    const configuracion = await repoViejo.configuracion.obtener();
+    expect(configuracion.vacunasObligatorias).toEqual([
+      "octuple",
+      "antirrabica",
+      "kc",
+    ]);
+    // Los campos nuevos de la configuración se completan solos.
+    expect(configuracion.duracionVacunasMeses.octuple).toBeGreaterThan(0);
+    expect(configuracion.catalogos.razas.length).toBeGreaterThan(0);
+  });
+
+  it("completa la configuración sin pisar lo que Administración ya eligió", async () => {
+    const almacen = crearAlmacenMemoria();
+    almacen.escribir(CLAVE_ALMACEN, {
+      ...SEED,
+      configuracion: {
+        vacunasObligatorias: ["antirrabica"],
+        camposObligatorios: [],
+        actualizadoEn: "2026-01-01T12:00:00.000Z",
+      },
+    });
+
+    const configuracion = await crearRepositorioLocal({
+      almacen,
+      hoy: HOY,
+    }).configuracion.obtener();
+
+    expect(configuracion.vacunasObligatorias).toEqual(["antirrabica"]);
+    expect(configuracion.catalogos.marcasComida.length).toBeGreaterThan(0);
   });
 });
 

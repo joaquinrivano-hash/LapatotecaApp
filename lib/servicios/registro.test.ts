@@ -13,7 +13,6 @@ import {
   cotizarDiaDePrueba,
   crearCuenta,
   disponibilidadDeUnDia,
-  reparosParaEntrar,
   reprogramarDiaDePrueba,
   RegistroRechazado,
 } from "./registro";
@@ -42,7 +41,7 @@ const PERRO = {
   // rechaza la ficha, que es justamente lo que queremos que haga.
   fechaNacimiento: "2022-03-10",
   fotoUrl: "data:image/jpeg;base64,aG9sYQ==",
-  carnetVacunasUrl: "data:image/jpeg;base64,aG9sYQ==",
+  carnetVacunasUrls: ["data:image/jpeg;base64,aG9sYQ=="],
   alimentacion: {
     marca: "Proplan",
     cantidad: 1,
@@ -51,7 +50,7 @@ const PERRO = {
   },
   vacunas: NEGOCIO.admision.vacunasObligatorias.map((tipo) => ({
     tipo,
-    fechaVencimiento: "2027-01-01",
+    fechaAplicacion: "2026-05-01",
   })),
   desparasitadoHasta: "2027-01-01",
 };
@@ -124,13 +123,41 @@ describe("crearCuenta", () => {
     expect(await repo.perros.listar()).toHaveLength(0);
   });
 
-  it("avisa del macho sin esterilizar, no de la hembra", () => {
-    expect(
-      reparosParaEntrar({ ...PERRO, sexo: "macho", esterilizado: false }),
-    ).toHaveLength(1);
-    expect(
-      reparosParaEntrar({ ...PERRO, sexo: "hembra", esterilizado: false }),
-    ).toHaveLength(0);
+  it("no deja crear la cuenta de un macho sin castrar de más de 7 meses", async () => {
+    await expect(
+      crearCuenta(repo, {
+        cuenta: CUENTA,
+        perro: {
+          ...PERRO,
+          sexo: "macho",
+          esterilizado: false,
+          fechaNacimiento: "2024-01-01",
+        },
+      }, DOMINGO),
+    ).rejects.toThrow(RegistroRechazado);
+  });
+
+  it("pero sí la de un cachorro que todavía no tiene la edad", async () => {
+    await expect(
+      crearCuenta(repo, {
+        cuenta: CUENTA,
+        perro: {
+          ...PERRO,
+          sexo: "macho",
+          esterilizado: false,
+          // Cuatro meses antes del lunes del test.
+          fechaNacimiento: "2026-02-15",
+        },
+      }, DOMINGO),
+    ).resolves.toBeTruthy();
+  });
+
+  it("calcula el vencimiento de cada vacuna con la duración configurada", async () => {
+    const { perro } = await crearCuenta(repo, { cuenta: CUENTA, perro: PERRO });
+    const octuple = perro.vacunas.find((v) => v.tipo === "octuple")!;
+
+    expect(octuple.fechaAplicacion).toBe("2026-05-01");
+    expect(octuple.fechaVencimiento).toBe("2027-05-01");
   });
 });
 
