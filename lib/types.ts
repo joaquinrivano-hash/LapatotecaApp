@@ -43,25 +43,18 @@ export interface DiaDePrueba {
 }
 
 /**
- * Cada cuánto toca el antiparasitario.
+ * El antiparasitario que le dieron y cuánto le dura.
  *
  * De acá sale `desparasitadoHasta`, que es lo que mira la admisión: el dueño
- * dice cuándo se lo dio y cada cuánto se repite, y la vigencia se calcula
- * (`vigenciaAntiparasitario` en `lib/rules/perro.ts`). Pedirle la fecha de
- * vencimiento sería pedirle que haga la cuenta él.
+ * dice cuándo se lo dio y qué duración tiene el formato, y la vigencia se
+ * calcula (`vigenciaAntiparasitario` en `lib/rules/perro.ts`). Pedirle la
+ * fecha de vencimiento sería pedirle que haga la cuenta él.
  */
-export type PeriodicidadAntiparasitario =
-  | "mensual"
-  | "trimestral"
-  | "semestral"
-  | "anual"
-  | "otro";
-
 export interface Antiparasitario {
   ultimaAplicacion: FechaISO;
-  periodicidad: PeriodicidadAntiparasitario;
-  /** Solo cuando la periodicidad es "otro". */
-  cadaCuantosDias?: number;
+  /** 1 o 3 meses, que es lo que traen los formatos que se venden. */
+  mesesDeDuracion: number;
+  marca?: string;
 }
 
 export type Comida = "desayuno" | "almuerzo" | "cena";
@@ -117,8 +110,13 @@ export interface Perro {
   /** El folleto lo exige explícitamente. `undefined` = sin evaluar. */
   sociable?: boolean;
   diaDePrueba: DiaDePrueba;
-  /** Foto del carnet de vacunación, para que el equipo pueda verificarlo. */
-  carnetVacunasUrl?: string;
+  /**
+   * Fotos del carnet de vacunación, una por hoja.
+   *
+   * Son varias porque un carnet real tiene las vacunas repartidas en distintas
+   * páginas y con una sola foto siempre falta la que importa.
+   */
+  carnetVacunasUrls?: string[];
   /** De dónde sale `desparasitadoHasta`. Ver `Antiparasitario`. */
   antiparasitario?: Antiparasitario;
   /** Qué come, cuánto y en qué comidas. Ver `Alimentacion`. */
@@ -503,9 +501,21 @@ export type CampoDeAlta =
   | "alimentacion"
   | "antiparasitario";
 
-export interface ConfiguracionAdmision {
+/** Las listas que el formulario ofrece en un desplegable. */
+export interface Catalogos {
+  razas: string[];
+  marcasComida: string[];
+  marcasAntiparasitario: string[];
+}
+
+export type NombreDeCatalogo = keyof Catalogos;
+
+export interface Configuracion {
   vacunasObligatorias: TipoVacuna[];
+  /** Cuánto dura cada vacuna desde que se pone, en meses. */
+  duracionVacunasMeses: Record<TipoVacuna, number>;
   camposObligatorios: CampoDeAlta[];
+  catalogos: Catalogos;
   actualizadoEn: InstanteISO;
 }
 

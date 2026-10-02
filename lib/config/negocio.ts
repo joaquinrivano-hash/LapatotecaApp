@@ -87,7 +87,7 @@ export const NEGOCIO = {
    * Lo que se le exige a una ficha nueva, por defecto.
    *
    * Es un punto de partida: la configuración de verdad vive en el
-   * repositorio (`ConfiguracionAdmision`) para que Administración la cambie
+   * repositorio (`Configuracion`) para que Administración la cambie
    * sin tocar código. Esto es lo que se usa la primera vez y cuando alguien
    * aprieta "volver a lo de siempre".
    *
@@ -107,11 +107,33 @@ export const NEGOCIO = {
     pesoMaximoKg: 20,
     /** Las hembras no tienen requisito de esterilización. */
     esterilizacionObligatoriaEnMachos: true,
+    /**
+     * Desde qué edad se exige la castración de los machos.
+     *
+     * Antes de eso el veterinario todavía no la indica, así que rechazar a un
+     * cachorro de cuatro meses sería rechazarlo por algo que ni siquiera
+     * puede hacer.
+     */
+    mesesParaExigirCastracion: 7,
     vacunasObligatorias: ["octuple", "antirrabica", "kc"],
+    /**
+     * Cuánto dura cada vacuna desde que se pone.
+     *
+     * Al dueño se le pide **cuándo se la pusieron**, no hasta cuándo vale: la
+     * primera fecha está en el carnet y la segunda es una cuenta. Son valores
+     * editables desde Administración porque los protocolos cambian y la KC
+     * según la marca dura entre 6 y 12 meses.
+     */
+    duracionVacunasMeses: { octuple: 12, antirrabica: 12, kc: 12 },
     /** Desparasitación interna y externa al día. */
     exigeDesparasitacion: true,
     /** El perro tiene que ser 100% sociable. */
     exigeSociabilidad: true,
+  },
+
+  antiparasitario: {
+    /** Lo que dura un antiparasitario según el formato. En meses. */
+    duracionesEnMeses: [1, 3],
   },
 
   /** Un cliente está "activo" si tiene plan vigente con saldo o estadía reciente. */
