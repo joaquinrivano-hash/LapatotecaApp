@@ -475,8 +475,26 @@ function migrarPerros(perros: Perro[]): void {
     const comida = perro.alimentacion as unknown;
     if (typeof comida === "string") {
       perro.alimentacion = comida.trim()
-        ? { comidas: [], notas: comida }
+        ? { raciones: [], notas: comida }
         : undefined;
+    }
+
+    // La comida tenía UNA ración suelta y ahora puede tener varias, para los
+    // perros que desayunan distinto de lo que cenan.
+    const plato = perro.alimentacion as unknown as
+      | {
+          cantidad?: number;
+          comidas?: string[];
+          raciones?: unknown[];
+        }
+      | undefined;
+    if (plato && !plato.raciones) {
+      plato.raciones =
+        plato.cantidad !== undefined || (plato.comidas ?? []).length > 0
+          ? [{ cantidad: plato.cantidad, comidas: plato.comidas ?? [] }]
+          : [];
+      delete plato.cantidad;
+      delete plato.comidas;
     }
 
     // El carnet era una foto y ahora son las hojas que haga falta.

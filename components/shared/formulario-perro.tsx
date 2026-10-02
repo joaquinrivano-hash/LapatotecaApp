@@ -48,6 +48,19 @@ import type {
 const COMIDAS: Comida[] = ["desayuno", "almuerzo", "cena"];
 const UNIDADES: UnidadRacion[] = ["taza", "scoop", "g"];
 
+const ETIQUETA_UNIDAD: Record<UnidadRacion, string> = {
+  taza: "tazas",
+  scoop: "scoops",
+  g: "gramos",
+};
+
+/** "Cuántas tazas" pero "Cuántos scoops": la taza es femenina. */
+const CUANTOS: Record<UnidadRacion, string> = {
+  taza: "Cuántas tazas",
+  scoop: "Cuántos scoops",
+  g: "Cuántos gramos",
+};
+
 export interface EstadoPerro {
   nombre: string;
   raza: string;
@@ -67,9 +80,9 @@ export interface EstadoPerro {
   };
   alimentacion: {
     marca: string;
-    cantidad: string;
-    unidad: UnidadRacion;
-    comidas: Comida[];
+    /** `null` = todavía no eligió la medida, que es el primer paso. */
+    unidad: UnidadRacion | null;
+    raciones: { cantidad: string; comidas: Comida[] }[];
     notas: string;
   };
   medicamentos: Medicamento[];
@@ -95,9 +108,8 @@ export function estadoVacio(): EstadoPerro {
     },
     alimentacion: {
       marca: "",
-      cantidad: "",
-      unidad: "taza",
-      comidas: [],
+      unidad: null,
+      raciones: [{ cantidad: "", comidas: [] }],
       notas: "",
     },
     medicamentos: [],
@@ -133,9 +145,14 @@ export function estadoDesde(perro: Perro): EstadoPerro {
       : vacio.antiparasitario,
     alimentacion: {
       marca: perro.alimentacion?.marca ?? "",
-      cantidad: String(perro.alimentacion?.cantidad ?? ""),
-      unidad: perro.alimentacion?.unidad ?? "taza",
-      comidas: perro.alimentacion?.comidas ?? [],
+      unidad: perro.alimentacion?.unidad ?? null,
+      raciones:
+        perro.alimentacion?.raciones?.length
+          ? perro.alimentacion.raciones.map((racion) => ({
+              cantidad: String(racion.cantidad ?? ""),
+              comidas: racion.comidas,
+            }))
+          : vacio.alimentacion.raciones,
       notas: perro.alimentacion?.notas ?? "",
     },
     medicamentos: perro.medicamentos ?? [],
@@ -179,9 +196,15 @@ export function aBorrador(estado: EstadoPerro): BorradorDePerro {
       : undefined,
     alimentacion: {
       marca: estado.alimentacion.marca.trim() || undefined,
-      cantidad: numero(estado.alimentacion.cantidad),
-      unidad: estado.alimentacion.unidad,
-      comidas: estado.alimentacion.comidas,
+      unidad: estado.alimentacion.unidad ?? undefined,
+      // Una ración en blanco no se guarda: es la fila que la pantalla muestra
+      // siempre, no algo que el dueño haya escrito.
+      raciones: estado.alimentacion.raciones
+        .filter((racion) => racion.cantidad !== "" || racion.comidas.length > 0)
+        .map((racion) => ({
+          cantidad: numero(racion.cantidad),
+          comidas: racion.comidas,
+        })),
       notas: estado.alimentacion.notas.trim() || undefined,
     },
   };
@@ -197,8 +220,7 @@ export function aDatosDePerro(estado: EstadoPerro): DatosDePerro {
   const borrador = aBorrador(estado);
   const comida = borrador.alimentacion;
   const tieneComida =
-    comida &&
-    (comida.marca || comida.cantidad || comida.comidas.length > 0 || comida.notas);
+    comida && (comida.marca || comida.raciones.length > 0 || comida.notas);
 
   return {
     nombre: borrador.nombre ?? "",
@@ -475,69 +497,50 @@ export function FormularioPerro({
         )}
       </Seccion>
 
-      <Seccion titulo="Qué come" ayuda="Lo que el equipo mira a la hora de almuerzo.">
-        <ConOtra
-          id="comida-marca"
-          etiqueta="Marca"
-          opciones={configuracion.catalogos.marcasComida}
-          valor={estado.alimentacion.marca}
-          onCambio={(marca) =>
-            cambiar({ alimentacion: { ...estado.alimentacion, marca } })
+      <Seccion
+        titulo="Qué come"
+        ayuda="Dinos cómo le gusta comer a tu perrito."
+      >
+        {/* El orden es el de las preguntas: con qué se mide, de qué marca y
+            recién entonces cuánto y cuándo. Cada paso aparece cuando el
+            anterior está contestado, así nadie ve diez campos de golpe. */}
+        <Opciones
+          etiqueta="¿Con qué se mide su porción?"
+          opciones={UNIDADES.map((valor) => ({
+            valor,
+            texto: ETIQUETA_UNIDAD[valor],
+          }))}
+          elegida={estado.alimentacion.unidad}
+          onElegir={(unidad) =>
+            cambiar({ alimentacion: { ...estado.alimentacion, unidad } })
           }
-          textoOtra="Otra (escríbela)"
-          placeholder="¿Cuál come?"
         />
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Campo
-            id="comida-cantidad"
-            etiqueta="Cuánto por porción"
-            tipo="number"
-            valor={estado.alimentacion.cantidad}
-            onCambio={(cantidad) =>
-              cambiar({ alimentacion: { ...estado.alimentacion, cantidad } })
-            }
-          />
-          <Opciones
-            etiqueta="Medida"
-            opciones={UNIDADES.map((valor) => ({
-              valor,
-              texto: valor === "g" ? "gramos" : valor,
-            }))}
-            elegida={estado.alimentacion.unidad}
-            onElegir={(unidad) =>
-              cambiar({ alimentacion: { ...estado.alimentacion, unidad } })
-            }
-          />
-        </div>
+        {estado.alimentacion.unidad && (
+          <>
+            <ConOtra
+              id="comida-marca"
+              etiqueta="Marca"
+              opciones={configuracion.catalogos.marcasComida}
+              valor={estado.alimentacion.marca}
+              onCambio={(marca) =>
+                cambiar({ alimentacion: { ...estado.alimentacion, marca } })
+              }
+              textoOtra="Otra (escríbela)"
+              placeholder="¿Cuál come?"
+            />
 
-        <div className="space-y-1.5">
-          <Label>En qué comidas</Label>
-          <div className="flex flex-wrap gap-1.5">
-            {COMIDAS.map((comida) => {
-              const activo = estado.alimentacion.comidas.includes(comida);
-              return (
-                <Chip
-                  key={comida}
-                  activo={activo}
-                  onClick={() =>
-                    cambiar({
-                      alimentacion: {
-                        ...estado.alimentacion,
-                        comidas: activo
-                          ? estado.alimentacion.comidas.filter((c) => c !== comida)
-                          : [...estado.alimentacion.comidas, comida],
-                      },
-                    })
-                  }
-                >
-                  {ETIQUETA_COMIDA[comida]}
-                </Chip>
-              );
-            })}
-          </div>
-          <p className="text-muted-foreground text-xs">Puede ser más de una.</p>
-        </div>
+            {estado.alimentacion.marca && (
+              <Porciones
+                unidad={estado.alimentacion.unidad}
+                raciones={estado.alimentacion.raciones}
+                onCambio={(raciones) =>
+                  cambiar({ alimentacion: { ...estado.alimentacion, raciones } })
+                }
+              />
+            )}
+          </>
+        )}
 
         <Campo
           id="comida-notas"
@@ -662,6 +665,118 @@ export function FormularioPerro({
 
 /* ── Piezas ────────────────────────────────────────────────────────── */
 
+/**
+ * Cuánto come y en qué comidas, con un "+" para los que comen distinto.
+ *
+ * La mayoría de los perros come lo mismo en cada comida, así que arranca con
+ * una sola fila y el "+" aparece al lado de las comidas, que es donde se nota
+ * la diferencia ("media taza en la mañana, una entera en la noche").
+ */
+function Porciones({
+  unidad,
+  raciones,
+  onCambio,
+}: {
+  unidad: UnidadRacion;
+  raciones: { cantidad: string; comidas: Comida[] }[];
+  onCambio: (raciones: { cantidad: string; comidas: Comida[] }[]) => void;
+}) {
+  const cambiarUna = (
+    i: number,
+    cambios: Partial<{ cantidad: string; comidas: Comida[] }>,
+  ) => onCambio(raciones.map((r, j) => (j === i ? { ...r, ...cambios } : r)));
+
+  /** Las comidas que ya tomó otra ración: nadie come dos veces al almuerzo. */
+  const tomadas = (salvo: number) =>
+    new Set(raciones.flatMap((r, j) => (j === salvo ? [] : r.comidas)));
+
+  return (
+    <div className="space-y-2">
+      {raciones.map((racion, i) => {
+        const ocupadas = tomadas(i);
+
+        return (
+          <div
+            key={i}
+            className="bg-background/60 space-y-3 rounded-xl border border-border/70 p-3"
+          >
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <Campo
+                  id={`comida-cantidad-${i}`}
+                  etiqueta={CUANTOS[unidad]}
+                  tipo="number"
+                  valor={racion.cantidad}
+                  onCambio={(cantidad) => cambiarUna(i, { cantidad })}
+                />
+              </div>
+              {raciones.length > 1 && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  aria-label={`Quitar la porción ${i + 1}`}
+                  onClick={() => onCambio(raciones.filter((_, j) => j !== i))}
+                >
+                  <X />
+                </Button>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <Label>En qué comidas</Label>
+                {i === raciones.length - 1 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    aria-label="Agregar otra porción"
+                    onClick={() =>
+                      onCambio([...raciones, { cantidad: "", comidas: [] }])
+                    }
+                  >
+                    <Plus />
+                    Otra porción
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {COMIDAS.map((comida) => {
+                  const activa = racion.comidas.includes(comida);
+                  const enOtra = ocupadas.has(comida);
+
+                  return (
+                    <Chip
+                      key={comida}
+                      activo={activa}
+                      deshabilitado={enOtra}
+                      onClick={() =>
+                        cambiarUna(i, {
+                          comidas: activa
+                            ? racion.comidas.filter((c) => c !== comida)
+                            : [...racion.comidas, comida],
+                        })
+                      }
+                    >
+                      {ETIQUETA_COMIDA[comida]}
+                    </Chip>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      <p className="text-muted-foreground text-xs text-pretty">
+        {raciones.length === 1
+          ? "Si come distinto según la hora, agrega otra porción."
+          : "Cada porción tiene sus propias comidas."}
+      </p>
+    </div>
+  );
+}
+
 function Seccion({
   titulo,
   ayuda,
@@ -686,21 +801,26 @@ function Seccion({
 
 function Chip({
   activo,
+  deshabilitado,
   onClick,
   children,
 }: {
   activo: boolean;
+  deshabilitado?: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
+      disabled={deshabilitado}
       onClick={onClick}
       className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
         activo
           ? "border-primary bg-primary text-primary-foreground"
-          : "border-border bg-background hover:border-primary"
+          : deshabilitado
+            ? "border-border/50 bg-background text-muted-foreground opacity-50"
+            : "border-border bg-background hover:border-primary"
       }`}
     >
       {children}

@@ -61,11 +61,25 @@ export type Comida = "desayuno" | "almuerzo" | "cena";
 export type UnidadRacion = "g" | "taza" | "scoop";
 
 /**
+ * Una ración: cuánto come y en qué comidas de esas.
+ *
+ * Son varias porque hay perros que desayunan media taza y cenan una entera.
+ * La mayoría tiene una sola, y por eso la pantalla empieza mostrando una.
+ */
+export interface Racion {
+  cantidad?: number;
+  comidas: Comida[];
+}
+
+/**
  * Qué come el perro, en campos y no en un párrafo.
  *
  * A la hora de almuerzo nadie lee un texto libre buscando la ración: se mira
  * la marca, cuánto va y en qué comidas. `notas` queda para lo que no cabe en
  * esos campos ("si no come al almuerzo, no insistir").
+ *
+ * La **medida** es una sola para todas las raciones: un perro no come media
+ * taza en la mañana y 200 gramos en la noche, come más o menos de lo mismo.
  *
  * Todo es opcional en el tipo porque los perros cargados antes de que esto
  * existiera no tienen los datos; lo obligatorio al CREAR se valida en
@@ -73,9 +87,8 @@ export type UnidadRacion = "g" | "taza" | "scoop";
  */
 export interface Alimentacion {
   marca?: string;
-  cantidad?: number;
   unidad?: UnidadRacion;
-  comidas: Comida[];
+  raciones: Racion[];
   notas?: string;
 }
 

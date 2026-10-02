@@ -85,12 +85,19 @@ function exige(configuracion: Configuracion, campo: CampoDeAlta): boolean {
 }
 
 function alimentacionCompleta(alimentacion: Alimentacion | undefined): boolean {
-  return Boolean(
-    alimentacion?.marca?.trim() &&
-      alimentacion.cantidad &&
-      alimentacion.cantidad > 0 &&
-      alimentacion.unidad &&
-      alimentacion.comidas.length > 0,
+  if (!alimentacion?.marca?.trim() || !alimentacion.unidad) return false;
+
+  const raciones = alimentacion.raciones ?? [];
+  // Todas las raciones tienen que estar completas, no solo la primera: media
+  // ración anotada es peor que ninguna, porque parece que está.
+  return (
+    raciones.length > 0 &&
+    raciones.every(
+      (racion) =>
+        racion.cantidad !== undefined &&
+        racion.cantidad > 0 &&
+        racion.comidas.length > 0,
+    )
   );
 }
 

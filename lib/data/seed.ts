@@ -244,16 +244,30 @@ export function generarSeed(
       // La mayoría tiene la comida anotada con marca y ración; algunos solo
       // dejaron una nota, como los perros cargados antes de que esto existiera.
       alimentacion: azar.probabilidad(0.75)
-        ? {
-            marca: azar.elegir(MARCAS_COMIDA),
-            ...azar.elegir(RACIONES),
-            comidas: azar.probabilidad(0.6)
-              ? (["almuerzo"] as const).slice()
-              : (["desayuno", "cena"] as const).slice(),
-            notas: azar.probabilidad(0.3)
-              ? azar.elegir(ALIMENTACION_PERRO)
-              : undefined,
-          }
+        ? (() => {
+            const racion = azar.elegir(RACIONES);
+            return {
+              marca: azar.elegir(MARCAS_COMIDA),
+              unidad: racion.unidad,
+              raciones: azar.probabilidad(0.2)
+                ? // Algunos comen distinto en la mañana que en la noche.
+                  [
+                    { cantidad: racion.cantidad, comidas: ["desayuno" as const] },
+                    { cantidad: racion.cantidad * 2, comidas: ["cena" as const] },
+                  ]
+                : [
+                    {
+                      cantidad: racion.cantidad,
+                      comidas: azar.probabilidad(0.6)
+                        ? (["almuerzo"] as const).slice()
+                        : (["desayuno", "cena"] as const).slice(),
+                    },
+                  ],
+              notas: azar.probabilidad(0.3)
+                ? azar.elegir(ALIMENTACION_PERRO)
+                : undefined,
+            };
+          })()
         : undefined,
       alergias: azar.probabilidad(0.15)
         ? { tiene: true, detalle: "Al pollo. Nada de snacks con pollo." }

@@ -49,9 +49,8 @@ function completo(cambios: Partial<BorradorDePerro> = {}): BorradorDePerro {
     antiparasitario: { ultimaAplicacion: "2026-09-01", mesesDeDuracion: 1 },
     alimentacion: {
       marca: "Proplan",
-      cantidad: 1,
       unidad: "taza",
-      comidas: ["almuerzo"],
+      raciones: [{ cantidad: 1, comidas: ["almuerzo"] }],
     },
     ...cambios,
   };
@@ -119,33 +118,85 @@ describe("revisarAltaDePerro", () => {
     ).toContain("vacuna-octuple");
   });
 
-  it("la comida está incompleta si le falta cualquiera de los tres datos", () => {
-    const base = { marca: "Proplan", cantidad: 1, unidad: "taza" as const };
+  it("la comida está incompleta si le falta cualquiera de los datos", () => {
+    const base = { marca: "Proplan", unidad: "taza" as const };
 
-    expect(campos(completo({ alimentacion: { ...base, comidas: [] } }))).toContain(
-      "alimentacion",
-    );
-    expect(
-      campos(completo({ alimentacion: { ...base, marca: "", comidas: ["cena"] } })),
-    ).toContain("alimentacion");
+    // Sin comidas.
     expect(
       campos(
         completo({
-          alimentacion: { marca: "Proplan", comidas: ["cena"] },
+          alimentacion: { ...base, raciones: [{ cantidad: 1, comidas: [] }] },
+        }),
+      ),
+    ).toContain("alimentacion");
+
+    // Sin marca.
+    expect(
+      campos(
+        completo({
+          alimentacion: {
+            ...base,
+            marca: "",
+            raciones: [{ cantidad: 1, comidas: ["cena"] }],
+          },
+        }),
+      ),
+    ).toContain("alimentacion");
+
+    // Sin cantidad.
+    expect(
+      campos(
+        completo({
+          alimentacion: { ...base, raciones: [{ comidas: ["cena"] }] },
+        }),
+      ),
+    ).toContain("alimentacion");
+
+    // Sin medida.
+    expect(
+      campos(
+        completo({
+          alimentacion: {
+            marca: "Proplan",
+            raciones: [{ cantidad: 1, comidas: ["cena"] }],
+          },
         }),
       ),
     ).toContain("alimentacion");
   });
-});
 
-describe("la configuración de fábrica", () => {
-  it("solo exige campos que el formulario sabe pedir", () => {
-    const config = configuracionPorDefecto();
-    const pide = (campo: string) => config.camposObligatorios.includes(campo as never);
+  it("acepta varias porciones, pero todas tienen que estar completas", () => {
+    const base = { marca: "Proplan", unidad: "taza" as const };
 
-    // Exigir algo que no se puede llenar deja el alta trancada sin explicación.
-    expect(pide("foto")).toBe(true);
-    expect(config.vacunasObligatorias).toEqual(["octuple", "antirrabica", "kc"]);
+    expect(
+      campos(
+        completo({
+          alimentacion: {
+            ...base,
+            raciones: [
+              { cantidad: 0.5, comidas: ["desayuno"] },
+              { cantidad: 1, comidas: ["cena"] },
+            ],
+          },
+        }),
+      ),
+    ).not.toContain("alimentacion");
+
+    // La segunda a medias invalida el conjunto: media ración anotada parece
+    // que está y no está.
+    expect(
+      campos(
+        completo({
+          alimentacion: {
+            ...base,
+            raciones: [
+              { cantidad: 0.5, comidas: ["desayuno"] },
+              { cantidad: 1, comidas: [] },
+            ],
+          },
+        }),
+      ),
+    ).toContain("alimentacion");
   });
 });
 

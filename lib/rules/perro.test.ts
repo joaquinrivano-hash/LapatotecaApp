@@ -132,24 +132,38 @@ describe("describirAlimentacion", () => {
     expect(
       describirAlimentacion({
         marca: "Proplan",
-        cantidad: 1,
         unidad: "taza",
-        comidas: ["almuerzo", "cena"],
+        raciones: [{ cantidad: 1, comidas: ["almuerzo", "cena"] }],
       }),
     ).toBe("Proplan · 1 taza en almuerzo y cena");
+  });
+
+  it("junta las porciones distintas en una sola línea", () => {
+    expect(
+      describirAlimentacion({
+        marca: "Royal Canin",
+        unidad: "taza",
+        raciones: [
+          { cantidad: 0.5, comidas: ["desayuno"] },
+          { cantidad: 1, comidas: ["cena"] },
+        ],
+      }),
+    ).toBe("Royal Canin · 0.5 tazas en desayuno, 1 taza en cena");
   });
 
   it("pluraliza la medida, pero no los gramos", () => {
     expect(
       describirAlimentacion({
-        cantidad: 2,
         unidad: "scoop",
-        comidas: ["desayuno"],
+        raciones: [{ cantidad: 2, comidas: ["desayuno"] }],
       }),
     ).toBe("2 scoops en desayuno");
 
     expect(
-      describirAlimentacion({ cantidad: 200, unidad: "g", comidas: [] }),
+      describirAlimentacion({
+        unidad: "g",
+        raciones: [{ cantidad: 200, comidas: [] }],
+      }),
     ).toBe("200 g");
   });
 
@@ -157,7 +171,7 @@ describe("describirAlimentacion", () => {
     expect(
       describirAlimentacion({
         marca: "Royal Canin",
-        comidas: ["almuerzo"],
+        raciones: [{ comidas: ["almuerzo"] }],
         notas: "Si no come, no insistir.",
       }),
     ).toBe("Royal Canin · en almuerzo. Si no come, no insistir.");
@@ -165,12 +179,12 @@ describe("describirAlimentacion", () => {
 
   it("sin nada anotado devuelve null para que la pantalla ponga su vacío", () => {
     expect(describirAlimentacion(undefined)).toBeNull();
-    expect(describirAlimentacion({ comidas: [] })).toBeNull();
+    expect(describirAlimentacion({ raciones: [] })).toBeNull();
   });
 
   it("con solo notas, devuelve las notas", () => {
     expect(
-      describirAlimentacion({ comidas: [], notas: "Trae su bolsita." }),
+      describirAlimentacion({ raciones: [], notas: "Trae su bolsita." }),
     ).toBe("Trae su bolsita.");
   });
 });

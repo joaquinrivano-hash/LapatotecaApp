@@ -8,6 +8,8 @@
 import { rangoFechas } from "@/lib/utils/fecha";
 import type {
   Alimentacion,
+  Racion,
+  UnidadRacion,
   Antiparasitario,
   Comida,
   FechaISO,
@@ -219,7 +221,9 @@ function enumerar(valores: string[]): string {
 }
 
 /**
- * La comida en una línea, para la ficha: "Proplan · 1 taza en almuerzo y cena".
+ * La comida en una línea, para la ficha:
+ * "Proplan · 1 taza en almuerzo" o "Proplan · media taza en desayuno y 1 taza
+ * en cena".
  *
  * Devuelve `null` cuando no hay nada anotado, para que la pantalla muestre su
  * propio texto de vacío en vez de una línea a medias.
@@ -232,28 +236,39 @@ export function describirAlimentacion(
   const partesTexto: string[] = [];
   if (alimentacion.marca) partesTexto.push(alimentacion.marca);
 
-  if (alimentacion.cantidad && alimentacion.unidad) {
-    const unidad =
-      alimentacion.unidad === "g"
-        ? "g"
-        : alimentacion.cantidad === 1
-          ? alimentacion.unidad
-          : `${alimentacion.unidad}s`;
-    const racion = `${alimentacion.cantidad} ${unidad}`;
+  const raciones = (alimentacion.raciones ?? [])
+    .map((racion) => describirRacion(racion, alimentacion.unidad))
+    .filter((texto): texto is string => texto !== null);
 
-    partesTexto.push(
-      alimentacion.comidas.length > 0
-        ? `${racion} en ${enumerar(alimentacion.comidas.map((c) => ETIQUETA_COMIDA[c]))}`
-        : racion,
-    );
-  } else if (alimentacion.comidas.length > 0) {
-    partesTexto.push(
-      `en ${enumerar(alimentacion.comidas.map((c) => ETIQUETA_COMIDA[c]))}`,
-    );
-  }
+  if (raciones.length > 0) partesTexto.push(raciones.join(", "));
 
   const linea = partesTexto.join(" · ");
   if (!linea) return alimentacion.notas ?? null;
 
   return alimentacion.notas ? `${linea}. ${alimentacion.notas}` : linea;
+}
+
+/** "1 taza en almuerzo y cena" · "en desayuno" · "200 g" */
+function describirRacion(
+  racion: Racion,
+  unidad: UnidadRacion | undefined,
+): string | null {
+  const medida =
+    racion.cantidad && unidad
+      ? `${racion.cantidad} ${pluralizarUnidad(racion.cantidad, unidad)}`
+      : null;
+
+  const cuando =
+    racion.comidas.length > 0
+      ? `en ${enumerar(racion.comidas.map((c) => ETIQUETA_COMIDA[c]))}`
+      : null;
+
+  if (medida && cuando) return `${medida} ${cuando}`;
+  return medida ?? cuando;
+}
+
+/** Los gramos no se pluralizan; las tazas y los scoops sí. */
+function pluralizarUnidad(cantidad: number, unidad: UnidadRacion): string {
+  if (unidad === "g") return "g";
+  return cantidad === 1 ? unidad : `${unidad}s`;
 }

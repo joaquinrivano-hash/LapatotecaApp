@@ -44,9 +44,8 @@ const PERRO = {
   carnetVacunasUrls: ["data:image/jpeg;base64,aG9sYQ=="],
   alimentacion: {
     marca: "Proplan",
-    cantidad: 1,
     unidad: "taza" as const,
-    comidas: ["almuerzo" as const],
+    raciones: [{ cantidad: 1, comidas: ["almuerzo" as const] }],
   },
   vacunas: NEGOCIO.admision.vacunasObligatorias.map((tipo) => ({
     tipo,

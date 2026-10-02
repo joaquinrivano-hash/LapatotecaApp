@@ -248,7 +248,7 @@ describe("migración de datos guardados", () => {
     const perro = (await repoViejo.perros.listar())[0];
 
     expect(perro.alimentacion).toEqual({
-      comidas: [],
+      raciones: [],
       notas: "Una taza al almuerzo, la trae el dueño.",
     });
   });
@@ -256,9 +256,8 @@ describe("migración de datos guardados", () => {
   it("no toca la comida que ya está en el formato nuevo", async () => {
     const comida = {
       marca: "Proplan",
-      cantidad: 1,
       unidad: "taza" as const,
-      comidas: ["almuerzo" as const],
+      raciones: [{ cantidad: 1, comidas: ["almuerzo" as const] }],
     };
     const repoViejo = crearRepositorioLocal({
       almacen: almacenViejo({ alimentacion: comida }),
@@ -314,6 +313,26 @@ describe("migración de datos guardados", () => {
     expect(
       (await repoViejo.perros.listar())[0].antiparasitario?.mesesDeDuracion,
     ).toBe(2);
+  });
+
+  it("convierte la ración suelta en una lista de porciones", async () => {
+    const repoViejo = crearRepositorioLocal({
+      almacen: almacenViejo({
+        alimentacion: {
+          marca: "Proplan",
+          cantidad: 1,
+          unidad: "taza",
+          comidas: ["almuerzo"],
+        },
+      }),
+      hoy: HOY,
+    });
+
+    expect((await repoViejo.perros.listar())[0].alimentacion).toEqual({
+      marca: "Proplan",
+      unidad: "taza",
+      raciones: [{ cantidad: 1, comidas: ["almuerzo"] }],
+    });
   });
 
   it("le pone configuración y bandeja de avisos a un set que no los tenía", async () => {

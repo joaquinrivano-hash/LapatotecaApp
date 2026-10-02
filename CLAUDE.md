@@ -336,9 +336,9 @@ sería pedirle al dueño que haga una cuenta que la app puede hacer sola:
 - El **vencimiento de cada vacuna** sale de la fecha en que se puso más la
   duración que Administración tenga configurada. Al dueño se le pide solo la
   primera: está escrita en el carnet, la otra es una cuenta.
-- La **comida** dejó de ser un párrafo: son marca, ración y en qué comidas.
-  `describirAlimentacion` la arma en una línea para la ficha. Lo que estaba
-  escrito antes no se tira, queda como `notas`.
+- La **comida** dejó de ser un párrafo: son marca, medida y una o más
+  raciones. `describirAlimentacion` la arma en una línea para la ficha. Lo que
+  estaba escrito antes no se tira, queda como `notas`.
 
 ### Qué es obligatorio lo decide Administración
 
@@ -359,6 +359,26 @@ explicación.
 Y `esterilizado` no tiene valor por defecto en el formulario: predeterminarlo
 en "sí" hace que un macho sin castrar pase sin que nadie lo note, y en "no" que
 la mitad de las fichas nazcan mal.
+
+### La comida se pregunta en el orden en que se piensa
+
+Primero **con qué se mide** la porción, después **de qué marca** y recién
+entonces **cuánto y cuándo**. Cada paso aparece cuando el anterior está
+contestado: diez campos de golpe hacen que el dueño llene cualquier cosa para
+salir del paso.
+
+Las **raciones son varias** porque hay perros que desayunan media taza y cenan
+una entera. La pantalla parte con una sola —que es el caso normal— y el "+"
+vive al lado de las comidas, que es donde se nota la diferencia. La **medida**
+es una sola para todas: un perro no come media taza en la mañana y 200 gramos
+en la noche.
+
+Una comida ya tomada por otra ración se muestra apagada: nadie come dos veces
+al almuerzo, y dejar elegirlo produce una ficha que se contradice sola.
+
+Y la sección dice "dinos cómo le gusta comer a tu perrito", no "lo que el
+equipo mira a la hora de almuerzo": al dueño le estamos preguntando por su
+perro, no explicándole nuestra operación.
 
 ### Las listas las mantiene Administración
 
