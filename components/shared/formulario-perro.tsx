@@ -13,31 +13,32 @@
  * nada mientras se escribe.
  */
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Camera, FileImage, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { MARCAS_COMIDA } from "@/lib/data/catalogos";
+import { NEGOCIO } from "@/lib/config/negocio";
 import { nombreVacuna } from "@/lib/rules/admision";
 import type { BorradorDePerro, FaltanteDeAlta } from "@/lib/rules/alta-perro";
 import type { DatosDePerro } from "@/lib/servicios/registro";
 import {
+  describirDuracion,
   describirEdad,
   ETIQUETA_COMIDA,
-  ETIQUETA_PERIODICIDAD,
   vigenciaAntiparasitario,
+  vigenciaVacuna,
 } from "@/lib/rules/perro";
 import { comprimirImagen } from "@/lib/utils/imagen";
 import { formatearFechaLarga } from "@/lib/utils/fecha";
 import type {
   Comida,
-  ConfiguracionAdmision,
+  Configuracion,
   Medicamento,
-  PeriodicidadAntiparasitario,
   Perro,
   Sexo,
   TipoVacuna,
@@ -46,13 +47,6 @@ import type {
 
 const COMIDAS: Comida[] = ["desayuno", "almuerzo", "cena"];
 const UNIDADES: UnidadRacion[] = ["taza", "scoop", "g"];
-const PERIODICIDADES: PeriodicidadAntiparasitario[] = [
-  "mensual",
-  "trimestral",
-  "semestral",
-  "anual",
-  "otro",
-];
 
 export interface EstadoPerro {
   nombre: string;
@@ -63,12 +57,13 @@ export interface EstadoPerro {
   esterilizado: boolean | null;
   fechaNacimiento: string;
   fotoUrl?: string;
-  carnetVacunasUrl?: string;
-  vacunas: Partial<Record<TipoVacuna, { aplicacion: string; vencimiento: string }>>;
+  carnetVacunasUrls: string[];
+  /** Cuándo se puso cada vacuna. El vencimiento se calcula. */
+  vacunas: Partial<Record<TipoVacuna, string>>;
   antiparasitario: {
     ultimaAplicacion: string;
-    periodicidad: PeriodicidadAntiparasitario | null;
-    cadaCuantosDias: string;
+    mesesDeDuracion: number;
+    marca: string;
   };
   alimentacion: {
     marca: string;
@@ -91,11 +86,12 @@ export function estadoVacio(): EstadoPerro {
     sexo: null,
     esterilizado: null,
     fechaNacimiento: "",
+    carnetVacunasUrls: [],
     vacunas: {},
     antiparasitario: {
       ultimaAplicacion: "",
-      periodicidad: null,
-      cadaCuantosDias: "",
+      mesesDeDuracion: NEGOCIO.antiparasitario.duracionesEnMeses[0],
+      marca: "",
     },
     alimentacion: {
       marca: "",
@@ -124,18 +120,15 @@ export function estadoDesde(perro: Perro): EstadoPerro {
     esterilizado: perro.esterilizado,
     fechaNacimiento: perro.fechaNacimiento ?? "",
     fotoUrl: perro.fotoUrl,
-    carnetVacunasUrl: perro.carnetVacunasUrl,
+    carnetVacunasUrls: perro.carnetVacunasUrls ?? [],
     vacunas: Object.fromEntries(
-      perro.vacunas.map((v) => [
-        v.tipo,
-        { aplicacion: v.fechaAplicacion, vencimiento: v.fechaVencimiento },
-      ]),
+      perro.vacunas.map((v) => [v.tipo, v.fechaAplicacion]),
     ),
     antiparasitario: perro.antiparasitario
       ? {
           ultimaAplicacion: perro.antiparasitario.ultimaAplicacion,
-          periodicidad: perro.antiparasitario.periodicidad,
-          cadaCuantosDias: String(perro.antiparasitario.cadaCuantosDias ?? ""),
+          mesesDeDuracion: perro.antiparasitario.mesesDeDuracion,
+          marca: perro.antiparasitario.marca ?? "",
         }
       : vacio.antiparasitario,
     alimentacion: {
@@ -160,7 +153,7 @@ function numero(texto: string): number | undefined {
   return Number.isFinite(valor) && valor > 0 ? valor : undefined;
 }
 
-/** Lo que revisa `revisarAltaDePerro` y lo que se guarda. */
+/** Lo que revisan las reglas del alta. */
 export function aBorrador(estado: EstadoPerro): BorradorDePerro {
   return {
     nombre: estado.nombre,
@@ -170,23 +163,20 @@ export function aBorrador(estado: EstadoPerro): BorradorDePerro {
     esterilizado: estado.esterilizado ?? undefined,
     fechaNacimiento: estado.fechaNacimiento || undefined,
     fotoUrl: estado.fotoUrl,
-    carnetVacunasUrl: estado.carnetVacunasUrl,
+    carnetVacunasUrls: estado.carnetVacunasUrls,
     vacunas: Object.entries(estado.vacunas)
-      .filter(([, fechas]) => fechas?.vencimiento)
-      .map(([tipo, fechas]) => ({
+      .filter(([, fecha]) => fecha)
+      .map(([tipo, fecha]) => ({
         tipo: tipo as TipoVacuna,
-        fechaAplicacion: fechas!.aplicacion || undefined,
-        fechaVencimiento: fechas!.vencimiento,
+        fechaAplicacion: fecha,
       })),
-    antiparasitario:
-      estado.antiparasitario.ultimaAplicacion &&
-      estado.antiparasitario.periodicidad
-        ? {
-            ultimaAplicacion: estado.antiparasitario.ultimaAplicacion,
-            periodicidad: estado.antiparasitario.periodicidad,
-            cadaCuantosDias: numero(estado.antiparasitario.cadaCuantosDias),
-          }
-        : undefined,
+    antiparasitario: estado.antiparasitario.ultimaAplicacion
+      ? {
+          ultimaAplicacion: estado.antiparasitario.ultimaAplicacion,
+          mesesDeDuracion: estado.antiparasitario.mesesDeDuracion,
+          marca: estado.antiparasitario.marca.trim() || undefined,
+        }
+      : undefined,
     alimentacion: {
       marca: estado.alimentacion.marca.trim() || undefined,
       cantidad: numero(estado.alimentacion.cantidad),
@@ -218,11 +208,10 @@ export function aDatosDePerro(estado: EstadoPerro): DatosDePerro {
     esterilizado: borrador.esterilizado,
     fechaNacimiento: borrador.fechaNacimiento,
     fotoUrl: borrador.fotoUrl,
-    carnetVacunasUrl: borrador.carnetVacunasUrl,
+    carnetVacunasUrls: borrador.carnetVacunasUrls,
     vacunas: (borrador.vacunas ?? []).map((v) => ({
       tipo: v.tipo,
-      fechaAplicacion: v.fechaAplicacion,
-      fechaVencimiento: v.fechaVencimiento!,
+      fechaAplicacion: v.fechaAplicacion!,
     })),
     antiparasitario: borrador.antiparasitario,
     alimentacion: tieneComida ? comida : undefined,
@@ -244,11 +233,13 @@ export function aDatosDePerro(estado: EstadoPerro): DatosDePerro {
 /**
  * Los campos del perro listos para `repo.perros.actualizar`.
  *
- * Es lo mismo que se manda al crear, pero con la vigencia del antiparasitario
- * ya calculada: acá no pasa por `crearCuenta`, que es quien la deriva en el
- * alta.
+ * El vencimiento de cada vacuna se calcula acá con la configuración, porque
+ * este camino no pasa por `crearCuenta`, que es quien lo deriva en el alta.
  */
-export function cambiosDePerro(estado: EstadoPerro): Partial<Perro> {
+export function cambiosDePerro(
+  estado: EstadoPerro,
+  configuracion: Configuracion,
+): Partial<Perro> {
   const datos = aDatosDePerro(estado);
 
   return {
@@ -259,11 +250,14 @@ export function cambiosDePerro(estado: EstadoPerro): Partial<Perro> {
     esterilizado: datos.esterilizado === true,
     fechaNacimiento: datos.fechaNacimiento,
     fotoUrl: datos.fotoUrl,
-    carnetVacunasUrl: datos.carnetVacunasUrl,
+    carnetVacunasUrls: datos.carnetVacunasUrls,
     vacunas: (datos.vacunas ?? []).map((v) => ({
       tipo: v.tipo,
-      fechaAplicacion: v.fechaAplicacion ?? v.fechaVencimiento,
-      fechaVencimiento: v.fechaVencimiento,
+      fechaAplicacion: v.fechaAplicacion,
+      fechaVencimiento: vigenciaVacuna(
+        v.fechaAplicacion,
+        configuracion.duracionVacunasMeses[v.tipo],
+      ),
     })),
     antiparasitario: datos.antiparasitario,
     desparasitadoHasta: datos.antiparasitario
@@ -288,8 +282,8 @@ export function FormularioPerro({
 }: {
   estado: EstadoPerro;
   onCambio: (estado: EstadoPerro) => void;
-  configuracion: ConfiguracionAdmision;
-  /** Lo que falta, para marcarlo. Se muestra recién cuando el usuario intenta guardar. */
+  configuracion: Configuracion;
+  /** Lo que falta, para marcarlo. Se muestra recién cuando intenta guardar. */
   faltantes?: FaltanteDeAlta[];
   hoy: string;
 }) {
@@ -306,39 +300,22 @@ export function FormularioPerro({
     ? describirEdad(estado.fechaNacimiento, hoy)
     : null;
 
-  const vigencia =
-    estado.antiparasitario.ultimaAplicacion && estado.antiparasitario.periodicidad
-      ? vigenciaAntiparasitario({
-          ultimaAplicacion: estado.antiparasitario.ultimaAplicacion,
-          periodicidad: estado.antiparasitario.periodicidad,
-          cadaCuantosDias: numero(estado.antiparasitario.cadaCuantosDias),
-        })
-      : null;
+  const vigenciaBicho = estado.antiparasitario.ultimaAplicacion
+    ? vigenciaAntiparasitario({
+        ultimaAplicacion: estado.antiparasitario.ultimaAplicacion,
+        mesesDeDuracion: estado.antiparasitario.mesesDeDuracion,
+      })
+    : null;
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <SelectorFoto
-          valor={estado.fotoUrl}
-          onCambio={(fotoUrl) => cambiar({ fotoUrl })}
-          etiqueta={exige("foto") ? "Su foto" : "Su foto (opcional)"}
-          ayuda="Así el equipo lo reconoce apenas llega."
-          icono={Camera}
-          error={error("fotoUrl")}
-        />
-        <SelectorFoto
-          valor={estado.carnetVacunasUrl}
-          onCambio={(carnetVacunasUrl) => cambiar({ carnetVacunasUrl })}
-          etiqueta={
-            exige("carnetVacunas")
-              ? "Foto del carnet"
-              : "Foto del carnet (opcional)"
-          }
-          ayuda="Sácale una foto a la hoja de las vacunas."
-          icono={FileImage}
-          error={error("carnetVacunasUrl")}
-        />
-      </div>
+      <SelectorDeFoto
+        valor={estado.fotoUrl}
+        onCambio={(fotoUrl) => cambiar({ fotoUrl })}
+        etiqueta={exige("foto") ? "Su foto" : "Su foto (opcional)"}
+        ayuda="Así el equipo lo reconoce apenas llega."
+        error={error("fotoUrl")}
+      />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Campo
@@ -348,12 +325,14 @@ export function FormularioPerro({
           onCambio={(nombre) => cambiar({ nombre })}
           error={error("nombre")}
         />
-        <Campo
+        <ConOtra
           id="raza"
           etiqueta="Raza"
+          opciones={configuracion.catalogos.razas}
           valor={estado.raza}
           onCambio={(raza) => cambiar({ raza })}
-          ayuda="Si es quiltro, escribe quiltro."
+          textoOtra="Otra (escríbela)"
+          placeholder="¿Cuál es?"
           error={error("raza")}
         />
       </div>
@@ -370,9 +349,7 @@ export function FormularioPerro({
         <Campo
           id="nacimiento"
           etiqueta={
-            exige("fechaNacimiento")
-              ? "Cuándo nació"
-              : "Cuándo nació (opcional)"
+            exige("fechaNacimiento") ? "Cuándo nació" : "Cuándo nació (opcional)"
           }
           tipo="date"
           valor={estado.fechaNacimiento}
@@ -401,59 +378,69 @@ export function FormularioPerro({
           ]}
           elegida={estado.esterilizado}
           onElegir={(esterilizado) => cambiar({ esterilizado })}
-          ayuda="Obligatorio en los machos."
+          ayuda={`Obligatorio en los machos desde los ${NEGOCIO.admision.mesesParaExigirCastracion} meses.`}
           error={error("esterilizado")}
         />
       </div>
 
-      <Seccion titulo="Vacunas" ayuda="Míralas en el carnet.">
-        <div className="space-y-3">
-          {configuracion.vacunasObligatorias.map((tipo) => {
-            const fechas = estado.vacunas[tipo] ?? {
-              aplicacion: "",
-              vencimiento: "",
-            };
-            const ponerFecha = (cambios: Partial<typeof fechas>) =>
-              cambiar({
-                vacunas: { ...estado.vacunas, [tipo]: { ...fechas, ...cambios } },
-              });
+      <Seccion
+        titulo="Vacunas"
+        ayuda="Anota cuándo se la pusieron, tal como aparece en el carnet. Nosotros calculamos hasta cuándo le vale."
+      >
+        <SelectorDeHojas
+          valores={estado.carnetVacunasUrls}
+          onCambio={(carnetVacunasUrls) => cambiar({ carnetVacunasUrls })}
+          obligatorio={exige("carnetVacunas")}
+          error={error("carnetVacunasUrls")}
+        />
 
-            return (
-              <div key={tipo} className="space-y-1.5">
-                <Label className="capitalize">{nombreVacuna(tipo)}</Label>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <Campo
-                    id={`vacuna-${tipo}-aplicacion`}
-                    etiqueta="Se la pusieron el"
-                    pequena
-                    tipo="date"
-                    valor={fechas.aplicacion}
-                    onCambio={(aplicacion) => ponerFecha({ aplicacion })}
-                  />
-                  <Campo
-                    id={`vacuna-${tipo}-vencimiento`}
-                    etiqueta="Vale hasta"
-                    pequena
-                    tipo="date"
-                    valor={fechas.vencimiento}
-                    onCambio={(vencimiento) => ponerFecha({ vencimiento })}
-                  />
-                </div>
-                {error(`vacuna-${tipo}`) && (
-                  <p className="text-destructive text-xs">
-                    {error(`vacuna-${tipo}`)}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        {configuracion.vacunasObligatorias.map((tipo) => {
+          const fecha = estado.vacunas[tipo] ?? "";
+          const vence = fecha
+            ? vigenciaVacuna(fecha, configuracion.duracionVacunasMeses[tipo])
+            : null;
+          const vencida = vence !== null && vence < hoy;
+
+          return (
+            <div key={tipo} className="space-y-1.5">
+              <Campo
+                id={`vacuna-${tipo}`}
+                etiqueta={`${nombreVacuna(tipo)}: cuándo se la pusieron`}
+                tipo="date"
+                valor={fecha}
+                onCambio={(valor) =>
+                  cambiar({ vacunas: { ...estado.vacunas, [tipo]: valor } })
+                }
+                error={error(`vacuna-${tipo}`)}
+              />
+              {vence && !error(`vacuna-${tipo}`) && (
+                <p
+                  className={`text-xs ${vencida ? "text-destructive font-semibold" : "text-muted-foreground"}`}
+                >
+                  {vencida ? "Vencida el " : "Le vale hasta el "}
+                  {formatearFechaLarga(vence)}.
+                </p>
+              )}
+            </div>
+          );
+        })}
       </Seccion>
 
       <Seccion
         titulo="Antiparasitario"
         ayuda="Interna y externa. Con esto calculamos hasta cuándo está cubierto."
       >
+        <ConOtra
+          id="antiparasitario-marca"
+          etiqueta="Marca"
+          opciones={configuracion.catalogos.marcasAntiparasitario}
+          valor={estado.antiparasitario.marca}
+          onCambio={(marca) =>
+            cambiar({ antiparasitario: { ...estado.antiparasitario, marca } })
+          }
+          textoOtra="Otra (escríbela)"
+          placeholder="¿Cuál le das?"
+        />
         <Campo
           id="antiparasitario-fecha"
           etiqueta="Última vez que se lo diste"
@@ -466,32 +453,21 @@ export function FormularioPerro({
           }
         />
         <Opciones
-          etiqueta="Cada cuánto"
-          opciones={PERIODICIDADES.map((valor) => ({
-            valor,
-            texto: ETIQUETA_PERIODICIDAD[valor],
+          etiqueta="Cuánto le dura"
+          opciones={NEGOCIO.antiparasitario.duracionesEnMeses.map((meses) => ({
+            valor: meses,
+            texto: describirDuracion(meses),
           }))}
-          elegida={estado.antiparasitario.periodicidad}
-          onElegir={(periodicidad) =>
-            cambiar({ antiparasitario: { ...estado.antiparasitario, periodicidad } })
+          elegida={estado.antiparasitario.mesesDeDuracion}
+          onElegir={(mesesDeDuracion) =>
+            cambiar({
+              antiparasitario: { ...estado.antiparasitario, mesesDeDuracion },
+            })
           }
         />
-        {estado.antiparasitario.periodicidad === "otro" && (
-          <Campo
-            id="antiparasitario-dias"
-            etiqueta="Cada cuántos días"
-            tipo="number"
-            valor={estado.antiparasitario.cadaCuantosDias}
-            onCambio={(cadaCuantosDias) =>
-              cambiar({
-                antiparasitario: { ...estado.antiparasitario, cadaCuantosDias },
-              })
-            }
-          />
-        )}
-        {vigencia && (
+        {vigenciaBicho && (
           <p className="text-muted-foreground text-xs">
-            Le dura hasta el {formatearFechaLarga(vigencia)}.
+            Le dura hasta el {formatearFechaLarga(vigenciaBicho)}.
           </p>
         )}
         {error("antiparasitario") && (
@@ -500,27 +476,17 @@ export function FormularioPerro({
       </Seccion>
 
       <Seccion titulo="Qué come" ayuda="Lo que el equipo mira a la hora de almuerzo.">
-        <Campo
+        <ConOtra
           id="comida-marca"
           etiqueta="Marca"
+          opciones={configuracion.catalogos.marcasComida}
           valor={estado.alimentacion.marca}
           onCambio={(marca) =>
             cambiar({ alimentacion: { ...estado.alimentacion, marca } })
           }
+          textoOtra="Otra (escríbela)"
+          placeholder="¿Cuál come?"
         />
-        <div className="flex flex-wrap gap-1.5">
-          {MARCAS_COMIDA.map((marca) => (
-            <Chip
-              key={marca}
-              activo={estado.alimentacion.marca === marca}
-              onClick={() =>
-                cambiar({ alimentacion: { ...estado.alimentacion, marca } })
-              }
-            >
-              {marca}
-            </Chip>
-          ))}
-        </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Campo
@@ -570,9 +536,7 @@ export function FormularioPerro({
               );
             })}
           </div>
-          <p className="text-muted-foreground text-xs">
-            Puede ser más de una.
-          </p>
+          <p className="text-muted-foreground text-xs">Puede ser más de una.</p>
         </div>
 
         <Campo
@@ -590,15 +554,9 @@ export function FormularioPerro({
         )}
       </Seccion>
 
-      <Seccion
-        titulo="Medicamentos"
-        ayuda="Los que toma todos los días, con su dosis."
-      >
+      <Seccion titulo="Medicamentos" ayuda="Los que toma todos los días, con su dosis.">
         {estado.medicamentos.map((medicamento, i) => (
-          <div
-            key={i}
-            className="space-y-2 rounded-xl border border-border/70 p-3"
-          >
+          <div key={i} className="space-y-2 rounded-xl border border-border/70 p-3">
             <div className="flex items-center justify-between gap-2">
               <Label className="text-xs">Medicamento {i + 1}</Label>
               <Button
@@ -662,9 +620,7 @@ export function FormularioPerro({
             { valor: false, texto: "No" },
           ]}
           elegida={estado.alergias.tiene}
-          onElegir={(tiene) =>
-            cambiar({ alergias: { ...estado.alergias, tiene } })
-          }
+          onElegir={(tiene) => cambiar({ alergias: { ...estado.alergias, tiene } })}
         />
         {estado.alergias.tiene && (
           <Campo
@@ -716,7 +672,7 @@ function Seccion({
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-2 rounded-2xl bg-secondary/40 p-3">
+    <section className="space-y-3 rounded-2xl bg-secondary/40 p-3">
       <div>
         <h3 className="text-sm font-semibold">{titulo}</h3>
         {ayuda && (
@@ -790,33 +746,97 @@ function Opciones<T>({
   );
 }
 
-function SelectorFoto({
+/**
+ * Un desplegable con una salida de emergencia.
+ *
+ * Las listas las mantiene Administración, pero ninguna lista está completa:
+ * siempre llega la raza o la marca que no está. "Otra" abre un campo de texto
+ * en vez de dejar al dueño trancado.
+ */
+function ConOtra({
+  id,
+  etiqueta,
+  opciones,
+  valor,
+  onCambio,
+  textoOtra,
+  placeholder,
+  error,
+}: {
+  id: string;
+  etiqueta: string;
+  opciones: string[];
+  valor: string;
+  onCambio: (valor: string) => void;
+  textoOtra: string;
+  placeholder: string;
+  error?: string;
+}) {
+  // Un valor que no está en la lista solo puede venir de "Otra".
+  const [abiertoAMano, setAbiertoAMano] = useState(false);
+  const esOtra = abiertoAMano || (valor !== "" && !opciones.includes(valor));
+
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{etiqueta}</Label>
+      <Select
+        id={id}
+        value={esOtra ? "__otra__" : valor}
+        aria-invalid={error ? true : undefined}
+        onChange={(e) => {
+          if (e.target.value === "__otra__") {
+            setAbiertoAMano(true);
+            onCambio("");
+          } else {
+            setAbiertoAMano(false);
+            onCambio(e.target.value);
+          }
+        }}
+      >
+        <option value="">Elige una…</option>
+        {opciones.map((opcion) => (
+          <option key={opcion} value={opcion}>
+            {opcion}
+          </option>
+        ))}
+        <option value="__otra__">{textoOtra}</option>
+      </Select>
+      {esOtra && (
+        <Input
+          aria-label={`${etiqueta}: escríbela`}
+          value={valor}
+          placeholder={placeholder}
+          onChange={(e) => onCambio(e.target.value)}
+        />
+      )}
+      {error && <p className="text-destructive text-xs">{error}</p>}
+    </div>
+  );
+}
+
+async function leerFoto(archivo: File): Promise<string | null> {
+  try {
+    return await comprimirImagen(archivo);
+  } catch {
+    toast.error("No pudimos procesar esa foto.");
+    return null;
+  }
+}
+
+function SelectorDeFoto({
   valor,
   onCambio,
   etiqueta,
   ayuda,
-  icono: Icono,
   error,
 }: {
   valor?: string;
   onCambio: (valor: string | undefined) => void;
   etiqueta: string;
   ayuda: string;
-  icono: React.ComponentType<{ className?: string }>;
   error?: string;
 }) {
   const archivo = useRef<HTMLInputElement>(null);
-
-  async function elegir(evento: React.ChangeEvent<HTMLInputElement>) {
-    const entrante = evento.target.files?.[0];
-    evento.target.value = "";
-    if (!entrante) return;
-    try {
-      onCambio(await comprimirImagen(entrante));
-    } catch {
-      toast.error("No pudimos procesar esa foto.");
-    }
-  }
 
   return (
     <div className="space-y-1.5">
@@ -828,7 +848,7 @@ function SelectorFoto({
             width={640}
             height={480}
             unoptimized
-            className="h-32 w-full rounded-2xl object-cover"
+            className="h-40 w-full rounded-2xl object-cover"
           />
           <Button
             size="icon"
@@ -848,7 +868,7 @@ function SelectorFoto({
             error ? "border-destructive" : "border-border"
           }`}
         >
-          <Icono className="size-6" />
+          <Camera className="size-6" />
           <span className="text-sm font-semibold">{etiqueta}</span>
           <span className="text-xs text-pretty">{ayuda}</span>
         </button>
@@ -858,7 +878,99 @@ function SelectorFoto({
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={elegir}
+        onChange={async (e) => {
+          const entrante = e.target.files?.[0];
+          e.target.value = "";
+          if (!entrante) return;
+          const foto = await leerFoto(entrante);
+          if (foto) onCambio(foto);
+        }}
+      />
+      {error && <p className="text-destructive text-xs">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * Las hojas del carnet.
+ *
+ * Son varias porque un carnet real tiene las vacunas repartidas en distintas
+ * páginas: con una sola foto siempre falta justo la que hay que mirar.
+ */
+function SelectorDeHojas({
+  valores,
+  onCambio,
+  obligatorio,
+  error,
+}: {
+  valores: string[];
+  onCambio: (valores: string[]) => void;
+  obligatorio: boolean;
+  error?: string;
+}) {
+  const archivo = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="space-y-2">
+      <Label>
+        Foto del carnet de vacunación{obligatorio ? "" : " (opcional)"}
+      </Label>
+      <p className="text-muted-foreground text-xs text-pretty">
+        Sube <strong>todas las hojas</strong> donde haya vacunas anotadas.
+        Puedes elegir varias de una vez.
+      </p>
+
+      {valores.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {valores.map((hoja, i) => (
+            <div key={i} className="relative">
+              <Image
+                src={hoja}
+                alt={`Hoja ${i + 1} del carnet`}
+                width={320}
+                height={420}
+                unoptimized
+                className="h-28 w-full rounded-xl object-cover"
+              />
+              <Button
+                size="icon"
+                variant="secondary"
+                aria-label={`Quitar la hoja ${i + 1}`}
+                className="absolute top-1 right-1 size-7"
+                onClick={() => onCambio(valores.filter((_, j) => j !== i))}
+              >
+                <X />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={() => archivo.current?.click()}
+      >
+        <FileImage />
+        {valores.length === 0 ? "Subir las hojas del carnet" : "Agregar otra hoja"}
+      </Button>
+
+      <input
+        ref={archivo}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={async (e) => {
+          const entrantes = Array.from(e.target.files ?? []);
+          e.target.value = "";
+          const hojas: string[] = [];
+          for (const entrante of entrantes) {
+            const hoja = await leerFoto(entrante);
+            if (hoja) hojas.push(hoja);
+          }
+          if (hojas.length > 0) onCambio([...valores, ...hojas]);
+        }}
       />
       {error && <p className="text-destructive text-xs">{error}</p>}
     </div>

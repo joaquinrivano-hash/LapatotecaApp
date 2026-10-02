@@ -205,7 +205,8 @@ app/
   api/integraciones/whatsapp/   enviar · webhook
 components/
   ui/          shadcn escrito a mano
-  shared/      PrecioCLP, PerroAvatar, EstadoBadge, LogoPatoteca, PWA…
+  shared/      PrecioCLP, PerroAvatar, EstadoBadge, LogoPatoteca, PWA
+               FormularioPerro (el alta, igual en las tres caras)…
   staff/ admin/
 lib/
   config/      precios.ts · negocio.ts   ← única fuente de constantes
@@ -328,10 +329,13 @@ Tres datos de la ficha se **derivan** en vez de preguntarse, porque pedirlos
 sería pedirle al dueño que haga una cuenta que la app puede hacer sola:
 
 - La **edad** sale de `fechaNacimiento`, y el cumpleaños también.
-- `desparasitadoHasta` sale del **antiparasitario**: el dueño dice cuándo se lo
-  dio y cada cuánto se repite. La vigencia la calcula
+- `desparasitadoHasta` sale del **antiparasitario**: el dueño dice la marca,
+  cuándo se lo dio y si el formato dura 1 o 3 meses. La vigencia la calcula
   `vigenciaAntiparasitario`. `desparasitadoHasta` se conserva porque es lo que
-  mira la admisión, que no tiene por qué saber de periodicidades.
+  mira la admisión, que no tiene por qué saber de duraciones.
+- El **vencimiento de cada vacuna** sale de la fecha en que se puso más la
+  duración que Administración tenga configurada. Al dueño se le pide solo la
+  primera: está escrita en el carnet, la otra es una cuenta.
 - La **comida** dejó de ser un párrafo: son marca, ración y en qué comidas.
   `describirAlimentacion` la arma en una línea para la ficha. Lo que estaba
   escrito antes no se tira, queda como `notas`.
@@ -355,6 +359,37 @@ explicación.
 Y `esterilizado` no tiene valor por defecto en el formulario: predeterminarlo
 en "sí" hace que un macho sin castrar pase sin que nadie lo note, y en "no" que
 la mitad de las fichas nazcan mal.
+
+### Las listas las mantiene Administración
+
+Razas, marcas de comida y marcas de antiparasitario viven en
+`Configuracion.catalogos` y se editan desde `/admin/configuracion`. Una raza
+nueva no puede depender de que alguien toque el código.
+
+Toda lista lleva **"Otra (escríbela)"**, que no es parte del catálogo sino una
+opción del formulario: ninguna lista está completa y el dueño nunca puede
+quedar trancado porque su raza no esté. Por eso tampoco se puede borrar.
+
+Los desplegables son `<select>` **nativos**. En el celular abren la rueda del
+sistema, que se usa con una mano y trae la accesibilidad gratis; veinte razas
+en chips no caben y una lista dibujada a mano se pelea con el teclado de iOS.
+
+### Castrado: desde los 7 meses
+
+Antes de esa edad el veterinario todavía no la indica, así que rechazar a un
+cachorro de cuatro meses sería rechazarlo por algo que ni siquiera puede
+hacer. `leCorrespondeEstarCastrado` lo decide, y sin fecha de nacimiento asume
+que ya tiene la edad: es lo prudente, y el dueño siempre puede agregarla.
+
+### Lo que bloquea el alta y lo que solo avisa
+
+`reparosDeAlta` separa las dos cosas, igual que `evaluarAdmision`:
+
+- **Bloquea** lo que no tiene vuelta: el peso y la castración.
+- **Avisa** una vacuna vencida. Se renueva antes de venir, así que rechazar
+  ahí sería perder un cliente por algo que se arregla en una visita al
+  veterinario. El mensaje dice claro que sin ponerla al día no lo podemos
+  recibir el día de prueba.
 
 ### Los datos guardados se migran, no se botan
 

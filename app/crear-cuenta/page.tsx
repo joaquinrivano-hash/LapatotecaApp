@@ -19,14 +19,14 @@ import {
 } from "@/components/shared/formulario-perro";
 import { PRECIOS } from "@/lib/config/precios";
 import { NEGOCIO } from "@/lib/config/negocio";
-import { revisarAltaDePerro, type FaltanteDeAlta } from "@/lib/rules/alta-perro";
+import {
+  reparosDeAlta,
+  revisarAltaDePerro,
+  type FaltanteDeAlta,
+} from "@/lib/rules/alta-perro";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { hoyDelStaff } from "@/lib/servicios/asistencia";
-import {
-  crearCuenta,
-  RegistroRechazado,
-  reparosParaEntrar,
-} from "@/lib/servicios/registro";
+import { crearCuenta, RegistroRechazado } from "@/lib/servicios/registro";
 import { useSesion } from "@/lib/store/sesion";
 import { formatearCLP } from "@/lib/utils/moneda";
 import { esTelefonoValido } from "@/lib/utils/telefono";
@@ -52,15 +52,10 @@ export default function CrearCuenta() {
   const [faltantes, setFaltantes] = useState<FaltanteDeAlta[]>([]);
 
   const borrador = aBorrador(perro);
-  const reparos = borrador.pesoKg
-    ? reparosParaEntrar({
-        nombre: perro.nombre,
-        raza: perro.raza,
-        pesoKg: borrador.pesoKg,
-        sexo: borrador.sexo ?? "hembra",
-        esterilizado: borrador.esterilizado,
-      })
+  const reparos = configuracion.datos
+    ? reparosDeAlta(borrador, configuracion.datos, hoy)
     : [];
+  const bloqueos = reparos.filter((r) => r.bloquea);
 
   const datosDelDueno =
     cuenta.nombre.trim() !== "" &&
@@ -198,25 +193,32 @@ export default function CrearCuenta() {
           </CardContent>
         </Card>
 
-        {reparos.length > 0 && (
-          <div className="bg-warning/12 text-warning space-y-1 rounded-xl p-3 text-sm">
-            {reparos.map((reparo) => (
-              <p key={reparo} className="flex items-start gap-2">
-                <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-                {reparo}
-              </p>
-            ))}
-            <p className="text-muted-foreground text-xs">
-              Escríbenos igual: a veces hay vuelta, pero no queremos prometerte
-              un cupo que no podemos cumplir.
+        {reparos.map((reparo) => (
+          <div
+            key={reparo.mensaje}
+            className={`space-y-1 rounded-xl p-3 text-sm ${
+              reparo.bloquea
+                ? "bg-destructive/10 text-destructive"
+                : "bg-warning/12 text-warning"
+            }`}
+          >
+            <p className="flex items-start gap-2 text-pretty">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+              {reparo.mensaje}
             </p>
+            {reparo.bloquea && (
+              <p className="text-muted-foreground text-xs text-pretty">
+                Escríbenos igual: a veces hay vuelta, pero no queremos
+                prometerte un cupo que no podemos cumplir.
+              </p>
+            )}
           </div>
-        )}
+        ))}
 
         <Button
           size="xl"
           className="w-full"
-          disabled={!datosDelDueno || reparos.length > 0 || ocupado}
+          disabled={!datosDelDueno || bloqueos.length > 0 || ocupado}
           onClick={crear}
         >
           <PawPrint />
