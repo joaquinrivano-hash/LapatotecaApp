@@ -58,7 +58,13 @@ export interface Antiparasitario {
 }
 
 export type Comida = "desayuno" | "almuerzo" | "cena";
-export type UnidadRacion = "g" | "taza" | "scoop";
+/**
+ * Con qué se mide la porción.
+ *
+ * "medida" es el medidor que viene en el saco, que es como lo dice la gente;
+ * antes se llamaba "scoop" y nadie en Chile pide un scoop de comida.
+ */
+export type UnidadRacion = "medida" | "g" | "taza";
 
 /**
  * Una ración: cuánto come y en qué comidas de esas.

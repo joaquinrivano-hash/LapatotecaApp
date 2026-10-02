@@ -488,6 +488,12 @@ function migrarPerros(perros: Perro[]): void {
           raciones?: unknown[];
         }
       | undefined;
+    // "scoop" se llamaba así cuando el campo era nuestro; ahora la opción se
+    // llama "medida", que es como lo dice la gente.
+    if (plato && (plato as { unidad?: string }).unidad === "scoop") {
+      (plato as { unidad?: string }).unidad = "medida";
+    }
+
     if (plato && !plato.raciones) {
       plato.raciones =
         plato.cantidad !== undefined || (plato.comidas ?? []).length > 0

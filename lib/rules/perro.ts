@@ -207,18 +207,81 @@ export const ETIQUETA_COMIDA: Record<Comida, string> = {
   cena: "cena",
 };
 
-export const ETIQUETA_UNIDAD = {
-  g: "g",
-  taza: "taza",
-  scoop: "scoop",
-} as const;
-
 /** "Pelusa" · "Pelusa y Rocco" · "Pelusa, Rocco y Luna" */
 function enumerar(valores: string[]): string {
   if (valores.length === 0) return "";
   if (valores.length === 1) return valores[0];
   return `${valores.slice(0, -1).join(", ")} y ${valores.at(-1)}`;
 }
+
+/* ── Cantidades: números y fracciones ──────────────────────────────── */
+
+const FRACCIONES: Record<string, number> = {
+  "½": 0.5,
+  "⅓": 1 / 3,
+  "⅔": 2 / 3,
+  "¼": 0.25,
+  "¾": 0.75,
+};
+
+/**
+ * Lo que escribió el dueño, como número.
+ *
+ * Media taza se escribe de muchas maneras —"1/2", "½", "0,5"— y todas son
+ * correctas para quien las escribe. Rechazar una por no ser la que esperaba
+ * el campo es culpar a la persona de una limitación nuestra.
+ */
+export function parsearCantidad(texto: string): number | undefined {
+  const limpio = texto.trim();
+  if (!limpio) return undefined;
+
+  // "1½" o "½"
+  const conGlifo = /^(\d+)?\s*([½⅓⅔¼¾])$/.exec(limpio);
+  if (conGlifo) {
+    return Number(conGlifo[1] ?? 0) + FRACCIONES[conGlifo[2]];
+  }
+
+  // "1 1/2" o "1/2"
+  const conBarra = /^(?:(\d+)\s+)?(\d+)\s*\/\s*(\d+)$/.exec(limpio);
+  if (conBarra) {
+    const denominador = Number(conBarra[3]);
+    if (denominador === 0) return undefined;
+    return Number(conBarra[1] ?? 0) + Number(conBarra[2]) / denominador;
+  }
+
+  // "1,5" o "1.5"
+  const decimal = /^\d+(?:[.,]\d+)?$/.exec(limpio);
+  if (!decimal) return undefined;
+
+  const valor = Number(limpio.replace(",", "."));
+  return Number.isFinite(valor) && valor > 0 ? valor : undefined;
+}
+
+/** El número como se lee: "½", "1½", "1,3". */
+export function formatearCantidad(cantidad: number): string {
+  const entero = Math.floor(cantidad);
+  const resto = cantidad - entero;
+
+  const glifo = Object.entries(FRACCIONES).find(
+    ([, valor]) => Math.abs(valor - resto) < 0.01,
+  )?.[0];
+
+  if (glifo) return entero > 0 ? `${entero}${glifo}` : glifo;
+  if (Number.isInteger(cantidad)) return String(cantidad);
+
+  return cantidad
+    .toFixed(2)
+    .replace(/0+$/, "")
+    .replace(/\.$/, "")
+    .replace(".", ",");
+}
+
+export const ETIQUETA_UNIDAD: Record<UnidadRacion, { una: string; varias: string }> =
+  {
+    medida: { una: "medida", varias: "medidas" },
+    g: { una: "g", varias: "g" },
+    taza: { una: "taza", varias: "tazas" },
+  };
 
 /**
  * La comida en una línea, para la ficha:
@@ -255,7 +318,7 @@ function describirRacion(
 ): string | null {
   const medida =
     racion.cantidad && unidad
-      ? `${racion.cantidad} ${pluralizarUnidad(racion.cantidad, unidad)}`
+      ? `${formatearCantidad(racion.cantidad)} ${pluralizarUnidad(racion.cantidad, unidad)}`
       : null;
 
   const cuando =
@@ -267,8 +330,12 @@ function describirRacion(
   return medida ?? cuando;
 }
 
-/** Los gramos no se pluralizan; las tazas y los scoops sí. */
+/**
+ * "1 taza", "½ taza", "2 tazas".
+ *
+ * Media taza va en singular: "½ tazas" no lo dice nadie.
+ */
 function pluralizarUnidad(cantidad: number, unidad: UnidadRacion): string {
-  if (unidad === "g") return "g";
-  return cantidad === 1 ? unidad : `${unidad}s`;
+  const etiqueta = ETIQUETA_UNIDAD[unidad];
+  return cantidad <= 1 ? etiqueta.una : etiqueta.varias;
 }

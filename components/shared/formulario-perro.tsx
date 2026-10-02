@@ -30,6 +30,9 @@ import {
   describirDuracion,
   describirEdad,
   ETIQUETA_COMIDA,
+  ETIQUETA_UNIDAD,
+  formatearCantidad,
+  parsearCantidad,
   vigenciaAntiparasitario,
   vigenciaVacuna,
 } from "@/lib/rules/perro";
@@ -46,19 +49,20 @@ import type {
 } from "@/lib/types";
 
 const COMIDAS: Comida[] = ["desayuno", "almuerzo", "cena"];
-const UNIDADES: UnidadRacion[] = ["taza", "scoop", "g"];
+const UNIDADES: UnidadRacion[] = ["medida", "g", "taza"];
 
-const ETIQUETA_UNIDAD: Record<UnidadRacion, string> = {
-  taza: "tazas",
-  scoop: "scoops",
+/** Cómo se llama cada medida en el selector. */
+const NOMBRE_UNIDAD: Record<UnidadRacion, string> = {
+  medida: "medida",
   g: "gramos",
+  taza: "taza",
 };
 
-/** "Cuántas tazas" pero "Cuántos scoops": la taza es femenina. */
+/** "¿Cuántas tazas?" pero "¿Cuántos gramos?": la taza es femenina. */
 const CUANTOS: Record<UnidadRacion, string> = {
-  taza: "Cuántas tazas",
-  scoop: "Cuántos scoops",
-  g: "Cuántos gramos",
+  medida: "¿Cuántas medidas?",
+  g: "¿Cuántos gramos?",
+  taza: "¿Cuántas tazas?",
 };
 
 export interface EstadoPerro {
@@ -149,7 +153,10 @@ export function estadoDesde(perro: Perro): EstadoPerro {
       raciones:
         perro.alimentacion?.raciones?.length
           ? perro.alimentacion.raciones.map((racion) => ({
-              cantidad: String(racion.cantidad ?? ""),
+              cantidad:
+                racion.cantidad === undefined
+                  ? ""
+                  : formatearCantidad(racion.cantidad),
               comidas: racion.comidas,
             }))
           : vacio.alimentacion.raciones,
@@ -202,7 +209,7 @@ export function aBorrador(estado: EstadoPerro): BorradorDePerro {
       raciones: estado.alimentacion.raciones
         .filter((racion) => racion.cantidad !== "" || racion.comidas.length > 0)
         .map((racion) => ({
-          cantidad: numero(racion.cantidad),
+          cantidad: parsearCantidad(racion.cantidad),
           comidas: racion.comidas,
         })),
       notas: estado.alimentacion.notas.trim() || undefined,
@@ -321,6 +328,16 @@ export function FormularioPerro({
   const edad = estado.fechaNacimiento
     ? describirEdad(estado.fechaNacimiento, hoy)
     : null;
+
+  // La marca se pregunta recién cuando ya sabemos cuánto come y cuándo: antes
+  // es un campo más en una lista, después es la última pregunta.
+  const primera = estado.alimentacion.raciones[0];
+  const comidaServida = Boolean(
+    estado.alimentacion.unidad &&
+      primera &&
+      parsearCantidad(primera.cantidad) !== undefined &&
+      primera.comidas.length > 0,
+  );
 
   const vigenciaBicho = estado.antiparasitario.ultimaAplicacion
     ? vigenciaAntiparasitario({
@@ -497,18 +514,15 @@ export function FormularioPerro({
         )}
       </Seccion>
 
-      <Seccion
-        titulo="Qué come"
-        ayuda="Dinos cómo le gusta comer a tu perrito."
-      >
-        {/* El orden es el de las preguntas: con qué se mide, de qué marca y
-            recién entonces cuánto y cuándo. Cada paso aparece cuando el
+      <Seccion titulo="Qué come" ayuda="Dinos cómo le gusta comer a tu perrito.">
+        {/* El orden es el de las preguntas: con qué se mide, cuánto y cuándo,
+            de qué marca y si hay algo especial. Cada paso aparece cuando el
             anterior está contestado, así nadie ve diez campos de golpe. */}
         <Opciones
           etiqueta="¿Con qué se mide su porción?"
           opciones={UNIDADES.map((valor) => ({
             valor,
-            texto: ETIQUETA_UNIDAD[valor],
+            texto: NOMBRE_UNIDAD[valor],
           }))}
           elegida={estado.alimentacion.unidad}
           onElegir={(unidad) =>
@@ -517,40 +531,40 @@ export function FormularioPerro({
         />
 
         {estado.alimentacion.unidad && (
-          <>
-            <ConOtra
-              id="comida-marca"
-              etiqueta="Marca"
-              opciones={configuracion.catalogos.marcasComida}
-              valor={estado.alimentacion.marca}
-              onCambio={(marca) =>
-                cambiar({ alimentacion: { ...estado.alimentacion, marca } })
-              }
-              textoOtra="Otra (escríbela)"
-              placeholder="¿Cuál come?"
-            />
-
-            {estado.alimentacion.marca && (
-              <Porciones
-                unidad={estado.alimentacion.unidad}
-                raciones={estado.alimentacion.raciones}
-                onCambio={(raciones) =>
-                  cambiar({ alimentacion: { ...estado.alimentacion, raciones } })
-                }
-              />
-            )}
-          </>
+          <Porciones
+            unidad={estado.alimentacion.unidad}
+            raciones={estado.alimentacion.raciones}
+            onCambio={(raciones) =>
+              cambiar({ alimentacion: { ...estado.alimentacion, raciones } })
+            }
+          />
         )}
 
-        <Campo
-          id="comida-notas"
-          etiqueta="Algo más sobre su comida (opcional)"
-          valor={estado.alimentacion.notas}
-          onCambio={(notas) =>
-            cambiar({ alimentacion: { ...estado.alimentacion, notas } })
-          }
-          ayuda="Ej: si no come al almuerzo, no insistir."
-        />
+        {comidaServida && (
+          <ConOtra
+            id="comida-marca"
+            etiqueta="¿Qué marca come?"
+            opciones={configuracion.catalogos.marcasComida}
+            valor={estado.alimentacion.marca}
+            onCambio={(marca) =>
+              cambiar({ alimentacion: { ...estado.alimentacion, marca } })
+            }
+            textoOtra="Otra (escríbela)"
+            placeholder="¿Cuál come?"
+          />
+        )}
+
+        {comidaServida && estado.alimentacion.marca && (
+          <Campo
+            id="comida-notas"
+            etiqueta="¿Alguna instrucción especial? (opcional)"
+            valor={estado.alimentacion.notas}
+            onCambio={(notas) =>
+              cambiar({ alimentacion: { ...estado.alimentacion, notas } })
+            }
+            ayuda="Ej: si no come al almuerzo, no insistir."
+          />
+        )}
 
         {error("alimentacion") && (
           <p className="text-destructive text-xs">{error("alimentacion")}</p>
@@ -705,9 +719,15 @@ function Porciones({
                 <Campo
                   id={`comida-cantidad-${i}`}
                   etiqueta={CUANTOS[unidad]}
-                  tipo="number"
                   valor={racion.cantidad}
                   onCambio={(cantidad) => cambiarUna(i, { cantidad })}
+                  ayuda={ayudaDeCantidad(racion.cantidad, unidad)}
+                  error={
+                    racion.cantidad !== "" &&
+                    parsearCantidad(racion.cantidad) === undefined
+                      ? "No entendimos esa cantidad. Prueba 1, ½ o 1/2."
+                      : undefined
+                  }
                 />
               </div>
               {raciones.length > 1 && (
@@ -775,6 +795,22 @@ function Porciones({
       </p>
     </div>
   );
+}
+
+/**
+ * Lo que la app entendió, escrito abajo del campo.
+ *
+ * Alguien que escribe "1/2" necesita ver que entendimos media, no quedarse
+ * con la duda hasta que guarde.
+ */
+function ayudaDeCantidad(texto: string, unidad: UnidadRacion): string {
+  const cantidad = parsearCantidad(texto);
+  if (cantidad === undefined) {
+    return "Puedes escribir 1, ½ o 1/2.";
+  }
+
+  const etiqueta = ETIQUETA_UNIDAD[unidad];
+  return `${formatearCantidad(cantidad)} ${cantidad <= 1 ? etiqueta.una : etiqueta.varias}.`;
 }
 
 function Seccion({

@@ -136,11 +136,12 @@ export const MARCAS_COMIDA = [
  * para que no salga "1 g" ni "200 tazas".
  */
 export const RACIONES = [
+  { cantidad: 0.5, unidad: "taza" },
   { cantidad: 1, unidad: "taza" },
   { cantidad: 1.5, unidad: "taza" },
   { cantidad: 2, unidad: "taza" },
-  { cantidad: 1, unidad: "scoop" },
-  { cantidad: 2, unidad: "scoop" },
+  { cantidad: 1, unidad: "medida" },
+  { cantidad: 2, unidad: "medida" },
   { cantidad: 120, unidad: "g" },
   { cantidad: 200, unidad: "g" },
   { cantidad: 300, unidad: "g" },

@@ -362,10 +362,19 @@ la mitad de las fichas nazcan mal.
 
 ### La comida se pregunta en el orden en que se piensa
 
-Primero **con qué se mide** la porción, después **de qué marca** y recién
-entonces **cuánto y cuándo**. Cada paso aparece cuando el anterior está
-contestado: diez campos de golpe hacen que el dueño llene cualquier cosa para
-salir del paso.
+Primero **con qué se mide** la porción (medida, gramos o taza), después
+**cuánto y en qué comidas**, y recién entonces **la marca** y la instrucción
+especial. Cada paso aparece cuando el anterior está contestado: diez campos de
+golpe hacen que el dueño llene cualquier cosa para salir del paso.
+
+La cantidad acepta **fracciones**: "1/2", "½" y "0,5" son todas correctas para
+quien las escribe, y rechazar una por no ser la que esperaba el campo es
+culpar a la persona de una limitación nuestra. `parsearCantidad` las entiende
+y el campo escribe abajo lo que entendió ("½ taza"), para que nadie se quede
+con la duda hasta guardar.
+
+Media taza va en **singular**: "½ tazas" no lo dice nadie, así que la
+pluralización mira `cantidad <= 1`, no `cantidad === 1`.
 
 Las **raciones son varias** porque hay perros que desayunan media taza y cenan
 una entera. La pantalla parte con una sola —que es el caso normal— y el "+"

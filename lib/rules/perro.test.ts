@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   calcularEdad,
+  formatearCantidad,
+  parsearCantidad,
   cumpleQueEdad,
   describirAlimentacion,
   describirEdad,
@@ -148,16 +150,16 @@ describe("describirAlimentacion", () => {
           { cantidad: 1, comidas: ["cena"] },
         ],
       }),
-    ).toBe("Royal Canin · 0.5 tazas en desayuno, 1 taza en cena");
+    ).toBe("Royal Canin · ½ taza en desayuno, 1 taza en cena");
   });
 
   it("pluraliza la medida, pero no los gramos", () => {
     expect(
       describirAlimentacion({
-        unidad: "scoop",
+        unidad: "medida",
         raciones: [{ cantidad: 2, comidas: ["desayuno"] }],
       }),
-    ).toBe("2 scoops en desayuno");
+    ).toBe("2 medidas en desayuno");
 
     expect(
       describirAlimentacion({
@@ -186,5 +188,60 @@ describe("describirAlimentacion", () => {
     expect(
       describirAlimentacion({ raciones: [], notas: "Trae su bolsita." }),
     ).toBe("Trae su bolsita.");
+  });
+});
+
+describe("parsearCantidad", () => {
+  it("entiende un número", () => {
+    expect(parsearCantidad("1")).toBe(1);
+    expect(parsearCantidad("200")).toBe(200);
+  });
+
+  it("entiende el decimal con coma y con punto", () => {
+    expect(parsearCantidad("1,5")).toBe(1.5);
+    expect(parsearCantidad("1.5")).toBe(1.5);
+  });
+
+  it("entiende la fracción escrita con barra", () => {
+    expect(parsearCantidad("1/2")).toBe(0.5);
+    expect(parsearCantidad("3/4")).toBe(0.75);
+    expect(parsearCantidad("1 1/2")).toBe(1.5);
+  });
+
+  it("entiende el símbolo de la fracción", () => {
+    expect(parsearCantidad("½")).toBe(0.5);
+    expect(parsearCantidad("1½")).toBe(1.5);
+    expect(parsearCantidad("¼")).toBe(0.25);
+  });
+
+  it("no acepta lo que no es una cantidad", () => {
+    expect(parsearCantidad("")).toBeUndefined();
+    expect(parsearCantidad("poquito")).toBeUndefined();
+    expect(parsearCantidad("0")).toBeUndefined();
+    expect(parsearCantidad("1/0")).toBeUndefined();
+  });
+});
+
+describe("formatearCantidad", () => {
+  it("escribe las fracciones como se leen", () => {
+    expect(formatearCantidad(0.5)).toBe("½");
+    expect(formatearCantidad(1.5)).toBe("1½");
+    expect(formatearCantidad(0.25)).toBe("¼");
+  });
+
+  it("deja los enteros como están", () => {
+    expect(formatearCantidad(1)).toBe("1");
+    expect(formatearCantidad(200)).toBe("200");
+  });
+
+  it("lo que no es fracción conocida va con coma", () => {
+    expect(formatearCantidad(1.3)).toBe("1,3");
+  });
+
+  it("lo que se escribe se puede volver a leer", () => {
+    for (const texto of ["1", "½", "1½", "1,5", "200", "¾"]) {
+      const cantidad = parsearCantidad(texto)!;
+      expect(parsearCantidad(formatearCantidad(cantidad))).toBeCloseTo(cantidad);
+    }
   });
 });
