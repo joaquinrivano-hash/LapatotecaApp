@@ -35,6 +35,16 @@ export const NEGOCIO = {
     horasJornadaMedia: 8,
     /** Margen antes de empezar a cobrar el recargo fuera de horario. */
     minutosGracia: 15,
+    /**
+     * Cancelando con al menos estas horas de aviso, el día se devuelve: el
+     * cobro se anula y, si venía de un plan, el día vuelve al pack.
+     *
+     * Son 24 y no las 48 del hotel porque es un solo día: pedir dos días de
+     * aviso para cancelar una jornada suelta deja sin salida a cualquiera
+     * que se enferme el día antes. Con menos aviso el cupo ya no se alcanza
+     * a revender, así que el día se pierde.
+     */
+    horasParaCancelarSinCosto: 24,
   },
 
   diaDePrueba: {

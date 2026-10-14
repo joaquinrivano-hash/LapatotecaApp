@@ -23,7 +23,11 @@ import {
 } from "@/lib/rules/capacidad";
 import { esClienteActivo } from "@/lib/rules/cliente";
 import { calcularAbono, calcularPrecioHotel } from "@/lib/rules/precio-hotel";
-import { calcularPrecioJardin } from "@/lib/rules/precio-jardin";
+import {
+  calcularDevolucionJardin,
+  calcularPrecioJardin,
+  type DevolucionJardin,
+} from "@/lib/rules/precio-jardin";
 import { comprarPlan, elegirPlanParaUsar, planesVigentes } from "@/lib/rules/planes";
 import { cotizarPaseo, cotizarSpa, cotizarTraslado } from "@/lib/rules/servicios";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
@@ -345,6 +349,83 @@ export async function reservarDiaJardin(
       : null;
 
   return { estadia, planUsado, pago };
+}
+
+/**
+ * Cancelar un día de jardín ya agendado.
+ *
+ * Existe porque el día ahora se paga por adelantado: antes cancelar no
+ * costaba nada porque no había nada cobrado, y dejarlo así después del
+ * cambio habría significado que el dueño paga un día que no usó sin ninguna
+ * manera de echarse atrás.
+ *
+ * Sigue la misma política que el hotel y el día de prueba: con aviso
+ * suficiente no se cobra, y pasado el corte el día se pierde. El cupo quedó
+ * tomado y a esa altura ya no se alcanza a revender.
+ */
+export interface ResultadoCancelacionJardin {
+  estadia: EstadiaJardin;
+  devolucion: DevolucionJardin;
+  /** El plan al que se le devolvió el día, si correspondía. */
+  planDevuelto: PlanComprado | null;
+}
+
+export async function cancelarDiaDeJardin(
+  repo: RepositorioPatoteca,
+  estadiaId: ID,
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<ResultadoCancelacionJardin> {
+  const estadia = await repo.estadiasJardin.obtener(estadiaId);
+  if (!estadia) throw new ReservaRechazada("No existe ese día.", []);
+
+  // Un perro que ya llegó no se cancela: eso es un retiro, no una
+  // cancelación, y lo registra el equipo.
+  if (estadia.estado !== "esperada") {
+    throw new ReservaRechazada("Ese día ya no se puede cancelar.", [
+      estadia.estado === "cancelada"
+        ? "Ya estaba cancelado."
+        : "El perro ya está en la casa: pídele al equipo que registre el retiro.",
+    ]);
+  }
+
+  const devolucion = calcularDevolucionJardin(estadia.inicioProgramado, ahora);
+
+  const cancelada = await repo.estadiasJardin.actualizar(estadiaId, {
+    estado: "cancelada",
+  });
+
+  if (!devolucion.devuelve) {
+    // El día se pierde: el cobro queda como estaba y el día del pack queda
+    // consumido. Devolverlo sería no tener política.
+    return { estadia: cancelada, devolucion, planDevuelto: null };
+  }
+
+  // El cobro no se borra, se marca reembolsado en cero: un cobro que
+  // desaparece no deja rastro de que existió, y la cobranza del mes tiene
+  // que poder explicarse.
+  const pagos = await repo.pagos.listar();
+  for (const pago of pagos) {
+    if (pago.referenciaId !== estadiaId || pago.estado !== "pendiente") continue;
+    await repo.pagos.actualizar(pago.id, {
+      monto: 0,
+      estado: "reembolsado",
+      pagadoEn: undefined,
+      venceEn: undefined,
+    });
+  }
+
+  // Si el día venía de un pack, vuelve al saldo: se descontó al agendar.
+  let planDevuelto: PlanComprado | null = null;
+  if (estadia.planId) {
+    const plan = await repo.planes.obtener(estadia.planId);
+    if (plan) {
+      planDevuelto = await repo.planes.actualizar(plan.id, {
+        diasUsados: Math.max(0, plan.diasUsados - 1),
+      });
+    }
+  }
+
+  return { estadia: cancelada, devolucion, planDevuelto };
 }
 
 /* ── Jardín: plan ──────────────────────────────────────────────────── */

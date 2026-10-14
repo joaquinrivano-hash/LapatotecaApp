@@ -9,7 +9,9 @@ import {
   Ticket,
   TriangleAlert,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,9 +22,12 @@ import { MiPerro } from "@/components/portal/mi-perro";
 import { PrecioCLP } from "@/components/shared/precio";
 import { BarraParticipacion } from "@/components/admin/barra-participacion";
 import { useState } from "react";
-import { useConsulta } from "@/lib/hooks/use-consulta";
+import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { useCliente } from "@/lib/hooks/use-cliente";
+import { NEGOCIO } from "@/lib/config/negocio";
+import { calcularDevolucionJardin } from "@/lib/rules/precio-jardin";
 import { nombreDePlan, planVigente, saldoPlan } from "@/lib/rules/planes";
+import { cancelarDiaDeJardin } from "@/lib/servicios/reservas";
 import { alertasDePerro } from "@/lib/servicios/clientes";
 import { hoyDelStaff } from "@/lib/servicios/asistencia";
 import { useSesion } from "@/lib/store/sesion";
@@ -87,6 +92,8 @@ export default function MiCuenta() {
         fecha: r.inicioProgramado.slice(0, 10),
         detalle: `Hasta el ${formatearFecha(r.finProgramado)}`,
         total: r.cotizacion.total,
+        inicioProgramado: r.inicioProgramado,
+        esDiaDePrueba: false,
       })),
     ...(datos?.estadias ?? [])
       .filter((e) => e.fecha >= hoy && e.estado !== "cancelada")
@@ -97,6 +104,8 @@ export default function MiCuenta() {
         fecha: e.fecha,
         detalle: `${formatearHora(e.inicioProgramado)} a ${formatearHora(e.finProgramado)}`,
         total: e.cotizacion?.total ?? 0,
+        inicioProgramado: e.inicioProgramado,
+        esDiaDePrueba: e.origen === "dia_de_prueba",
       })),
   ].sort((a, b) => a.fecha.localeCompare(b.fecha));
 
@@ -261,6 +270,16 @@ export default function MiCuenta() {
                   </Badge>
                   {item.total > 0 && <PrecioCLP monto={item.total} />}
                 </CardContent>
+
+                {/* El día de prueba se cancela desde su propia pantalla, que
+                    además deja reprogramar. */}
+                {item.linea === "jardin" && !item.esDiaDePrueba && (
+                  <CancelarDia
+                    estadiaId={item.id}
+                    inicioProgramado={item.inicioProgramado}
+                    perro={nombrePerro(item.perroId)}
+                  />
+                )}
               </Card>
             ))
           )}
@@ -317,6 +336,90 @@ export default function MiCuenta() {
           )}
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+/**
+ * Cancelar un día de jardín, con la condición a la vista antes de confirmar.
+ *
+ * El día está pagado por adelantado, así que cancelar tiene consecuencia. Por
+ * eso el primer toque no cancela: abre la condición que aplica AHORA, con el
+ * número de horas incluido. Enterarse después de que el día se perdió es la
+ * manera segura de que se sienta letra chica.
+ */
+function CancelarDia({
+  estadiaId,
+  inicioProgramado,
+  perro,
+}: {
+  estadiaId: string;
+  inicioProgramado: string;
+  perro: string;
+}) {
+  const [confirmando, setConfirmando] = useState(false);
+  const { ocupado, ejecutar } = useAccion();
+
+  // Se recalcula en el render y no al montar: si alguien deja la pestaña
+  // abierta toda la tarde, la condición que ve tiene que ser la de ahora.
+  const devolucion = calcularDevolucionJardin(
+    inicioProgramado,
+    new Date().toISOString(),
+  );
+
+  if (!confirmando) {
+    return (
+      <div className="px-3 pb-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground h-8 px-2"
+          onClick={() => setConfirmando(true)}
+        >
+          Cancelar este día
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-border/60 space-y-2 border-t px-3 py-3">
+      <p className="text-sm text-pretty">
+        {devolucion.devuelve
+          ? `Todavía estás a tiempo: cancelas y no te cobramos el día.`
+          : `Quedan menos de ${NEGOCIO.jardin.horasParaCancelarSinCosto} horas, así que el día se cobra igual. El cupo ya está tomado y no alcanzamos a ofrecerlo.`}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant={devolucion.devuelve ? "default" : "destructive"}
+          disabled={ocupado}
+          onClick={async () => {
+            try {
+              const { devolucion: aplicada } = await ejecutar((repo) =>
+                cancelarDiaDeJardin(repo, estadiaId),
+              );
+              toast.success(`Cancelamos el día de ${perro}`, {
+                description: aplicada.devuelve
+                  ? "No te cobramos nada."
+                  : "El día queda cobrado, como decía la condición.",
+              });
+            } catch {
+              toast.error("No pudimos cancelar ese día.");
+            }
+          }}
+        >
+          Sí, cancelar
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={ocupado}
+          onClick={() => setConfirmando(false)}
+        >
+          Mejor no
+        </Button>
+      </div>
     </div>
   );
 }

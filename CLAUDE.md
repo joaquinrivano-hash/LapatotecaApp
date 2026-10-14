@@ -323,6 +323,16 @@ Entonces, cuándo nace cada cobro:
 | Recargo fuera de horario | **Nunca solo**: lo decide Administración |
 | Ingreso no planificado | Lo emite Administración después |
 
+Y como el día de jardín ahora está pagado antes de usarse, **cancelarlo tiene
+consecuencia**: `cancelarDiaDeJardin` aplica la política y, cuando devuelve,
+anula el cobro marcándolo reembolsado en cero y le devuelve el día al pack. Un
+perro que ya llegó no se cancela —eso es un retiro, y lo registra el equipo—.
+
+La condición se muestra **antes de confirmar**, con las horas que quedan, y se
+recalcula en el render y no al montar: si alguien deja la pestaña abierta toda
+la tarde, lo que ve tiene que ser la condición de ahora y no la de cuando
+abrió.
+
 `lib/servicios/cobros-pendientes.ts` junta las tres colas que quedan
 esperando en el backoffice, y **no son la misma cosa**:
 
@@ -535,6 +545,12 @@ cliente reserva a futuro y no hay ningún perro en la puerta que registrar.
 
 - El día suelto de jardín **se paga por adelantado**, al agendarlo. Lo que se
   descuenta al agendar, si el perro tiene plan, es el día del pack.
+- **Cancelarlo sigue la misma forma que el hotel**: con 24 horas o más de
+  aviso no se cobra —y el día del pack vuelve al saldo—; con menos, el día se
+  pierde. Son 24 y no las 48 del hotel porque es un solo día: pedir dos días
+  de aviso para cancelar una jornada dejaría sin salida a cualquiera que se
+  enferme la noche antes. Pasado el corte el cupo ya no se alcanza a
+  revender, así que el día se cobra igual.
 - La reserva de hotel deja el **abono del 50% pagado** y el saldo se cobra al
   retiro.
 - La tienda, si un producto no alcanza, **compra lo que hay y lo avisa**, en

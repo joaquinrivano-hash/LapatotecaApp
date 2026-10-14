@@ -141,3 +141,48 @@ export function calcularPrecioJardin(
     soloAplicables([descuentoSegundoPerro(entrada.indicePerro)]),
   );
 }
+
+/* ── Cancelar un día ───────────────────────────────────────────────── */
+
+export interface DevolucionJardin {
+  devuelve: boolean;
+  /** Horas que faltaban para la llegada. Negativo si el día ya empezó. */
+  horasDeAviso: number;
+  motivo: string;
+}
+
+/**
+ * Cancelar un día de jardín.
+ *
+ * Misma forma que el hotel y el día de prueba —un corte en horas y después
+ * no se devuelve nada—, con el corte del día de prueba y no el del hotel: es
+ * un solo día. Pedir 48 horas de aviso para cancelar una jornada suelta
+ * dejaría sin salida a cualquiera que se enferme la noche antes.
+ *
+ * Pasado el corte el día se pierde, y no por castigar: el cupo quedó tomado
+ * y a esa altura ya no se alcanza a revender.
+ */
+export function calcularDevolucionJardin(
+  inicioProgramado: InstanteISO,
+  momentoCancelacion: InstanteISO,
+): DevolucionJardin {
+  const horasDeAviso = horasEntre(momentoCancelacion, inicioProgramado);
+  const minimo = NEGOCIO.jardin.horasParaCancelarSinCosto;
+
+  if (horasDeAviso >= minimo) {
+    return {
+      devuelve: true,
+      horasDeAviso,
+      motivo: `Cancelado con ${Math.floor(horasDeAviso)} h de aviso: no se cobra.`,
+    };
+  }
+
+  return {
+    devuelve: false,
+    horasDeAviso,
+    motivo:
+      horasDeAviso < 0
+        ? "El día ya empezó: se cobra completo."
+        : `Cancelado con ${Math.floor(horasDeAviso)} h de aviso, menos de las ${minimo} necesarias: se cobra completo.`,
+  };
+}

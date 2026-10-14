@@ -20,6 +20,7 @@ import {
   cotizarServicio,
   crearReservaHotel,
   diasConCupo,
+  cancelarDiaDeJardin,
   reservarDiaJardin,
   ReservaRechazada,
 } from "./reservas";
@@ -413,5 +414,92 @@ describe("diasConCupo", () => {
     const libres = await diasConCupo(repo, LUNES, "2026-06-16");
     expect(libres[LUNES]).toBe(0);
     expect(libres["2026-06-16"]).toBe(25);
+  });
+});
+
+describe("cancelar un día de jardín", () => {
+  const MANANA = "2026-06-16";
+
+  async function agendarYCancelar(ahora: string) {
+    const { estadia } = await reservarDiaJardin(repo, {
+      perroId: "perro-001",
+      fecha: MANANA,
+    });
+    return cancelarDiaDeJardin(repo, estadia.id, ahora);
+  }
+
+  it("con aviso suficiente anula el cobro, sin borrarlo", async () => {
+    const { devolucion } = await agendarYCancelar(en("08:00", "2026-06-14"));
+
+    expect(devolucion.devuelve).toBe(true);
+    const [pago] = await repo.pagos.listar();
+    // Marcado reembolsado en cero y no borrado: la cobranza del mes tiene
+    // que poder explicar por qué ese día no se cobró.
+    expect(pago.monto).toBe(0);
+    expect(pago.estado).toBe("reembolsado");
+    expect(await repo.pagos.porCobrar()).toEqual([]);
+  });
+
+  it("deja el día cancelado y libera el cupo", async () => {
+    const { estadia } = await agendarYCancelar(en("08:00", "2026-06-14"));
+    expect(estadia.estado).toBe("cancelada");
+  });
+
+  it("sobre la hora el día se pierde: el cobro queda en pie", async () => {
+    const { devolucion } = await agendarYCancelar(en("20:00", "2026-06-15"));
+
+    expect(devolucion.devuelve).toBe(false);
+    const [pago] = await repo.pagos.listar();
+    expect(pago.monto).toBeGreaterThan(0);
+    expect(pago.estado).toBe("pendiente");
+  });
+
+  it("con plan y aviso suficiente el día vuelve al pack", async () => {
+    montar({ planes: [PLAN_VIGENTE] });
+    const { estadia } = await reservarDiaJardin(repo, {
+      perroId: "perro-001",
+      fecha: MANANA,
+    });
+    expect((await repo.planes.obtener(PLAN_VIGENTE.id))!.diasUsados).toBe(
+      PLAN_VIGENTE.diasUsados + 1,
+    );
+
+    const { planDevuelto } = await cancelarDiaDeJardin(
+      repo,
+      estadia.id,
+      en("08:00", "2026-06-14"),
+    );
+    expect(planDevuelto?.diasUsados).toBe(PLAN_VIGENTE.diasUsados);
+  });
+
+  it("con plan y sobre la hora el día del pack se pierde", async () => {
+    // Sin esto cancelar tarde con plan saldría gratis, y entonces no hay
+    // política: sería un cupo tomado toda la semana sin costo.
+    montar({ planes: [PLAN_VIGENTE] });
+    const { estadia } = await reservarDiaJardin(repo, {
+      perroId: "perro-001",
+      fecha: MANANA,
+    });
+
+    const { planDevuelto } = await cancelarDiaDeJardin(
+      repo,
+      estadia.id,
+      en("20:00", "2026-06-15"),
+    );
+    expect(planDevuelto).toBeNull();
+    expect((await repo.planes.obtener(PLAN_VIGENTE.id))!.diasUsados).toBe(
+      PLAN_VIGENTE.diasUsados + 1,
+    );
+  });
+
+  it("no se cancela dos veces", async () => {
+    const { estadia } = await reservarDiaJardin(repo, {
+      perroId: "perro-001",
+      fecha: MANANA,
+    });
+    await cancelarDiaDeJardin(repo, estadia.id, en("08:00", "2026-06-14"));
+    await expect(
+      cancelarDiaDeJardin(repo, estadia.id, en("09:00", "2026-06-14")),
+    ).rejects.toThrow(ReservaRechazada);
   });
 });
