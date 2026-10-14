@@ -34,6 +34,7 @@ import type { RepositorioPatoteca } from "@/lib/repo/tipos";
 import { fechaISO, instanteEn, rangoFechas } from "@/lib/utils/fecha";
 import type {
   Cotizacion,
+  DatosBancarios,
   DuracionPaseo,
   EstadiaJardin,
   FechaISO,
@@ -368,12 +369,62 @@ export interface ResultadoCancelacionJardin {
   devolucion: DevolucionJardin;
   /** El plan al que se le devolvió el día, si correspondía. */
   planDevuelto: PlanComprado | null;
+  /**
+   * Lo que hay que transferirle de vuelta al cliente.
+   *
+   * Cero cuando el cobro estaba pendiente: anularlo YA fue la devolución, no
+   * hay plata que mover. Prometerle una transferencia a alguien que nunca
+   * pagó es prometerle algo que no va a llegar nunca.
+   */
+  aDevolver: number;
+}
+
+/**
+ * Lo que el cliente ya pagó por este día.
+ *
+ * No depende de la hora, así que la pantalla lo puede pedir una vez y seguir
+ * recalculando la política en cada render: lo que cambia con el reloj es si
+ * corresponde devolver, no cuánto se pagó.
+ */
+export async function loPagadoPorElDia(
+  repo: RepositorioPatoteca,
+  estadiaId: ID,
+): Promise<number> {
+  const pagos = await repo.pagos.listar();
+  return pagos
+    .filter((p) => p.referenciaId === estadiaId && p.estado === "pagado")
+    .reduce((suma, p) => suma + p.monto, 0);
+}
+
+/**
+ * Qué pasaría si cancelara ahora, sin cancelar nada.
+ *
+ * La pantalla lo necesita para decidir si pedirle los datos de transferencia:
+ * solo tiene sentido cuando de verdad hay plata que devolver.
+ */
+export async function simularCancelacionDeJardin(
+  repo: RepositorioPatoteca,
+  estadiaId: ID,
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<{ devolucion: DevolucionJardin; aDevolver: number }> {
+  const estadia = await repo.estadiasJardin.obtener(estadiaId);
+  if (!estadia) throw new ReservaRechazada("No existe ese día.", []);
+
+  const devolucion = calcularDevolucionJardin(estadia.inicioProgramado, ahora);
+  const pagos = await repo.pagos.listar();
+  const pagado = pagos
+    .filter((p) => p.referenciaId === estadiaId && p.estado === "pagado")
+    .reduce((suma, p) => suma + p.monto, 0);
+
+  return { devolucion, aDevolver: devolucion.devuelve ? pagado : 0 };
 }
 
 export async function cancelarDiaDeJardin(
   repo: RepositorioPatoteca,
   estadiaId: ID,
   ahora: InstanteISO = new Date().toISOString(),
+  /** Dónde devolverle la plata, si alcanzó a pagar. Se guardan en su ficha. */
+  datosBancarios?: DatosBancarios,
 ): Promise<ResultadoCancelacionJardin> {
   const estadia = await repo.estadiasJardin.obtener(estadiaId);
   if (!estadia) throw new ReservaRechazada("No existe ese día.", []);
@@ -397,21 +448,46 @@ export async function cancelarDiaDeJardin(
   if (!devolucion.devuelve) {
     // El día se pierde: el cobro queda como estaba y el día del pack queda
     // consumido. Devolverlo sería no tener política.
-    return { estadia: cancelada, devolucion, planDevuelto: null };
+    return { estadia: cancelada, devolucion, planDevuelto: null, aDevolver: 0 };
   }
 
-  // El cobro no se borra, se marca reembolsado en cero: un cobro que
-  // desaparece no deja rastro de que existió, y la cobranza del mes tiene
-  // que poder explicarse.
+  // Los dos casos no son el mismo, y confundirlos sería prometer una
+  // transferencia que nunca va a llegar:
+  //
+  //   · Si el cobro estaba PENDIENTE, anularlo ya es la devolución. No hay
+  //     plata que mover: se marca reembolsado en cero.
+  //   · Si el cliente ALCANZÓ a pagar, la plata está en la casa y hay que
+  //     devolverla. Se marca reembolsado conservando el monto, que es
+  //     justamente lo que se le debe, y queda esperando la transferencia.
+  //
+  // En ninguno de los dos se borra: un cobro que desaparece no deja rastro de
+  // que existió, y la cobranza del mes tiene que poder explicarse.
   const pagos = await repo.pagos.listar();
+  let aDevolver = 0;
   for (const pago of pagos) {
-    if (pago.referenciaId !== estadiaId || pago.estado !== "pendiente") continue;
-    await repo.pagos.actualizar(pago.id, {
-      monto: 0,
-      estado: "reembolsado",
-      pagadoEn: undefined,
-      venceEn: undefined,
-    });
+    if (pago.referenciaId !== estadiaId) continue;
+
+    if (pago.estado === "pendiente") {
+      await repo.pagos.actualizar(pago.id, {
+        monto: 0,
+        estado: "reembolsado",
+        pagadoEn: undefined,
+        venceEn: undefined,
+      });
+    } else if (pago.estado === "pagado") {
+      aDevolver += pago.monto;
+      await repo.pagos.actualizar(pago.id, {
+        estado: "reembolsado",
+        venceEn: undefined,
+      });
+    }
+  }
+
+  // Se guardan en la ficha y no en el cobro: nadie se sabe su número de
+  // cuenta de memoria, y pedírselo de nuevo la próxima vez es la manera de
+  // que la devolución quede a medias.
+  if (aDevolver > 0 && datosBancarios) {
+    await repo.clientes.actualizar(estadia.clienteId, { datosBancarios });
   }
 
   // Si el día venía de un pack, vuelve al saldo: se descontó al agendar.
@@ -425,7 +501,7 @@ export async function cancelarDiaDeJardin(
     }
   }
 
-  return { estadia: cancelada, devolucion, planDevuelto };
+  return { estadia: cancelada, devolucion, planDevuelto, aDevolver };
 }
 
 /* ── Jardín: plan ──────────────────────────────────────────────────── */

@@ -151,6 +151,26 @@ export interface Perro {
   creadoEn: InstanteISO;
 }
 
+/**
+ * Dónde devolverle la plata a un cliente.
+ *
+ * Los pide él cuando cancela algo que ya pagó, y se guardan en su ficha para
+ * no volver a pedírselos la próxima vez: nadie se sabe su número de cuenta de
+ * memoria y tener que ir a buscarlo es la manera de que la devolución quede
+ * a medias.
+ *
+ * `rut` es del TITULAR, que puede no ser el cliente: hay cuentas a nombre de
+ * la pareja o de un familiar, y el banco rechaza la transferencia si el
+ * nombre no calza con el RUT.
+ */
+export interface DatosBancarios {
+  titular: string;
+  rut: string;
+  banco: string;
+  tipoDeCuenta: string;
+  numero: string;
+}
+
 export interface Cliente {
   id: ID;
   nombre: string;
@@ -159,6 +179,8 @@ export interface Cliente {
   telefono: string;
   comuna: string;
   direccion?: string;
+  /** Para devoluciones. Se pide recién cuando hace falta una. */
+  datosBancarios?: DatosBancarios;
   creadoEn: InstanteISO;
 }
 
@@ -341,6 +363,14 @@ export interface Pago {
   emitidoEn: InstanteISO;
   venceEn?: FechaISO;
   pagadoEn?: InstanteISO;
+  /**
+   * Cuándo se le transfirió de vuelta al cliente.
+   *
+   * Solo aplica a un cobro reembolsado que el cliente ALCANZÓ a pagar: si
+   * estaba pendiente, anularlo ya fue la devolución y no hay plata que mover.
+   * Mientras esté vacío, la plata todavía no sale de la casa.
+   */
+  devolucionTransferidaEn?: InstanteISO;
 }
 
 /**

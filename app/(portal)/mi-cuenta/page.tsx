@@ -12,6 +12,9 @@ import {
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,13 +24,17 @@ import { PerroAvatar } from "@/components/shared/perro-avatar";
 import { MiPerro } from "@/components/portal/mi-perro";
 import { PrecioCLP } from "@/components/shared/precio";
 import { BarraParticipacion } from "@/components/admin/barra-participacion";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { useCliente } from "@/lib/hooks/use-cliente";
 import { NEGOCIO } from "@/lib/config/negocio";
+import type { DatosBancarios } from "@/lib/types";
 import { calcularDevolucionJardin } from "@/lib/rules/precio-jardin";
 import { nombreDePlan, planVigente, saldoPlan } from "@/lib/rules/planes";
-import { cancelarDiaDeJardin } from "@/lib/servicios/reservas";
+import {
+  cancelarDiaDeJardin,
+  loPagadoPorElDia,
+} from "@/lib/servicios/reservas";
 import { alertasDePerro } from "@/lib/servicios/clientes";
 import { hoyDelStaff } from "@/lib/servicios/asistencia";
 import { useSesion } from "@/lib/store/sesion";
@@ -278,6 +285,7 @@ export default function MiCuenta() {
                     estadiaId={item.id}
                     inicioProgramado={item.inicioProgramado}
                     perro={nombrePerro(item.perroId)}
+                    datosGuardados={base.datos?.cliente?.datosBancarios}
                   />
                 )}
               </Card>
@@ -352,20 +360,47 @@ function CancelarDia({
   estadiaId,
   inicioProgramado,
   perro,
+  datosGuardados,
 }: {
   estadiaId: string;
   inicioProgramado: string;
   perro: string;
+  datosGuardados?: DatosBancarios;
 }) {
   const [confirmando, setConfirmando] = useState(false);
+  const [cuenta, setCuenta] = useState<DatosBancarios>(
+    datosGuardados ?? {
+      titular: "",
+      rut: "",
+      banco: "",
+      tipoDeCuenta: TIPOS_DE_CUENTA[0],
+      numero: "",
+    },
+  );
   const { ocupado, ejecutar } = useAccion();
+  const idTipoDeCuenta = useId();
 
-  // Se recalcula en el render y no al montar: si alguien deja la pestaña
-  // abierta toda la tarde, la condición que ve tiene que ser la de ahora.
+  // Lo pagado no depende del reloj, así que se pide una vez.
+  const pagado = useConsulta(
+    (repo) => loPagadoPorElDia(repo, estadiaId),
+    [estadiaId],
+  );
+
+  // La política SÍ depende del reloj, y se recalcula en el render y no al
+  // montar: si alguien deja la pestaña abierta toda la tarde, lo que ve tiene
+  // que ser la condición de ahora y no la de cuando abrió.
   const devolucion = calcularDevolucionJardin(
     inicioProgramado,
     new Date().toISOString(),
   );
+
+  // Hay plata que devolver solo si corresponde devolver Y alcanzó a pagar.
+  // Si el cobro seguía pendiente, anularlo ya es la devolución: ofrecerle una
+  // transferencia a alguien que nunca pagó es prometerle algo que no llega.
+  const aDevolver = devolucion.devuelve ? (pagado.datos ?? 0) : 0;
+  const faltaCuenta =
+    aDevolver > 0 &&
+    (!cuenta.titular.trim() || !cuenta.rut.trim() || !cuenta.numero.trim());
 
   if (!confirmando) {
     return (
@@ -383,33 +418,105 @@ function CancelarDia({
   }
 
   return (
-    <div className="border-border/60 space-y-2 border-t px-3 py-3">
+    <div className="border-border/60 space-y-3 border-t px-3 py-3">
       <p className="text-sm text-pretty">
-        {devolucion.devuelve
-          ? `Todavía estás a tiempo: cancelas y no te cobramos el día.`
-          : `Quedan menos de ${NEGOCIO.jardin.horasParaCancelarSinCosto} horas, así que el día se cobra igual. El cupo ya está tomado y no alcanzamos a ofrecerlo.`}
+        {!devolucion.devuelve
+          ? `Quedan menos de ${NEGOCIO.jardin.horasParaCancelarSinCosto} horas, así que el día se cobra igual. El cupo ya está tomado y no alcanzamos a ofrecerlo.`
+          : aDevolver > 0
+            ? "Todavía estás a tiempo, así que te devolvemos lo que pagaste."
+            : "Todavía estás a tiempo: cancelas y no te cobramos el día."}
       </p>
+
+      {aDevolver > 0 && (
+        <div className="bg-secondary/50 space-y-3 rounded-xl p-3">
+          <p className="text-sm font-semibold">
+            Te devolvemos <PrecioCLP monto={aDevolver} /> por transferencia
+          </p>
+          <p className="text-muted-foreground text-xs text-pretty">
+            Dinos a qué cuenta. La hacemos dentro de los próximos días hábiles.
+          </p>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <CampoCuenta
+              etiqueta="Nombre del titular"
+              valor={cuenta.titular}
+              alCambiar={(titular) => setCuenta({ ...cuenta, titular })}
+            />
+            <CampoCuenta
+              etiqueta="RUT del titular"
+              valor={cuenta.rut}
+              alCambiar={(rut) => setCuenta({ ...cuenta, rut })}
+            />
+            <CampoCuenta
+              etiqueta="Banco"
+              valor={cuenta.banco}
+              alCambiar={(banco) => setCuenta({ ...cuenta, banco })}
+            />
+            <div className="space-y-1">
+              <Label htmlFor={idTipoDeCuenta} className="text-xs">
+                Tipo de cuenta
+              </Label>
+              <Select
+                id={idTipoDeCuenta}
+                value={cuenta.tipoDeCuenta}
+                onChange={(e) =>
+                  setCuenta({ ...cuenta, tipoDeCuenta: e.target.value })
+                }
+              >
+                {TIPOS_DE_CUENTA.map((tipo) => (
+                  <option key={tipo} value={tipo}>
+                    {tipo}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="sm:col-span-2">
+              <CampoCuenta
+                etiqueta="Número de cuenta"
+                valor={cuenta.numero}
+                alCambiar={(numero) => setCuenta({ ...cuenta, numero })}
+              />
+            </div>
+          </div>
+
+          {/* El titular puede no ser el cliente: hay cuentas a nombre de la
+              pareja, y el banco rechaza si el nombre no calza con el RUT. */}
+          <p className="text-muted-foreground text-xs text-pretty">
+            Si la cuenta está a nombre de otra persona, pon sus datos: el banco
+            rechaza la transferencia cuando el nombre no calza con el RUT.
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         <Button
           size="sm"
           variant={devolucion.devuelve ? "default" : "destructive"}
-          disabled={ocupado}
+          disabled={ocupado || faltaCuenta}
           onClick={async () => {
             try {
-              const { devolucion: aplicada } = await ejecutar((repo) =>
-                cancelarDiaDeJardin(repo, estadiaId),
+              const resultado = await ejecutar((repo) =>
+                cancelarDiaDeJardin(
+                  repo,
+                  estadiaId,
+                  new Date().toISOString(),
+                  aDevolver > 0 ? cuenta : undefined,
+                ),
               );
               toast.success(`Cancelamos el día de ${perro}`, {
-                description: aplicada.devuelve
-                  ? "No te cobramos nada."
-                  : "El día queda cobrado, como decía la condición.",
+                description:
+                  resultado.aDevolver > 0
+                    ? "Te transferimos en los próximos días hábiles."
+                    : resultado.devolucion.devuelve
+                      ? "No te cobramos nada."
+                      : "El día queda cobrado, como decía la condición.",
               });
             } catch {
               toast.error("No pudimos cancelar ese día.");
             }
           }}
         >
-          Sí, cancelar
+          {faltaCuenta ? "Completa la cuenta" : "Sí, cancelar"}
         </Button>
         <Button
           size="sm"
@@ -420,6 +527,40 @@ function CancelarDia({
           Mejor no
         </Button>
       </div>
+    </div>
+  );
+}
+
+const TIPOS_DE_CUENTA = [
+  "Cuenta corriente",
+  "Cuenta vista",
+  "Cuenta RUT",
+  "Cuenta de ahorro",
+];
+
+function CampoCuenta({
+  etiqueta,
+  valor,
+  alCambiar,
+}: {
+  etiqueta: string;
+  valor: string;
+  alCambiar: (valor: string) => void;
+}) {
+  // La etiqueta va amarrada al campo con `htmlFor`. Sin eso un lector de
+  // pantalla lee cinco cajas de texto sin nombre, y tocar la etiqueta en el
+  // celular no enfoca nada: el área tocable se reduce a la caja.
+  const id = useId();
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={id} className="text-xs">
+        {etiqueta}
+      </Label>
+      <Input
+        id={id}
+        value={valor}
+        onChange={(e) => alCambiar(e.target.value)}
+      />
     </div>
   );
 }

@@ -280,6 +280,62 @@ export async function emitirSaldoHotel(
   });
 }
 
+/* ── La plata que sale: devoluciones ──────────────────────────────── */
+
+export interface DevolucionPorTransferir {
+  pago: Pago;
+  cliente: Cliente;
+  /** Dónde transferirle. Vacío si el cliente nunca los dejó. */
+  cuenta?: Cliente["datosBancarios"];
+}
+
+/**
+ * Lo que la casa le debe a un cliente y todavía no le transfirió.
+ *
+ * Un cobro reembolsado con monto en cero NO entra: ese es el caso en que el
+ * cliente nunca alcanzó a pagar y anular el cobro ya fue la devolución. Acá
+ * solo está la plata que entró y tiene que salir.
+ *
+ * Existe porque al cancelar le prometemos al dueño una transferencia, y una
+ * promesa que nadie ve en ninguna pantalla es una promesa que no se cumple.
+ */
+export async function devolucionesPorTransferir(
+  repo: RepositorioPatoteca,
+): Promise<DevolucionPorTransferir[]> {
+  const [pagos, clientes] = await Promise.all([
+    repo.pagos.listar(),
+    repo.clientes.listar(),
+  ]);
+
+  return pagos
+    .filter(
+      (p) =>
+        p.estado === "reembolsado" &&
+        p.monto > 0 &&
+        !p.devolucionTransferidaEn,
+    )
+    .flatMap((pago) => {
+      const cliente = clientes.find((c) => c.id === pago.clienteId);
+      if (!cliente) return [];
+      return [{ pago, cliente, cuenta: cliente.datosBancarios }];
+    })
+    .sort((a, b) => a.pago.emitidoEn.localeCompare(b.pago.emitidoEn));
+}
+
+/** Deja constancia de que la transferencia salió. */
+export async function marcarDevolucionTransferida(
+  repo: RepositorioPatoteca,
+  pagoId: ID,
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<Pago> {
+  const pago = await repo.pagos.obtener(pagoId);
+  if (!pago) throw new DecisionImposible(`No existe el cobro ${pagoId}`);
+  if (pago.devolucionTransferidaEn) {
+    throw new DecisionImposible("Esa devolución ya estaba transferida.");
+  }
+  return repo.pagos.actualizar(pagoId, { devolucionTransferidaEn: ahora });
+}
+
 /* ── Todo junto, por cliente ───────────────────────────────────────── */
 
 export type TipoPendiente = "recargo" | "saldo_hotel" | "dia";

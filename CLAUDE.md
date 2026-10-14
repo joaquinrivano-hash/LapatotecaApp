@@ -333,6 +333,34 @@ recalcula en el render y no al montar: si alguien deja la pestaña abierta toda
 la tarde, lo que ve tiene que ser la condición de ahora y no la de cuando
 abrió.
 
+#### Devolver la plata no es lo mismo que anular el cobro
+
+Cancelar dentro de plazo tiene **dos caminos distintos**, y confundirlos sería
+prometer una transferencia que nunca llega:
+
+- **El cobro estaba pendiente** → anularlo YA es la devolución. No hay plata
+  que mover: queda reembolsado en cero y no se le pide ninguna cuenta.
+- **El dueño alcanzó a pagar** → la plata está en la casa y hay que
+  devolverla. El cobro queda reembolsado **conservando el monto**, que es
+  justamente lo que se le debe, y ahí sí se le piden los datos de
+  transferencia.
+
+Por eso el formulario de cuenta aparece **solo cuando hay algo que devolver**,
+y nunca cuando se cancela fuera de plazo. Ofrecerle una transferencia a alguien
+que nunca pagó, o a alguien que canceló tarde, es ofrecerle algo que no llega.
+
+Los datos se guardan en la **ficha del cliente**, no en el cobro: nadie se sabe
+su número de cuenta de memoria y pedírselo de nuevo en cada devolución es la
+manera de que la devolución quede a medias. El RUT es **del titular**, que
+puede no ser el cliente —hay cuentas a nombre de la pareja— y el banco rechaza
+la transferencia si el nombre no calza.
+
+Y la otra mitad: `/admin/pagos` tiene su propia tarjeta **"Por devolver"**, con
+la cuenta completa a la vista para copiarla. Va aparte de los cobros pendientes
+porque es al revés —ahí entra plata, acá sale— y juntarlas haría fácil
+confundir cobrarle a alguien con devolverle. Una promesa que no aparece en
+ninguna pantalla es una promesa que no se cumple.
+
 `lib/servicios/cobros-pendientes.ts` junta las tres colas que quedan
 esperando en el backoffice, y **no son la misma cosa**:
 

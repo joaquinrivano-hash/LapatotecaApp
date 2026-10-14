@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CobrosPendientes } from "@/components/admin/cobros-pendientes";
+import { Devoluciones } from "@/components/admin/devoluciones";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { PrecioCLP } from "@/components/shared/precio";
 import { Tile } from "@/components/shared/tile";
@@ -96,6 +97,7 @@ export default function Pagos() {
       </div>
 
       <CobrosPendientes />
+      <Devoluciones />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Tile

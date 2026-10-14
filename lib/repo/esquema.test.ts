@@ -12,16 +12,26 @@
  * mirando la pantalla. Acá aparece al correr los tests.
  */
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const raiz = join(__dirname, "..", "..");
 const TS = readFileSync(join(raiz, "lib", "types.ts"), "utf8");
-const SQL = readFileSync(
-  join(raiz, "supabase", "migrations", "20261014120000_esquema.sql"),
-  "utf8",
-);
+
+/**
+ * Todas las migraciones juntas, en el orden en que las aplica Supabase.
+ *
+ * No solo la del esquema: una columna agregada por una migración posterior es
+ * tan parte de la tabla como las que nacieron con ella, y leer solo el primer
+ * archivo haría que esta prueba acusara un desfase que no existe.
+ */
+const migraciones = join(raiz, "supabase", "migrations");
+const SQL = readdirSync(migraciones)
+  .filter((archivo) => archivo.endsWith(".sql"))
+  .sort()
+  .map((archivo) => readFileSync(join(migraciones, archivo), "utf8"))
+  .join("\n");
 
 /** Cada interfaz del dominio con la tabla que la guarda. */
 const PARES: Record<string, string> = {
@@ -72,11 +82,23 @@ function columnasDeLaTabla(tabla: string): string[] {
   ).exec(SQL);
   if (!m) throw new Error(`No encontré la tabla ${tabla} en el esquema`);
   const reservadas = ["unique", "primary", "foreign", "check", "constraint"];
-  return m[1]
+  const propias = m[1]
     .replace(/--.*/g, "")
     .split("\n")
     .map((linea) => /^(\w+) /.exec(linea.trim())?.[1])
     .filter((col): col is string => !!col && !reservadas.includes(col));
+
+  // Las que agregó una migración posterior cuentan igual.
+  const agregadas = [
+    ...SQL.matchAll(
+      new RegExp(
+        `alter table ${tabla}\\s+add column(?: if not exists)? (\\w+)`,
+        "g",
+      ),
+    ),
+  ].map((g) => g[1]);
+
+  return [...propias, ...agregadas];
 }
 
 describe("el esquema y los tipos se describen el uno al otro", () => {

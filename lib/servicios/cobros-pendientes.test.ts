@@ -17,6 +17,8 @@ import {
   diasPorCobrar,
   emitirDiaDeJardin,
   DecisionImposible,
+  devolucionesPorTransferir,
+  marcarDevolucionTransferida,
   emitirSaldoHotel,
   perdonarRecargo,
   recargosPorDecidir,
@@ -359,5 +361,73 @@ describe("agrupado por dueño", () => {
       "recargo_jardin",
       "saldo_hotel",
     ]);
+  });
+});
+
+describe("las devoluciones que todavía no salen", () => {
+  const PAGO_REEMBOLSADO = {
+    id: "pago-dev",
+    clienteId: CLIENTE.id,
+    concepto: "dia_suelto" as const,
+    referenciaId: "est-001",
+    monto: 18_000,
+    estado: "reembolsado" as const,
+    emitidoEn: en("09:00"),
+  };
+
+  it("aparece la plata que entró y tiene que salir", async () => {
+    montar({ estadiasJardin: [], pagos: [PAGO_REEMBOLSADO] });
+    const [devolucion] = await devolucionesPorTransferir(repo);
+    expect(devolucion.pago.monto).toBe(18_000);
+    expect(devolucion.cliente.nombre).toBe("Javiera");
+  });
+
+  it("un reembolso en cero NO aparece: nunca alcanzó a pagar", async () => {
+    // Ese es el caso del cobro pendiente que se anuló. Anularlo ya fue la
+    // devolución; no hay plata que mover y mostrarlo haría buscar una
+    // transferencia que no existe.
+    montar({
+      estadiasJardin: [],
+      pagos: [{ ...PAGO_REEMBOLSADO, monto: 0 }],
+    });
+    expect(await devolucionesPorTransferir(repo)).toEqual([]);
+  });
+
+  it("lleva la cuenta del cliente para poder transferirle", async () => {
+    montar({
+      estadiasJardin: [],
+      clientes: [
+        {
+          ...CLIENTE,
+          datosBancarios: {
+            titular: "Javiera Soto",
+            rut: "11.111.111-1",
+            banco: "Banco de Chile",
+            tipoDeCuenta: "Cuenta corriente",
+            numero: "00012345678",
+          },
+        },
+      ],
+      pagos: [PAGO_REEMBOLSADO],
+    });
+    const [devolucion] = await devolucionesPorTransferir(repo);
+    expect(devolucion.cuenta?.numero).toBe("00012345678");
+  });
+
+  it("marcada como transferida sale de la lista", async () => {
+    montar({ estadiasJardin: [], pagos: [PAGO_REEMBOLSADO] });
+    await marcarDevolucionTransferida(repo, "pago-dev", en("12:00"));
+
+    expect(await devolucionesPorTransferir(repo)).toEqual([]);
+    expect((await repo.pagos.obtener("pago-dev"))!.devolucionTransferidaEn)
+      .toBe(en("12:00"));
+  });
+
+  it("no se transfiere dos veces", async () => {
+    montar({ estadiasJardin: [], pagos: [PAGO_REEMBOLSADO] });
+    await marcarDevolucionTransferida(repo, "pago-dev", en("12:00"));
+    await expect(
+      marcarDevolucionTransferida(repo, "pago-dev"),
+    ).rejects.toThrow(DecisionImposible);
   });
 });

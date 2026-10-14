@@ -22,6 +22,7 @@ import {
   diasConCupo,
   cancelarDiaDeJardin,
   reservarDiaJardin,
+  simularCancelacionDeJardin,
   ReservaRechazada,
 } from "./reservas";
 
@@ -501,5 +502,109 @@ describe("cancelar un día de jardín", () => {
     await expect(
       cancelarDiaDeJardin(repo, estadia.id, en("09:00", "2026-06-14")),
     ).rejects.toThrow(ReservaRechazada);
+  });
+});
+
+describe("devolver la plata cuando ya estaba pagada", () => {
+  const MANANA = "2026-06-16";
+  const CUENTA = {
+    titular: "Javiera Soto",
+    rut: "11.111.111-1",
+    banco: "Banco de Chile",
+    tipoDeCuenta: "Cuenta corriente",
+    numero: "00012345678",
+  };
+
+  async function agendarYPagar() {
+    const { estadia, pago } = await reservarDiaJardin(repo, {
+      perroId: "perro-001",
+      fecha: MANANA,
+    });
+    await repo.pagos.actualizar(pago!.id, {
+      estado: "pagado",
+      metodo: "transferencia",
+      pagadoEn: en("10:00", "2026-06-13"),
+    });
+    return estadia;
+  }
+
+  it("si no alcanzó a pagar, no hay nada que transferir", async () => {
+    // Anular un cobro pendiente YA es la devolución. Prometerle una
+    // transferencia a alguien que nunca pagó es prometerle algo que no va a
+    // llegar nunca.
+    const { estadia } = await reservarDiaJardin(repo, {
+      perroId: "perro-001",
+      fecha: MANANA,
+    });
+    const { aDevolver } = await cancelarDiaDeJardin(
+      repo,
+      estadia.id,
+      en("08:00", "2026-06-14"),
+    );
+    expect(aDevolver).toBe(0);
+  });
+
+  it("si pagó, queda el monto por devolver y el cobro lo conserva", async () => {
+    const estadia = await agendarYPagar();
+    const { aDevolver } = await cancelarDiaDeJardin(
+      repo,
+      estadia.id,
+      en("08:00", "2026-06-14"),
+      CUENTA,
+    );
+
+    expect(aDevolver).toBeGreaterThan(0);
+    const [pago] = await repo.pagos.listar();
+    expect(pago.estado).toBe("reembolsado");
+    // El monto se conserva porque ES lo que se le debe, no se pone en cero.
+    expect(pago.monto).toBe(aDevolver);
+    expect(pago.devolucionTransferidaEn).toBeUndefined();
+  });
+
+  it("guarda los datos en la ficha para no volver a pedirlos", async () => {
+    const estadia = await agendarYPagar();
+    await cancelarDiaDeJardin(repo, estadia.id, en("08:00", "2026-06-14"), CUENTA);
+
+    const cliente = await repo.clientes.obtener(CLIENTE.id);
+    expect(cliente?.datosBancarios?.numero).toBe("00012345678");
+  });
+
+  it("fuera de plazo no se devuelve nada, aunque haya pagado", async () => {
+    const estadia = await agendarYPagar();
+    const { aDevolver } = await cancelarDiaDeJardin(
+      repo,
+      estadia.id,
+      en("20:00", "2026-06-15"),
+      CUENTA,
+    );
+
+    expect(aDevolver).toBe(0);
+    const [pago] = await repo.pagos.listar();
+    expect(pago.estado).toBe("pagado");
+  });
+
+  it("simular no cancela nada, solo dice qué pasaría", async () => {
+    const estadia = await agendarYPagar();
+
+    const dentro = await simularCancelacionDeJardin(
+      repo,
+      estadia.id,
+      en("08:00", "2026-06-14"),
+    );
+    expect(dentro.devolucion.devuelve).toBe(true);
+    expect(dentro.aDevolver).toBeGreaterThan(0);
+
+    const fuera = await simularCancelacionDeJardin(
+      repo,
+      estadia.id,
+      en("20:00", "2026-06-15"),
+    );
+    expect(fuera.devolucion.devuelve).toBe(false);
+    expect(fuera.aDevolver).toBe(0);
+
+    // Y nada de eso tocó la estadía.
+    expect((await repo.estadiasJardin.obtener(estadia.id))!.estado).toBe(
+      "esperada",
+    );
   });
 });
