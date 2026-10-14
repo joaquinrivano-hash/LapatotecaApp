@@ -20,10 +20,13 @@
  */
 
 import { calcularPrecioHotel } from "@/lib/rules/precio-hotel";
+import { fechaISO } from "@/lib/utils/fecha";
 import { calcularRecargoFueraDeHorario } from "@/lib/rules/precio-jardin";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
 import type {
+  Cliente,
   EstadiaJardin,
+  FechaISO,
   ID,
   InstanteISO,
   Pago,
@@ -275,4 +278,113 @@ export async function emitirSaldoHotel(
     estado: "pendiente",
     emitidoEn: ahora,
   });
+}
+
+/* ── Todo junto, por cliente ───────────────────────────────────────── */
+
+export type TipoPendiente = "recargo" | "saldo_hotel" | "dia";
+
+export interface Pendiente {
+  tipo: TipoPendiente;
+  /** La estadía o reserva que lo originó: es con lo que se decide. */
+  referenciaId: ID;
+  perroId: ID;
+  fecha: FechaISO;
+  monto: number;
+  /** Solo en el recargo: cuántas horas pasadas del cierre. */
+  horas?: number;
+}
+
+export interface ClienteConPendientes {
+  cliente: Cliente;
+  pendientes: Pendiente[];
+  total: number;
+}
+
+/**
+ * Las tres colas agrupadas por dueño.
+ *
+ * Agrupar por cliente y no por perro no es una preferencia de diseño: es que
+ * el cobro se le hace a una persona. Un dueño con dos perros que salieron
+ * tarde el mismo día es UNA conversación —y una transferencia—, no dos. Con
+ * las filas sueltas por perro, quien cobra tiene que ir juntando mentalmente
+ * cuáles son del mismo dueño antes de poder escribirle.
+ *
+ * Los dueños salen ordenados por lo que lleva más tiempo esperando, no por
+ * monto: lo que se añeja es lo que se termina no cobrando.
+ */
+export async function cobrosPendientesPorCliente(
+  repo: RepositorioPatoteca,
+): Promise<ClienteConPendientes[]> {
+  const [recargos, saldos, dias, clientes] = await Promise.all([
+    recargosPorDecidir(repo),
+    saldosPorEmitir(repo),
+    diasPorCobrar(repo),
+    repo.clientes.listar(),
+  ]);
+
+  const pendientes: Pendiente[] = [
+    ...recargos.map(({ estadia, horas, monto }) => ({
+      tipo: "recargo" as const,
+      referenciaId: estadia.id,
+      perroId: estadia.perroId,
+      fecha: estadia.fecha,
+      monto,
+      horas,
+    })),
+    ...saldos.map(({ reserva, saldo }) => ({
+      tipo: "saldo_hotel" as const,
+      referenciaId: reserva.id,
+      perroId: reserva.perroId,
+      fecha: fechaISO(reserva.finReal!),
+      monto: saldo,
+    })),
+    ...dias.map(({ estadia, monto }) => ({
+      tipo: "dia" as const,
+      referenciaId: estadia.id,
+      perroId: estadia.perroId,
+      fecha: estadia.fecha,
+      monto,
+    })),
+  ];
+
+  const porCliente = new Map<ID, Pendiente[]>();
+  const duenoDe = new Map<ID, ID>();
+  for (const perro of await repo.perros.listar()) {
+    duenoDe.set(perro.id, perro.clienteId);
+  }
+
+  for (const pendiente of pendientes) {
+    const clienteId = duenoDe.get(pendiente.perroId);
+    // Un perro borrado deja sus estadías huérfanas. No hay a quién cobrarle,
+    // así que no se muestra: una fila sin dueño no lleva a ninguna acción.
+    if (!clienteId) continue;
+    porCliente.set(clienteId, [...(porCliente.get(clienteId) ?? []), pendiente]);
+  }
+
+  return [...porCliente.entries()]
+    .flatMap(([clienteId, suyos]) => {
+      const cliente = clientes.find((c) => c.id === clienteId);
+      if (!cliente) return [];
+      return [{
+        cliente,
+        pendientes: [...suyos].sort((a, b) => a.fecha.localeCompare(b.fecha)),
+        total: suyos.reduce((suma, p) => suma + p.monto, 0),
+      }];
+    })
+    .sort((a, b) =>
+      a.pendientes[0].fecha.localeCompare(b.pendientes[0].fecha),
+    );
+}
+
+/** Resuelve un pendiente cobrándolo, sea del tipo que sea. */
+export async function cobrarPendiente(
+  repo: RepositorioPatoteca,
+  pendiente: Pendiente,
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<Pago> {
+  const { tipo, referenciaId } = pendiente;
+  if (tipo === "recargo") return cobrarRecargo(repo, referenciaId, ahora);
+  if (tipo === "saldo_hotel") return emitirSaldoHotel(repo, referenciaId, ahora);
+  return emitirDiaDeJardin(repo, referenciaId, ahora);
 }

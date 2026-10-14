@@ -349,9 +349,22 @@ concepto para esta estadía?"**: perdonar deja un cobro en cero, no deja un
 vacío, así que la cola no lo vuelve a ofrecer.
 
 La tarjeta vive en `/admin/pagos` y **se esconde sola cuando no hay nada**: un
-negocio al día no necesita mirar una tarjeta vacía todos los días. Muestra seis
-filas por sección y resume el resto, porque un fin de semana largo puede dejar
-quince retiros tarde y quince filas con dos botones no se leen, se barren.
+negocio al día no necesita mirar una tarjeta vacía todos los días. Muestra
+cinco dueños y resume el resto, porque un fin de semana largo puede dejar
+quince y quince bloques con botones no se leen, se barren.
+
+**Se agrupa por dueño, no por perro.** No es una preferencia de diseño: el
+cobro se le hace a una persona. Dos perros de la misma casa que salieron tarde
+el mismo día son UNA conversación y una transferencia; con las filas sueltas
+por perro, quien cobra tiene que ir juntando mentalmente cuáles son del mismo
+dueño antes de poder escribirle. Por eso cada dueño trae su total y un "Cobrar
+todo" cuando tiene más de uno.
+
+Los dueños salen ordenados por **lo que lleva más tiempo esperando**, no por
+monto: lo que se añeja es lo que se termina no cobrando.
+
+Y "Perdonar" aparece **solo en el recargo**. Un saldo de hotel o un día ya
+usado no son una decisión, son una deuda.
 
 En `/staff` el cierre avisa el atraso **en horas, sin el monto**: hay que
 conversarlo con el dueño que está ahí parado, pero poner un precio en esa

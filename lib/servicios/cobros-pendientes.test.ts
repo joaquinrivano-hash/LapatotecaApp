@@ -11,7 +11,9 @@ import type {
   ReservaHotel,
 } from "@/lib/types";
 import {
+  cobrarPendiente,
   cobrarRecargo,
+  cobrosPendientesPorCliente,
   diasPorCobrar,
   emitirDiaDeJardin,
   DecisionImposible,
@@ -257,5 +259,105 @@ describe("el día que nadie alcanzó a pagar por adelantado", () => {
   it("un día con plan tampoco: el pack ya lo pagó", async () => {
     montar({ estadiasJardin: [{ ...cerrada("17:30"), origen: "plan" }] });
     expect(await diasPorCobrar(repo)).toEqual([]);
+  });
+});
+
+describe("agrupado por dueño", () => {
+  const OTRO_PERRO: Perro = { ...PELUSA, id: "perro-002", nombre: "Rocco" };
+  const OTRO_CLIENTE: Cliente = {
+    ...CLIENTE,
+    id: "cli-002",
+    nombre: "Mariana",
+    apellido: "Vera",
+  };
+  const PERRO_AJENO: Perro = {
+    ...PELUSA,
+    id: "perro-003",
+    nombre: "Kira",
+    clienteId: OTRO_CLIENTE.id,
+  };
+
+  it("junta los dos perros de un mismo dueño en una sola fila", async () => {
+    // Dos perros de Javiera salieron tarde el mismo día. Eso es una
+    // conversación con Javiera, no dos.
+    montar({
+      perros: [PELUSA, OTRO_PERRO],
+      estadiasJardin: [
+        cerrada("20:30", "est-001"),
+        { ...cerrada("21:30", "est-002"), perroId: OTRO_PERRO.id },
+      ],
+    });
+
+    const grupos = await cobrosPendientesPorCliente(repo);
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].cliente.nombre).toBe("Javiera");
+    expect(grupos[0].pendientes).toHaveLength(2);
+    expect(grupos[0].total).toBe(2_000 + 3_000);
+  });
+
+  it("no mezcla dueños distintos", async () => {
+    montar({
+      clientes: [CLIENTE, OTRO_CLIENTE],
+      perros: [PELUSA, PERRO_AJENO],
+      estadiasJardin: [
+        cerrada("20:30", "est-001"),
+        { ...cerrada("20:30", "est-002"), perroId: PERRO_AJENO.id, clienteId: OTRO_CLIENTE.id },
+      ],
+    });
+
+    const grupos = await cobrosPendientesPorCliente(repo);
+    expect(grupos).toHaveLength(2);
+    expect(grupos.map((g) => g.pendientes.length)).toEqual([1, 1]);
+  });
+
+  it("junta tipos distintos del mismo dueño", async () => {
+    montar({
+      estadiasJardin: [cerrada("20:30")],
+      reservasHotel: [reservaCerrada("10:00")],
+    });
+
+    const [grupo] = await cobrosPendientesPorCliente(repo);
+    expect(grupo.pendientes.map((p) => p.tipo).sort()).toEqual([
+      "recargo",
+      "saldo_hotel",
+    ]);
+    expect(grupo.total).toBe(2_000 + 24_000);
+  });
+
+  it("ordena por lo que lleva más tiempo esperando", async () => {
+    // Lo que se añeja es lo que se termina no cobrando.
+    montar({
+      clientes: [CLIENTE, OTRO_CLIENTE],
+      perros: [PELUSA, PERRO_AJENO],
+      estadiasJardin: [
+        { ...cerrada("20:30", "est-001"), fecha: "2026-06-20" },
+        {
+          ...cerrada("20:30", "est-002"),
+          fecha: "2026-06-10",
+          perroId: PERRO_AJENO.id,
+          clienteId: OTRO_CLIENTE.id,
+        },
+      ],
+    });
+
+    const grupos = await cobrosPendientesPorCliente(repo);
+    expect(grupos.map((g) => g.cliente.nombre)).toEqual(["Mariana", "Javiera"]);
+  });
+
+  it("cobrarPendiente resuelve cualquiera de los tres tipos", async () => {
+    montar({
+      estadiasJardin: [cerrada("20:30")],
+      reservasHotel: [reservaCerrada("10:00")],
+    });
+
+    const [grupo] = await cobrosPendientesPorCliente(repo);
+    for (const pendiente of grupo.pendientes) {
+      await cobrarPendiente(repo, pendiente, en("22:00"));
+    }
+    expect(await cobrosPendientesPorCliente(repo)).toEqual([]);
+    expect((await repo.pagos.listar()).map((p) => p.concepto).sort()).toEqual([
+      "recargo_jardin",
+      "saldo_hotel",
+    ]);
   });
 });
