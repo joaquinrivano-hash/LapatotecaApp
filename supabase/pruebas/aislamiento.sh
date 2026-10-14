@@ -38,9 +38,10 @@ sql () { psql -h "$D" -U postgres -tAqc "$1"; }
 
 echo "▸ corriendo migraciones (dos veces, para probar que se repiten sin daño)"
 for vuelta in 1 2; do
+  # El andamio primero, después las migraciones en el mismo orden en que
+  # las aplica Supabase: por nombre, que por eso lleva marca de tiempo.
   for archivo in supabase/pruebas/andamio.sql \
-                 supabase/migraciones/0001_esquema.sql \
-                 supabase/migraciones/0002_permisos.sql; do
+                 $(cd "$raiz" && ls supabase/migrations/*.sql); do
     salida=$(psql -h "$D" -U postgres -v ON_ERROR_STOP=1 -q \
       -f "$raiz/$archivo" 2>&1 | grep -i "^psql.*ERROR")
     if [[ -n $salida ]]; then

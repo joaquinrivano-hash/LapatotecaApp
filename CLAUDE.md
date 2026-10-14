@@ -611,10 +611,18 @@ la fecha va en dos líneas ("lun" sobre "28") y el mes vive en el encabezado.
 
 ### La nube: las reglas viven pegadas a los datos
 
-`supabase/migraciones/`. Dos archivos que se pegan en el editor SQL de
-Supabase, en orden, y que se pueden correr de nuevo sin hacer daño:
-`0001_esquema.sql` crea las tablas y `0002_permisos.sql` define quién ve
-qué.
+`supabase/migrations/`. Dos archivos que se pegan en el editor SQL de
+Supabase, en orden, y que se pueden correr de nuevo sin hacer daño: el de
+`_esquema` crea las tablas y el de `_permisos` define quién ve qué.
+
+La carpeta se llama `migrations` y los archivos llevan **marca de tiempo**
+(`20261014120000_esquema.sql`) aunque el resto del repo esté en español: es
+la ruta y el formato que la integración de Supabase con GitHub espera, y se
+aplican **en orden alfabético**, que con marca de tiempo es el orden
+cronológico. Una migración que depende de otra anterior siempre lleva marca
+posterior. Pelear con la convención de una herramienta para ganar
+consistencia de nombres sale caro el día que se quiera encender la
+integración.
 
 Esto es lo que reemplaza al selector de rol. En el prototipo el rol vive en
 el navegador: cualquiera abre las herramientas de desarrollo, lo cambia a
