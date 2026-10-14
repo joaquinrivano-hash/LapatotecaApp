@@ -160,7 +160,7 @@ export function calcularPrecioHotel(entrada: EntradaPrecioHotel): Cotizacion {
   return { ...cotizacion, abono: calcularAbono(cotizacion.total) };
 }
 
-/** El 30% que se paga al reservar. */
+/** La fracción del total que se paga al reservar. */
 export function calcularAbono(total: number): number {
   return redondearCLP(total * NEGOCIO.hotel.fraccionAbono);
 }

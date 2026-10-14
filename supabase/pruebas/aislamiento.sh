@@ -74,11 +74,11 @@ comprobar_vista () {
 }
 
 echo "▸ lo que ve cada rol"
-# Ana y Beto: lo suyo y nada más. El equipo ve el cobro pendiente que nace
-# de su turno, y NI la cuenta del mes de Ana NI el día suelto ya conciliado.
+# Ana y Beto: lo suyo y nada más. El equipo: ningún cobro, de ningún tipo.
+# Ya no emite ninguno, así que no le hace falta ver ninguno.
 comprobar_vista Ana   "$ANA"   "clientes=1 configuracion=1 pagos=2 perros=1 reportes=1"
 comprobar_vista Beto  "$BETO"  "clientes=1 configuracion=1 pagos=1 perros=1 reportes=1"
-comprobar_vista Staff "$STAFF" "clientes=2 configuracion=1 pagos=1 perros=2 reportes=2"
+comprobar_vista Staff "$STAFF" "clientes=2 configuracion=1 pagos=0 perros=2 reportes=2"
 comprobar_vista Admin "$ADMIN" "clientes=2 configuracion=1 pagos=3 perros=2 reportes=2"
 comprobar_vista Anón  ""       "clientes=0 configuracion=1 pagos=0 perros=0 reportes=0"
 
@@ -175,16 +175,14 @@ intento_como "$STAFF" "abre la ficha del perro" "Mestizo" \
   "select raza from perros where nombre = 'Lola';"
 intento_como "$STAFF" "anota un incidente" "1" \
   "insert into incidentes (perro_id, fecha, tipo, gravedad, descripcion, autor_staff) values ('cccccccc-0000-0000-0000-000000000001', current_date, 'roce', 'leve', 'Se puso intensa en el patio', 'Javi'); select count(*) from incidentes;"
-intento_como "$STAFF" "cobra el día que acaba de cerrar" "18000" \
-  "insert into pagos (cliente_id, concepto, monto, estado) values ('aaaaaaaa-0000-0000-0000-000000000001', 'dia_suelto', 18000, 'pendiente'); select monto from pagos where monto = 18000;"
 
 echo "▸ y lo que el cuidador NO"
-intento_como "$STAFF" "marca un cobro como pagado" "violates row-level security" \
-  "update pagos set estado = 'pagado' where concepto = 'dia_de_prueba'; select estado from pagos where concepto = 'dia_de_prueba';"
-intento_como "$STAFF" "crea un cobro ya pagado" "violates row-level security" \
-  "insert into pagos (cliente_id, concepto, monto, estado) values ('aaaaaaaa-0000-0000-0000-000000000001', 'dia_suelto', 1, 'pagado');"
-intento_como "$STAFF" "toca un cobro ya conciliado" "0" \
-  "update pagos set monto = 1 where concepto = 'dia_suelto' and estado = 'pagado'; select count(*) from pagos where monto = 1;"
+intento_como "$STAFF" "emite el cobro del día que cerró" "violates row-level security" \
+  "insert into pagos (cliente_id, concepto, monto, estado) values ('aaaaaaaa-0000-0000-0000-000000000001', 'dia_suelto', 18000, 'pendiente');"
+intento_como "$STAFF" "ve cualquier cobro" "0" \
+  "select count(*) from pagos;"
+intento_como "$STAFF" "marca un cobro como pagado" "0" \
+  "update pagos set estado = 'pagado' where concepto = 'dia_de_prueba'; select count(*) from pagos where estado = 'pagado' and concepto = 'dia_de_prueba';"
 intento_como "$STAFF" "ve la cuenta del mes de un cliente" "0" \
   "select count(*) from cuentas_mensuales;"
 intento_como "$STAFF" "suma las ganancias del mes" "0" \
@@ -201,7 +199,8 @@ intento_como "$STAFF" "cambia el precio de la vitrina" "6000" \
 echo "▸ repetir un archivo suelto no rompe los demás"
 psql -h "$D" -U postgres -v ON_ERROR_STOP=1 -q \
   -f "$raiz/supabase/migrations/20261014120100_permisos.sql" >/dev/null 2>&1
-quedan=$(sql "select count(*) from pg_policies where policyname = 'el equipo cobra lo de su turno';" | tail -1)
+# Una política creada por una migración POSTERIOR al archivo de permisos.
+quedan=$(sql "select count(*) from pg_policies where policyname = 'agendo y queda pendiente';" | tail -1)
 if [[ $quedan == "1" ]]; then
   echo "  ✓ las políticas de las migraciones posteriores siguen ahí"
 else

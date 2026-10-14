@@ -65,7 +65,7 @@ export const NEGOCIO = {
     nochesParaDescuento10: 7,
     nochesParaDescuento15: 14,
     /** Fracción del total que se paga al reservar. */
-    fraccionAbono: 0.3,
+    fraccionAbono: 0.5,
     /** Cancelando con al menos estas horas de aviso, el abono se devuelve entero. */
     horasParaDevolucion: 48,
   },

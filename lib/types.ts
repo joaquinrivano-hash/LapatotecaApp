@@ -187,7 +187,7 @@ export interface Cotizacion {
   subtotal: number;
   descuentos: DescuentoAplicado[];
   total: number;
-  /** Solo en hotel: 30% que se paga al reservar. */
+  /** Solo en hotel: la fracción del total que se paga al reservar. */
   abono?: number;
 }
 
@@ -316,6 +316,8 @@ export type ConceptoPago =
   | "abono_hotel"
   | "saldo_hotel"
   | "dia_suelto"
+  /** Retiro tarde del jardín. Lo decide Administración, no nace solo. */
+  | "recargo_jardin"
   | "plan"
   | "servicio"
   | "tienda"

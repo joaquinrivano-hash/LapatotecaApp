@@ -160,7 +160,7 @@ export interface ResultadoReservaHotel {
   abono: Pago;
 }
 
-/** Confirma la reserva y deja pagado el abono del 30% (mock). */
+/** Confirma la reserva y deja pagado el abono (mock). */
 export async function crearReservaHotel(
   repo: RepositorioPatoteca,
   entrada: EntradaReservaHotel,
@@ -325,9 +325,26 @@ export async function reservarDiaJardin(
     creadaEn: ahora,
   });
 
-  // El día suelto se cobra al cerrar la jornada, con la hora real: acá solo
-  // queda agendado.
-  return { estadia, planUsado, pago: null };
+  // El día suelto se paga POR ADELANTADO, igual que el plan: la jornada se
+  // cobra al agendarla, no al cerrarla. Lo que puede aparecer después es el
+  // recargo por retiro tarde, y ese no nace solo — lo decide Administración.
+  //
+  // Con plan el total es cero: el pack ya cubrió el día y lo único que pasó
+  // al agendar fue descontarlo del saldo.
+  const total = previa.cotizacion.total;
+  const pago =
+    total > 0
+      ? await repo.pagos.crear({
+          clienteId: perro.clienteId,
+          concepto: "dia_suelto",
+          referenciaId: estadia.id,
+          monto: total,
+          estado: "pendiente",
+          emitidoEn: ahora,
+        })
+      : null;
+
+  return { estadia, planUsado, pago };
 }
 
 /* ── Jardín: plan ──────────────────────────────────────────────────── */

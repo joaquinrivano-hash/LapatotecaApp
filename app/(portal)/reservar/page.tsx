@@ -59,6 +59,14 @@ function avisarError(error: unknown) {
   }
 }
 
+/**
+ * El abono sale de la config, nunca escrito a mano en la frase: un
+ * porcentaje suelto en una pantalla se queda viejo el día que cambia la
+ * regla, y nadie lo nota hasta que un cliente reclama que le cobraron otra
+ * cosa de la que decía.
+ */
+const PORCENTAJE_ABONO = Math.round(NEGOCIO.hotel.fraccionAbono * 100);
+
 export default function Reservar() {
   const datos = useCliente();
   const [perroId, setPerroId] = useState<string | null>(null);
@@ -476,7 +484,7 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
         }),
       );
       toast.success("Reserva confirmada", {
-        description: "Pagaste el abono del 30%. El saldo se cobra al retiro.",
+        description: `Pagaste el abono del ${PORCENTAJE_ABONO}%. El saldo se cobra al retiro.`,
       });
     } catch (error) {
       avisarError(error);
@@ -490,7 +498,7 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
       <CardHeader className="pb-2">
         <CardTitle>Hotel</CardTitle>
         <p className="text-muted-foreground text-sm">
-          Se reserva con {Math.round(NEGOCIO.hotel.fraccionAbono * 100)}% de
+          Se reserva con {PORCENTAJE_ABONO}% de
           abono. Devolución con {NEGOCIO.hotel.horasParaDevolucion} h de aviso.
         </p>
       </CardHeader>
@@ -576,7 +584,9 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
             )}
             <Desglose cotizacion={datos.cotizacion} />
             <p className="bg-secondary/60 flex items-baseline justify-between gap-3 rounded-xl p-3 text-sm">
-              <span className="font-semibold">Pagas ahora (abono 30%)</span>
+              <span className="font-semibold">
+                Pagas ahora (abono {PORCENTAJE_ABONO}%)
+              </span>
               <PrecioCLP monto={datos.abono} tamano="lg" />
             </p>
             <Reparos

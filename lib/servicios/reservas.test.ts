@@ -96,10 +96,23 @@ function llenarJardin(cantidad: number, dia = LUNES): EstadiaJardin[] {
   }));
 }
 
+/** Plan con saldo y vigente en el mes de las pruebas. */
+const PLAN_VIGENTE: PlanComprado = {
+  id: "pl-vigente",
+  clienteId: CLIENTE.id,
+  perroId: "perro-001",
+  tipo: "dias",
+  diasTotales: 10,
+  diasUsados: 2,
+  compradoEn: en("10:00", "2026-06-01"),
+  venceEn: "2026-06-30",
+  precio: 150_000,
+};
+
 beforeEach(() => montar());
 
 describe("cotizar hotel", () => {
-  it("cobra por noche y calcula el abono del 30%", async () => {
+  it("cobra por noche y calcula el abono al reservar", async () => {
     const c = await cotizarReservaHotel(repo, {
       perroId: "perro-001",
       inicio: en("10:00"),
@@ -107,7 +120,7 @@ describe("cotizar hotel", () => {
     });
 
     expect(c.cotizacion.total).toBe(72_000);
-    expect(c.abono).toBe(21_600);
+    expect(c.abono).toBe(72_000 * NEGOCIO.hotel.fraccionAbono);
     expect(c.sePuede).toBe(true);
   });
 
@@ -168,7 +181,7 @@ describe("crear reserva de hotel", () => {
 
     expect(reserva.estado).toBe("confirmada");
     expect(reserva.abonoPagado).toBe(true);
-    expect(abono.monto).toBe(21_600);
+    expect(abono.monto).toBe(72_000 * NEGOCIO.hotel.fraccionAbono);
     expect(abono.estado).toBe("pagado");
     expect(await repo.reservasHotel.listar()).toHaveLength(1);
   });
@@ -258,12 +271,27 @@ describe("día de jardín", () => {
     ).rejects.toThrow(ReservaRechazada);
   });
 
-  it("el día suelto no se cobra al agendar: se cobra al cerrar la jornada", async () => {
-    const { pago } = await reservarDiaJardin(repo, {
+  it("el día suelto se paga por adelantado, al agendarlo", async () => {
+    const { pago, estadia } = await reservarDiaJardin(repo, {
       perroId: "perro-001",
       fecha: LUNES,
     });
+
+    expect(pago?.concepto).toBe("dia_suelto");
+    expect(pago?.monto).toBe(estadia.cotizacion?.total);
+    expect(pago?.estado).toBe("pendiente");
+    expect(await repo.pagos.listar()).toHaveLength(1);
+  });
+
+  it("con plan no cobra nada: el pack ya pagó el día", async () => {
+    montar({ planes: [PLAN_VIGENTE] });
+    const { pago, planUsado } = await reservarDiaJardin(repo, {
+      perroId: "perro-001",
+      fecha: LUNES,
+    });
+
     expect(pago).toBeNull();
+    expect(planUsado?.diasUsados).toBe(PLAN_VIGENTE.diasUsados + 1);
     expect(await repo.pagos.listar()).toHaveLength(0);
   });
 });

@@ -36,7 +36,6 @@ import type {
   ID,
   InstanteISO,
   OcupacionDia,
-  Pago,
   Perro,
   PlanComprado,
   ReservaHotel,
@@ -114,7 +113,6 @@ export interface ResultadoSalida {
   /** Recargo por retiro tarde, si lo hubo. */
   recargo: number;
   horasFueraDeHorario: number;
-  pago: Pago | null;
 }
 
 /**
@@ -144,55 +142,22 @@ export async function registrarSalidaJardin(
     cotizacion,
   });
 
-  const pago = await registrarCobroDeEstadia(repo, actualizada, ahora);
-
+  // Acá NO se emite ningún cobro, y es el punto del cambio.
+  //
+  // La jornada ya se pagó por adelantado —el plan al comprarlo, el día
+  // suelto al agendarlo—, así que cerrar no deja nada que cobrar por el día.
+  // Lo único que puede aparecer es el recargo por retiro tarde, y ese no
+  // nace solo: lo decide Administración, que es la que ve el total y la que
+  // sabe si al dueño se le perdona el atraso de hoy.
+  //
+  // Lo que sí tiene que quedar guardado es la hora real de salida, porque de
+  // ahí sale el cálculo cuando alguien lo decida. El cuidador registra lo que
+  // pasó; cobrarlo es otra decisión y de otra persona.
   return {
     estadia: actualizada,
     recargo: recargo.monto,
     horasFueraDeHorario: recargo.horas,
-    pago,
   };
-}
-
-/**
- * Deja el cobro de la jornada al día. Si ya había uno emitido, lo corrige en
- * vez de duplicarlo: un perro no puede aparecer cobrado dos veces por el
- * mismo día.
- */
-async function registrarCobroDeEstadia(
-  repo: RepositorioPatoteca,
-  estadia: EstadiaJardin,
-  ahora: InstanteISO,
-): Promise<Pago | null> {
-  const total = estadia.cotizacion?.total ?? 0;
-  const existentes = await repo.pagos.listar();
-  const previo = existentes.find(
-    (p) => p.referenciaId === estadia.id && p.estado !== "reembolsado",
-  );
-
-  if (total <= 0) {
-    // Jornada cubierta por el plan y sin recargo: no hay nada que cobrar.
-    if (previo && previo.estado === "pendiente") {
-      await repo.pagos.eliminar(previo.id);
-    }
-    return null;
-  }
-
-  const concepto =
-    estadia.origen === "dia_de_prueba" ? "dia_de_prueba" : "dia_suelto";
-
-  if (previo) {
-    return repo.pagos.actualizar(previo.id, { monto: total, concepto });
-  }
-
-  return repo.pagos.crear({
-    clienteId: estadia.clienteId,
-    concepto,
-    referenciaId: estadia.id,
-    monto: total,
-    estado: "pendiente",
-    emitidoEn: ahora,
-  });
 }
 
 /* ── Hotel ─────────────────────────────────────────────────────────── */
@@ -212,8 +177,11 @@ export interface ResultadoSalidaHotel {
   reserva: ReservaHotel;
   /** Diferencia contra lo cotizado al reservar. Positiva = se pasó. */
   diferencia: number;
+  /**
+   * Lo que queda por cobrar contra el abono. Está CALCULADO, no emitido: el
+   * cobro lo crea Administración desde el backoffice.
+   */
   saldoPorCobrar: number;
-  pago: Pago | null;
 }
 
 export async function registrarSalidaHotel(
@@ -244,30 +212,13 @@ export async function registrarSalidaHotel(
   const abono = cotizacionOriginal.abono ?? 0;
   const saldoPorCobrar = Math.max(0, cotizacion.total - abono);
 
-  const existentes = await repo.pagos.porCliente(reserva.clienteId);
-  const previo = existentes.find(
-    (p) => p.referenciaId === reserva.id && p.concepto === "saldo_hotel",
-  );
-
-  let pago: Pago | null = null;
-  if (saldoPorCobrar > 0) {
-    pago = previo
-      ? await repo.pagos.actualizar(previo.id, { monto: saldoPorCobrar })
-      : await repo.pagos.crear({
-          clienteId: reserva.clienteId,
-          concepto: "saldo_hotel",
-          referenciaId: reserva.id,
-          monto: saldoPorCobrar,
-          estado: "pendiente",
-          emitidoEn: ahora,
-        });
-  }
-
+  // Igual que en el jardín: el cuidador registra la salida y el saldo queda
+  // calculado, pero el cobro lo emite Administración desde el backoffice. El
+  // que recibe al perro en la puerta no emite documentos.
   return {
     reserva: actualizada,
     diferencia: cotizacion.total - cotizacionOriginal.total,
     saldoPorCobrar,
-    pago,
   };
 }
 
@@ -444,6 +395,15 @@ export async function registrarIngreso(
     creadaEn: inicio,
   });
 
+  // Tampoco se cobra acá, y por la misma razón que el cierre: el cuidador no
+  // emite documentos.
+  //
+  // "Por adelantado" tiene sentido cuando alguien reserva con anticipación y
+  // elige pagar antes. Un perro que aparece en la puerta no puede pagar por
+  // adelantado un día que ya empezó, así que su jornada queda registrada y
+  // Administración la emite después, junto con lo demás. Si se olvidara, no
+  // se pierde: aparece en la cola de días por cobrar hasta que alguien la
+  // emita.
   return { estadia, planUsado, revision };
 }
 

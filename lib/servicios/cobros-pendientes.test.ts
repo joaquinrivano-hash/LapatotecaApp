@@ -1,0 +1,261 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import type { DatosPatoteca } from "@/lib/data/seed";
+import { crearAlmacenMemoria } from "@/lib/repo/almacen";
+import { CLAVE_ALMACEN, crearRepositorioLocal } from "@/lib/repo/local";
+import type { RepositorioPatoteca } from "@/lib/repo/tipos";
+import { instanteEnHora } from "@/lib/utils/fecha";
+import type {
+  Cliente,
+  EstadiaJardin,
+  Perro,
+  ReservaHotel,
+} from "@/lib/types";
+import {
+  cobrarRecargo,
+  diasPorCobrar,
+  emitirDiaDeJardin,
+  DecisionImposible,
+  emitirSaldoHotel,
+  perdonarRecargo,
+  recargosPorDecidir,
+  saldosPorEmitir,
+} from "./cobros-pendientes";
+
+const DIA = "2026-06-15";
+const en = (hora: string, dia = DIA) => instanteEnHora(dia, hora);
+
+const CLIENTE: Cliente = {
+  id: "cli-001",
+  nombre: "Javiera",
+  apellido: "Soto",
+  email: "javiera@correo.cl",
+  telefono: "+569 1111 1111",
+  comuna: "Providencia",
+  creadoEn: en("10:00", "2026-01-01"),
+};
+
+const PELUSA: Perro = {
+  id: "perro-001",
+  clienteId: CLIENTE.id,
+  nombre: "Pelusa",
+  raza: "Quiltro",
+  pesoKg: 12,
+  sexo: "hembra",
+  esterilizado: true,
+  vacunas: [],
+  diaDePrueba: { estado: "aprobado" },
+  creadoEn: en("10:00", "2026-01-01"),
+};
+
+/** Una jornada ya cerrada, con la hora de salida que se le indique. */
+function cerrada(finReal: string, id = "est-001"): EstadiaJardin {
+  return {
+    id,
+    clienteId: CLIENTE.id,
+    perroId: PELUSA.id,
+    fecha: DIA,
+    inicioProgramado: en("08:00"),
+    finProgramado: en("18:00"),
+    inicioReal: en("08:00"),
+    finReal: en(finReal),
+    origen: "dia_suelto",
+    estado: "finalizada",
+    creadaEn: en("10:00", "2026-06-10"),
+  };
+}
+
+function reservaCerrada(finReal: string): ReservaHotel {
+  return {
+    id: "res-001",
+    clienteId: CLIENTE.id,
+    perroId: PELUSA.id,
+    inicioProgramado: en("10:00", "2026-06-14"),
+    finProgramado: en("10:00", "2026-06-16"),
+    inicioReal: en("10:00", "2026-06-14"),
+    finReal: en(finReal, "2026-06-16"),
+    paseosContratados: 0,
+    estado: "finalizada",
+    cotizacion: {
+      lineas: [{ concepto: "Alojamiento", monto: 48_000 }],
+      subtotal: 48_000,
+      descuentos: [],
+      total: 48_000,
+      abono: 24_000,
+    },
+    abonoPagado: true,
+    creadaEn: en("10:00", "2026-06-01"),
+  };
+}
+
+let repo: RepositorioPatoteca;
+
+function montar(datos: Partial<DatosPatoteca>) {
+  const almacen = crearAlmacenMemoria();
+  almacen.escribir(CLAVE_ALMACEN, {
+    hoy: DIA,
+    clientes: [CLIENTE],
+    perros: [PELUSA],
+    ...datos,
+  } as DatosPatoteca);
+  repo = crearRepositorioLocal({ almacen });
+}
+
+beforeEach(() => montar({ estadiasJardin: [cerrada("20:30")] }));
+
+describe("el recargo fuera de horario espera una decisión", () => {
+  it("aparece en la cola con sus horas y su monto", async () => {
+    const cola = await recargosPorDecidir(repo);
+    expect(cola).toHaveLength(1);
+    expect(cola[0].horas).toBe(2);
+    expect(cola[0].monto).toBe(2_000);
+  });
+
+  it("un retiro a la hora no aparece", async () => {
+    montar({ estadiasJardin: [cerrada("17:30")] });
+    expect(await recargosPorDecidir(repo)).toEqual([]);
+  });
+
+  it("los 15 minutos de gracia tampoco", async () => {
+    montar({ estadiasJardin: [cerrada("19:10")] });
+    expect(await recargosPorDecidir(repo)).toEqual([]);
+  });
+
+  it("una jornada todavía abierta no se decide", async () => {
+    montar({
+      estadiasJardin: [{ ...cerrada("20:30"), estado: "presente", finReal: undefined }],
+    });
+    expect(await recargosPorDecidir(repo)).toEqual([]);
+  });
+});
+
+describe("cobrarlo", () => {
+  it("emite el recargo pendiente y lo saca de la cola", async () => {
+    const pago = await cobrarRecargo(repo, "est-001", en("21:00"));
+
+    expect(pago.concepto).toBe("recargo_jardin");
+    expect(pago.monto).toBe(2_000);
+    expect(pago.estado).toBe("pendiente");
+    expect(await recargosPorDecidir(repo)).toEqual([]);
+  });
+
+  it("no se puede cobrar dos veces el mismo retiro", async () => {
+    await cobrarRecargo(repo, "est-001", en("21:00"));
+    await expect(cobrarRecargo(repo, "est-001", en("21:05"))).rejects.toThrow(
+      DecisionImposible,
+    );
+  });
+
+  it("no cobra un retiro que no tiene recargo", async () => {
+    montar({ estadiasJardin: [cerrada("17:30")] });
+    await expect(cobrarRecargo(repo, "est-001")).rejects.toThrow(
+      DecisionImposible,
+    );
+  });
+});
+
+describe("perdonarlo", () => {
+  it("deja rastro en vez de desaparecer", async () => {
+    // Un cobro que se borra no deja cómo explicar, el día 1, por qué ese
+    // retiro tarde no se cobró.
+    const pago = await perdonarRecargo(repo, "est-001", en("21:00"));
+
+    expect(pago.monto).toBe(0);
+    expect(pago.estado).toBe("reembolsado");
+    expect(await repo.pagos.listar()).toHaveLength(1);
+  });
+
+  it("lo saca de la cola: perdonado es decidido", async () => {
+    await perdonarRecargo(repo, "est-001", en("21:00"));
+    expect(await recargosPorDecidir(repo)).toEqual([]);
+  });
+
+  it("no suma nada por cobrar", async () => {
+    await perdonarRecargo(repo, "est-001", en("21:00"));
+    expect(await repo.pagos.porCobrar()).toEqual([]);
+  });
+
+  it("perdonado no se puede volver a cobrar", async () => {
+    await perdonarRecargo(repo, "est-001", en("21:00"));
+    await expect(cobrarRecargo(repo, "est-001")).rejects.toThrow(
+      DecisionImposible,
+    );
+  });
+});
+
+describe("el saldo de hotel se emite, no se decide", () => {
+  beforeEach(() =>
+    montar({ estadiasJardin: [], reservasHotel: [reservaCerrada("10:00")] }),
+  );
+
+  it("queda calculado contra el abono ya pagado", async () => {
+    const cola = await saldosPorEmitir(repo);
+    expect(cola).toHaveLength(1);
+    // 48.000 de dos noches menos los 24.000 del abono.
+    expect(cola[0].saldo).toBe(24_000);
+  });
+
+  it("emitido sale de la cola", async () => {
+    const pago = await emitirSaldoHotel(repo, "res-001", en("11:00"));
+    expect(pago.concepto).toBe("saldo_hotel");
+    expect(pago.monto).toBe(24_000);
+    expect(await saldosPorEmitir(repo)).toEqual([]);
+  });
+
+  it("no se emite dos veces", async () => {
+    await emitirSaldoHotel(repo, "res-001", en("11:00"));
+    await expect(emitirSaldoHotel(repo, "res-001")).rejects.toThrow(
+      DecisionImposible,
+    );
+  });
+
+  it("una salida tarde sube el saldo, sin pedirle permiso a nadie", async () => {
+    // A diferencia del jardín, acá no hay decisión: el hotel se paga según
+    // la salida real y pasada la tolerancia corre la hora extra.
+    montar({ estadiasJardin: [], reservasHotel: [reservaCerrada("16:00")] });
+    const [{ saldo }] = await saldosPorEmitir(repo);
+    expect(saldo).toBeGreaterThan(24_000);
+  });
+});
+
+describe("el día que nadie alcanzó a pagar por adelantado", () => {
+  it("un ingreso no planificado queda esperando que lo emitan", async () => {
+    montar({
+      estadiasJardin: [
+        { ...cerrada("17:30"), cotizacion: { lineas: [], subtotal: 16_000, descuentos: [], total: 16_000 } },
+      ],
+    });
+
+    const [dia] = await diasPorCobrar(repo);
+    expect(dia.monto).toBe(16_000);
+
+    const pago = await emitirDiaDeJardin(repo, "est-001", en("18:00"));
+    expect(pago.concepto).toBe("dia_suelto");
+    expect(pago.monto).toBe(16_000);
+    expect(await diasPorCobrar(repo)).toEqual([]);
+  });
+
+  it("un día reservado desde el portal no aparece: ya venía cobrado", async () => {
+    montar({
+      estadiasJardin: [
+        { ...cerrada("17:30"), cotizacion: { lineas: [], subtotal: 16_000, descuentos: [], total: 16_000 } },
+      ],
+      pagos: [
+        {
+          id: "pago-1",
+          clienteId: CLIENTE.id,
+          concepto: "dia_suelto",
+          referenciaId: "est-001",
+          monto: 16_000,
+          estado: "pendiente",
+          emitidoEn: en("09:00"),
+        },
+      ],
+    });
+    expect(await diasPorCobrar(repo)).toEqual([]);
+  });
+
+  it("un día con plan tampoco: el pack ya lo pagó", async () => {
+    montar({ estadiasJardin: [{ ...cerrada("17:30"), origen: "plan" }] });
+    expect(await diasPorCobrar(repo)).toEqual([]);
+  });
+});

@@ -76,6 +76,8 @@ Se validan antes de permitir cualquier reserva:
   inclusive $16.000**, **más de 8 h $18.000**.
 - **Fuera de horario**: $1.000 por hora iniciada después de las 19:00, con 15
   minutos de gracia, calculado desde el **check-out real** registrado por staff.
+  **No se cobra solo**: queda calculado esperando que Administración decida si
+  lo cobra o lo perdona. Ver "Quién cobra, y cuándo".
 
 ### Planes de jardín
 
@@ -105,7 +107,7 @@ consumo y los avisos de vencimiento funcionan igual que en cualquier plan.
   **desde 7 noches -10%**, **desde 14 noches -15%**. Son excluyentes entre sí.
 - **10% adicional** si el cliente tiene un **plan de jardín vigente**.
 - Paseo opcional: **$4.000 cada uno**, de 30 min.
-- Reserva con **abono del 30%**.
+- Reserva con **abono del 50%**.
 - **Devolución solo si se cancela con ≥48h de aviso**: devuelve el abono
   completo. Con menos de 48h, no se devuelve nada.
 
@@ -300,6 +302,52 @@ estadía, no cuando el perro llega. El check-in no toca el saldo. En un ingreso
 no planificado agendar y llegar son el mismo momento, así que ahí sí se
 descuenta al registrar.
 
+### Quién cobra, y cuándo
+
+**El cuidador no toca plata.** Marca llegada y salida y nada más: ni emite
+cobros ni perdona atrasos. Lo que su turno produce es información —la hora
+real de salida—, y de ahí sale el dinero después, decidido por otra persona.
+
+El motivo es el mismo por el que no ve la cobranza: quien está entregando un
+perro en la puerta, con el dueño enfrente, no debería tener que decidir si le
+cobra los $2.000 del atraso. Esa conversación no es suya.
+
+Entonces, cuándo nace cada cobro:
+
+| | Cuándo se paga |
+|---|---|
+| Plan de jardín | Al comprarlo, por adelantado |
+| Día suelto reservado | Al agendarlo, por adelantado |
+| Día de prueba | Al agendarlo |
+| Hotel | **50% al reservar**, saldo al retiro según la salida real |
+| Recargo fuera de horario | **Nunca solo**: lo decide Administración |
+| Ingreso no planificado | Lo emite Administración después |
+
+`lib/servicios/cobros-pendientes.ts` junta las tres colas que quedan
+esperando en el backoffice, y **no son la misma cosa**:
+
+- El **recargo fuera de horario** es una DECISIÓN. El pack cubre el día, no
+  que lo pasen a buscar a las ocho y media; pero si el dueño se quedó pegado
+  en el Costanera una vez, la dueña puede perdonarlo. Dos acciones: cobrarlo
+  o perdonarlo.
+- El **saldo de hotel** es una EMISIÓN, no una decisión: el hotel se paga
+  según la salida real y lo que falta contra el abono se debe. Lo único que
+  cambió es quién lo emite.
+- Los **días sin cobrar** son la red de seguridad: en la práctica son los
+  ingresos no planificados, porque un día reservado desde el portal ya trae
+  su cobro desde que se agendó. Si una jornada se registró y nunca se cobró,
+  aparece acá hasta que alguien la emita.
+
+**Perdonar deja rastro.** Un recargo perdonado nace como cobro en cero y
+marcado reembolsado, igual que la anulación del día de prueba. Borrarlo sería
+más limpio de mirar y dejaría la cobranza del mes sin poder explicarse: un
+cobro que desaparece no deja constancia de que existió ni de que alguien
+decidió perdonarlo.
+
+Y por eso **"¿ya se decidió?" se contesta con "¿existe un cobro de este
+concepto para esta estadía?"**: perdonar deja un cobro en cero, no deja un
+vacío, así que la cola no lo vuelve a ofrecer.
+
 ### La ficha del perro
 
 `components/shared/detalle-perro.tsx` es **una sola ficha para las tres
@@ -457,9 +505,9 @@ Así la pantalla muestra el precio en vivo y los reparos sin haber creado nada.
 A diferencia del ingreso no planificado del staff, acá **sí se bloquea**: el
 cliente reserva a futuro y no hay ningún perro en la puerta que registrar.
 
-- El día suelto de jardín **no se cobra al agendar**: se cobra al cerrar la
-  jornada, con la hora real. Lo que se descuenta al agendar es el día del plan.
-- La reserva de hotel deja el **abono del 30% pagado** y el saldo se cobra al
+- El día suelto de jardín **se paga por adelantado**, al agendarlo. Lo que se
+  descuenta al agendar, si el perro tiene plan, es el día del pack.
+- La reserva de hotel deja el **abono del 50% pagado** y el saldo se cobra al
   retiro.
 - La tienda, si un producto no alcanza, **compra lo que hay y lo avisa**, en
   vez de fallar la orden entera: en una tienda de mostrador eso es lo que pasa.
