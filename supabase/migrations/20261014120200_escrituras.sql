@@ -14,6 +14,7 @@
 -- condiciones de más importan: nace PENDIENTE y sin fecha de pago, así que
 -- nadie se da por pagado solo. Marcarlo pagado sigue siendo de
 -- Administración, que es quien mira la transferencia.
+drop policy if exists "agendo y queda pendiente" on pagos;
 create policy "agendo y queda pendiente" on pagos
   for insert with check (
     cliente_id = mi_cliente_id()
@@ -39,6 +40,7 @@ create policy "agendo y queda pendiente" on pagos
 -- nacen de su turno. La deuda del cliente, los planes, los abonos y la cuenta
 -- del mes siguen siendo de Administración: lo que el equipo ve es lo que
 -- acaba de pasar en la casa, no lo que el dueño debe.
+drop policy if exists "el equipo cobra lo de su turno" on pagos;
 create policy "el equipo cobra lo de su turno" on pagos
   for all using (
     es_equipo()

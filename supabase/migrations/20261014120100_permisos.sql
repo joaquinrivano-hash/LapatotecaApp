@@ -108,44 +108,42 @@ begin
   end loop;
 end $$;
 
--- Para poder correr el archivo dos veces: se borran las políticas que
--- este mismo archivo crea y se vuelven a crear.
-do $$
-declare p record;
-begin
-  for p in
-    select schemaname, tablename, policyname
-    from pg_policies
-    where schemaname = 'public'
-  loop
-    execute format('drop policy %I on %I.%I', p.policyname, p.schemaname, p.tablename);
-  end loop;
-end $$;
+-- Para poder correr este archivo dos veces, cada política se borra justo
+-- antes de crearse. La tentación era borrarlas TODAS de una y recrearlas,
+-- que es menos código; el problema es que este archivo dejaría de ser
+-- repetible por su cuenta: correrlo después de una migración posterior se
+-- llevaría las políticas de esa otra y no las devolvería.
 
 /* ── Perfiles ─────────────────────────────────────────────────────── */
 
+drop policy if exists "veo mi perfil" on perfiles;
 create policy "veo mi perfil" on perfiles
   for select using (id = auth.uid() or es_equipo());
 
 -- El rol lo asciende Administración, nunca el propio interesado: si un
 -- dueño pudiera editar su fila, se haría admin en una línea de consola.
+drop policy if exists "administracion asigna roles" on perfiles;
 create policy "administracion asigna roles" on perfiles
   for all using (es_admin()) with check (es_admin());
 
 /* ── Clientes ─────────────────────────────────────────────────────── */
 
+drop policy if exists "veo mi cuenta" on clientes;
 create policy "veo mi cuenta" on clientes
   for select using (perfil_id = auth.uid() or es_equipo());
 
 -- Al registrarse, el dueño crea su propia ficha y la amarra a su cuenta.
 -- El `with check` es lo que impide amarrarla a la de otro.
+drop policy if exists "me registro" on clientes;
 create policy "me registro" on clientes
   for insert with check (perfil_id = auth.uid() or es_admin());
 
+drop policy if exists "corrijo mis datos" on clientes;
 create policy "corrijo mis datos" on clientes
   for update using (perfil_id = auth.uid() or es_admin())
   with check (perfil_id = auth.uid() or es_admin());
 
+drop policy if exists "administracion borra clientes" on clientes;
 create policy "administracion borra clientes" on clientes
   for delete using (es_admin());
 
@@ -153,15 +151,18 @@ create policy "administracion borra clientes" on clientes
 
 -- El dueño manda sobre la ficha de su perro: son sus datos y nadie los
 -- conoce mejor. Cada cambio deja una notificación (ver `notificaciones`).
+drop policy if exists "mis perros" on perros;
 create policy "mis perros" on perros
   for all using (cliente_id = mi_cliente_id() or es_admin())
   with check (cliente_id = mi_cliente_id() or es_admin());
 
+drop policy if exists "el equipo ve las fichas" on perros;
 create policy "el equipo ve las fichas" on perros
   for select using (es_equipo());
 
 -- El staff anota lo que pasa en el día (sociabilidad, notas), no cambia
 -- al dueño ni el peso declarado.
+drop policy if exists "el equipo anota la ficha" on perros;
 create policy "el equipo anota la ficha" on perros
   for update using (es_equipo()) with check (es_equipo());
 
@@ -180,9 +181,13 @@ begin
   ]
   loop
     execute format(
+      'drop policy if exists "lo mio" on %1$I', t);
+    execute format(
       'create policy "lo mio" on %1$I'
       ' for select using (cliente_id = mi_cliente_id() or es_equipo())', t);
 
+    execute format(
+      'drop policy if exists "reservo lo mio" on %1$I', t);
     execute format(
       'create policy "reservo lo mio" on %1$I'
       ' for insert with check (cliente_id = mi_cliente_id() or es_equipo())', t);
@@ -191,10 +196,14 @@ begin
     -- salidas. Los dos escriben sobre las mismas filas, cada uno en sus
     -- columnas, y de eso se encarga la capa de servicios.
     execute format(
+      'drop policy if exists "el equipo opera" on %1$I', t);
+    execute format(
       'create policy "el equipo opera" on %1$I'
       ' for update using (cliente_id = mi_cliente_id() or es_equipo())'
       ' with check (cliente_id = mi_cliente_id() or es_equipo())', t);
 
+    execute format(
+      'drop policy if exists "administracion borra" on %1$I', t);
     execute format(
       'create policy "administracion borra" on %1$I'
       ' for delete using (es_admin())', t);
@@ -205,15 +214,19 @@ end $$;
 
 -- El dueño ve lo que debe y lo que pagó. No lo edita: un cobro que el
 -- cobrado puede cambiar no es un cobro.
+drop policy if exists "veo mis cobros" on pagos;
 create policy "veo mis cobros" on pagos
   for select using (cliente_id = mi_cliente_id() or es_admin());
 
+drop policy if exists "administracion cobra" on pagos;
 create policy "administracion cobra" on pagos
   for all using (es_admin()) with check (es_admin());
 
+drop policy if exists "veo mi cuenta del mes" on cuentas_mensuales;
 create policy "veo mi cuenta del mes" on cuentas_mensuales
   for select using (cliente_id = mi_cliente_id() or es_admin());
 
+drop policy if exists "administracion emite" on cuentas_mensuales;
 create policy "administracion emite" on cuentas_mensuales
   for all using (es_admin()) with check (es_admin());
 
@@ -222,9 +235,11 @@ create policy "administracion emite" on cuentas_mensuales
 
 /* ── Tienda ───────────────────────────────────────────────────────── */
 
+drop policy if exists "la vitrina" on productos;
 create policy "la vitrina" on productos
   for select using (activo or es_equipo());
 
+drop policy if exists "administracion surte" on productos;
 create policy "administracion surte" on productos
   for all using (es_admin()) with check (es_admin());
 
@@ -232,6 +247,7 @@ create policy "administracion surte" on productos
 
 -- Un reporte cubre varios perros, y cada dueño tiene que ver solo el
 -- que menciona a los suyos.
+drop policy if exists "los reportes de mis perros" on reportes;
 create policy "los reportes de mis perros" on reportes
   for select using (
     es_equipo()
@@ -242,9 +258,11 @@ create policy "los reportes de mis perros" on reportes
     )
   );
 
+drop policy if exists "el equipo reporta" on reportes;
 create policy "el equipo reporta" on reportes
   for all using (es_equipo()) with check (es_equipo());
 
+drop policy if exists "los incidentes de mis perros" on incidentes;
 create policy "los incidentes de mis perros" on incidentes
   for select using (
     es_equipo()
@@ -255,23 +273,28 @@ create policy "los incidentes de mis perros" on incidentes
     )
   );
 
+drop policy if exists "el equipo anota incidentes" on incidentes;
 create policy "el equipo anota incidentes" on incidentes
   for all using (es_equipo()) with check (es_equipo());
 
 -- La bandeja de mensajes es interna: guarda el intento, el error y el
 -- reintento. Al dueño le llega el WhatsApp, no el registro del envío.
+drop policy if exists "la bandeja es del equipo" on mensajes;
 create policy "la bandeja es del equipo" on mensajes
   for all using (es_equipo()) with check (es_equipo());
 
 -- Las notificaciones las escribe el dueño sin saberlo —al corregir la
 -- ficha de su perro— y las lee Administración. De ahí el reparto raro:
 -- inserta uno y lee el otro.
+drop policy if exists "mi cambio avisa" on notificaciones;
 create policy "mi cambio avisa" on notificaciones
   for insert with check (cliente_id = mi_cliente_id() or es_equipo());
 
+drop policy if exists "administracion lee los avisos" on notificaciones;
 create policy "administracion lee los avisos" on notificaciones
   for select using (es_equipo());
 
+drop policy if exists "administracion marca leido" on notificaciones;
 create policy "administracion marca leido" on notificaciones
   for update using (es_equipo()) with check (es_equipo());
 
@@ -281,8 +304,10 @@ create policy "administracion marca leido" on notificaciones
 -- las razas y los campos obligatorios para dibujarse, y todavía no hay
 -- nadie identificado. No hay nada reservado acá —son las mismas listas
 -- que el folleto— y cerrarla dejaría el formulario sin desplegables.
+drop policy if exists "todos leen las reglas" on configuracion;
 create policy "todos leen las reglas" on configuracion
   for select using (true);
 
+drop policy if exists "administracion define las reglas" on configuracion;
 create policy "administracion define las reglas" on configuracion
   for all using (es_admin()) with check (es_admin());

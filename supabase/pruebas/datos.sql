@@ -33,6 +33,19 @@ insert into reportes (perro_ids, fecha, nota, autor_staff) values
   (array['cccccccc-0000-0000-0000-000000000001']::uuid[], current_date, 'Lola durmió la siesta', 'Javi'),
   (array['dddddddd-0000-0000-0000-000000000002']::uuid[], current_date, 'Rocky jugó harto', 'Javi');
 
+-- Una estadía hoy y una la próxima semana: el cuidador tiene que ver las
+-- dos, la de hoy para marcar llegada y salida y la futura para preparar el
+-- día.
+insert into estadias_jardin
+  (cliente_id, perro_id, fecha, inicio_programado, fin_programado, origen, estado)
+values
+  ('aaaaaaaa-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001',
+   current_date, current_date + time '08:00', current_date + time '17:00',
+   'dia_suelto', 'esperada'),
+  ('bbbbbbbb-0000-0000-0000-000000000002', 'dddddddd-0000-0000-0000-000000000002',
+   current_date + 7, (current_date + 7) + time '09:00', (current_date + 7) + time '16:00',
+   'plan', 'esperada');
+
 insert into productos (id, nombre, categoria, precio, stock) values
   ('eeeeeeee-0000-0000-0000-000000000001', 'Pelota', 'juguetes', 6000, 10);
 

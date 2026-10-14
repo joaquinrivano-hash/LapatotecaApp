@@ -636,7 +636,7 @@ Tres alcances:
 | | Ve |
 |---|---|
 | Dueño | Lo suyo. Sus perros, sus reservas, sus cobros. |
-| Equipo | Los perros, las fichas y los cobros **de su turno**. |
+| Equipo | La agenda, las fichas, los reportes y los cobros **de su turno**. |
 | Admin | Todo. |
 
 **El dueño no solo mira: agenda y compra.** Puede crear sus reservas, sus
@@ -655,6 +655,29 @@ los pagos enteros, se le abren los **tres conceptos que nacen de su turno**
 (`dia_suelto`, `dia_de_prueba`, `saldo_hotel`). La deuda del cliente, los
 planes, los abonos y la cuenta del mes siguen siendo de Administración: el
 equipo ve lo que acaba de pasar en la casa, no lo que el dueño debe.
+
+#### Qué puede el cuidador, exactamente
+
+Verificado una por una en la prueba de aislamiento, no supuesto:
+
+| Puede | No puede |
+|---|---|
+| Ver la agenda de hoy y la de los días que vienen | Marcar un cobro como pagado |
+| Marcar llegada y salida | Tocar un cobro ya conciliado |
+| Mandar reportes y anotar incidentes | Ver la cuenta del mes de un cliente |
+| Abrir la ficha de cualquier perro | Sumar las ganancias |
+| Cobrar el día que acaba de cerrar | Emitir una cuenta mensual |
+| | Cambiar el precio de la vitrina |
+
+La línea que separa las dos columnas: **generar el cobro es consecuencia de
+cerrar la jornada; darlo por pagado es conciliar una transferencia.** Lo
+primero sale del turno, lo segundo lo mira Administración. Por eso un cobro
+ya pagado queda **fuera de su alcance**: no lo puede modificar ni borrar, y
+el intento de marcarlo pagado no falla en silencio sino con error.
+
+Y por eso "sumar las ganancias" da cero: los conceptos que no nacen del
+turno —planes, abonos, servicios, tienda, cuenta mensual— no los ve, así que
+no hay nada que sumar.
 
 #### Lo que RLS no puede cuidar: el monto
 
@@ -723,14 +746,25 @@ cuida el lugar donde no se puede olvidar.
 ```
 
 Levanta un Postgres desechable, corre las migraciones dos veces, siembra
-cuatro cuentas y le pregunta a la base qué ve cada una; después intenta
-pasarse por encima de las reglas. El andamio de la prueba arranca tan cerrado
+cuatro cuentas y le pregunta a la base qué ve cada una; después recorre lo
+que cada rol tiene que poder hacer y lo que no. El andamio de la prueba arranca tan cerrado
 como el proyecto real —sin privilegios por defecto— así que caza las dos
 fallas: un RLS olvidado y un grant olvidado. Correrlo después de tocar cualquier
 `create policy` es obligatorio: una política que aísla hoy puede dejar de
 aislar con el próximo cambio y **la base no avisa**, solo devuelve una fila
 que no correspondía. Con RLS apagado en una sola tabla, la prueba muestra a
 un visitante anónimo leyendo todos los cobros.
+
+#### Cada archivo se repite por su cuenta
+
+Cada política se borra justo antes de crearse, con su nombre. La tentación
+era borrarlas todas de una al principio del archivo de permisos, que es
+menos código; el problema es que ese archivo dejaría de ser repetible solo:
+alguien va a volver a correr uno suelto en el editor SQL —para releerlo,
+para arreglar un typo— y se llevaría por delante las políticas de las
+migraciones posteriores **sin devolverlas**. La prueba lo cubre: corre la
+tanda entera, vuelve a correr solo el archivo de permisos y verifica que las
+políticas de los que vinieron después sigan ahí.
 
 ### Datos que persisten
 
