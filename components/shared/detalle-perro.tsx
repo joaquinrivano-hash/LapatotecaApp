@@ -60,23 +60,30 @@ export function FotoPerro({ perro }: { perro: Perro }) {
  * para verificar una fecha y no para mirarla todos los días.
  */
 export function CarnetDeVacunas({ perro }: { perro: Perro }) {
-  if (!perro.carnetVacunasUrl) return null;
+  const hojas = perro.carnetVacunasUrls ?? [];
+  if (hojas.length === 0) return null;
 
   return (
     <details className="rounded-xl border border-border/70">
       <summary className="flex cursor-pointer items-center gap-1.5 p-3 text-sm font-semibold">
         <FileImage className="size-4" />
         Carnet de vacunación
+        <span className="text-muted-foreground font-normal">
+          {hojas.length} {hojas.length === 1 ? "hoja" : "hojas"}
+        </span>
       </summary>
-      <div className="px-3 pb-3">
-        <Image
-          src={perro.carnetVacunasUrl}
-          alt={`Carnet de vacunación de ${perro.nombre}`}
-          width={640}
-          height={480}
-          unoptimized
-          className="w-full rounded-xl object-contain"
-        />
+      <div className="space-y-2 px-3 pb-3">
+        {hojas.map((hoja, i) => (
+          <Image
+            key={i}
+            src={hoja}
+            alt={`Carnet de vacunación de ${perro.nombre}, hoja ${i + 1}`}
+            width={640}
+            height={480}
+            unoptimized
+            className="w-full rounded-xl object-contain"
+          />
+        ))}
       </div>
     </details>
   );

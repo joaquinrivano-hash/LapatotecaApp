@@ -43,29 +43,39 @@ export interface DiaDePrueba {
 }
 
 /**
- * Cada cuánto toca el antiparasitario.
+ * El antiparasitario que le dieron y cuánto le dura.
  *
  * De acá sale `desparasitadoHasta`, que es lo que mira la admisión: el dueño
- * dice cuándo se lo dio y cada cuánto se repite, y la vigencia se calcula
- * (`vigenciaAntiparasitario` en `lib/rules/perro.ts`). Pedirle la fecha de
- * vencimiento sería pedirle que haga la cuenta él.
+ * dice cuándo se lo dio y qué duración tiene el formato, y la vigencia se
+ * calcula (`vigenciaAntiparasitario` en `lib/rules/perro.ts`). Pedirle la
+ * fecha de vencimiento sería pedirle que haga la cuenta él.
  */
-export type PeriodicidadAntiparasitario =
-  | "mensual"
-  | "trimestral"
-  | "semestral"
-  | "anual"
-  | "otro";
-
 export interface Antiparasitario {
   ultimaAplicacion: FechaISO;
-  periodicidad: PeriodicidadAntiparasitario;
-  /** Solo cuando la periodicidad es "otro". */
-  cadaCuantosDias?: number;
+  /** 1 o 3 meses, que es lo que traen los formatos que se venden. */
+  mesesDeDuracion: number;
+  marca?: string;
 }
 
 export type Comida = "desayuno" | "almuerzo" | "cena";
-export type UnidadRacion = "g" | "taza" | "scoop";
+/**
+ * Con qué se mide la porción.
+ *
+ * "medida" es el medidor que viene en el saco, que es como lo dice la gente;
+ * antes se llamaba "scoop" y nadie en Chile pide un scoop de comida.
+ */
+export type UnidadRacion = "medida" | "g" | "taza";
+
+/**
+ * Una ración: cuánto come y en qué comidas de esas.
+ *
+ * Son varias porque hay perros que desayunan media taza y cenan una entera.
+ * La mayoría tiene una sola, y por eso la pantalla empieza mostrando una.
+ */
+export interface Racion {
+  cantidad?: number;
+  comidas: Comida[];
+}
 
 /**
  * Qué come el perro, en campos y no en un párrafo.
@@ -74,15 +84,17 @@ export type UnidadRacion = "g" | "taza" | "scoop";
  * la marca, cuánto va y en qué comidas. `notas` queda para lo que no cabe en
  * esos campos ("si no come al almuerzo, no insistir").
  *
+ * La **medida** es una sola para todas las raciones: un perro no come media
+ * taza en la mañana y 200 gramos en la noche, come más o menos de lo mismo.
+ *
  * Todo es opcional en el tipo porque los perros cargados antes de que esto
  * existiera no tienen los datos; lo obligatorio al CREAR se valida en
  * `lib/rules/alta-perro.ts`, que es donde la regla se puede cambiar.
  */
 export interface Alimentacion {
   marca?: string;
-  cantidad?: number;
   unidad?: UnidadRacion;
-  comidas: Comida[];
+  raciones: Racion[];
   notas?: string;
 }
 
@@ -117,8 +129,13 @@ export interface Perro {
   /** El folleto lo exige explícitamente. `undefined` = sin evaluar. */
   sociable?: boolean;
   diaDePrueba: DiaDePrueba;
-  /** Foto del carnet de vacunación, para que el equipo pueda verificarlo. */
-  carnetVacunasUrl?: string;
+  /**
+   * Fotos del carnet de vacunación, una por hoja.
+   *
+   * Son varias porque un carnet real tiene las vacunas repartidas en distintas
+   * páginas y con una sola foto siempre falta la que importa.
+   */
+  carnetVacunasUrls?: string[];
   /** De dónde sale `desparasitadoHasta`. Ver `Antiparasitario`. */
   antiparasitario?: Antiparasitario;
   /** Qué come, cuánto y en qué comidas. Ver `Alimentacion`. */
@@ -503,9 +520,21 @@ export type CampoDeAlta =
   | "alimentacion"
   | "antiparasitario";
 
-export interface ConfiguracionAdmision {
+/** Las listas que el formulario ofrece en un desplegable. */
+export interface Catalogos {
+  razas: string[];
+  marcasComida: string[];
+  marcasAntiparasitario: string[];
+}
+
+export type NombreDeCatalogo = keyof Catalogos;
+
+export interface Configuracion {
   vacunasObligatorias: TipoVacuna[];
+  /** Cuánto dura cada vacuna desde que se pone, en meses. */
+  duracionVacunasMeses: Record<TipoVacuna, number>;
   camposObligatorios: CampoDeAlta[];
+  catalogos: Catalogos;
   actualizadoEn: InstanteISO;
 }
 

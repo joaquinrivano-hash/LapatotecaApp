@@ -24,7 +24,11 @@ const PELUSA: Perro = {
     { tipo: "octuple", fechaAplicacion: "2026-01-01", fechaVencimiento: "2027-01-01" },
   ],
   diaDePrueba: { estado: "aprobado" },
-  alimentacion: { marca: "Proplan", cantidad: 1, unidad: "taza", comidas: ["almuerzo"] },
+  alimentacion: {
+    marca: "Proplan",
+    unidad: "taza",
+    raciones: [{ cantidad: 1, comidas: ["almuerzo"] }],
+  },
   creadoEn: "2026-01-01T12:00:00.000Z",
 };
 
@@ -77,9 +81,8 @@ describe("compararFichas", () => {
       ...PELUSA,
       alimentacion: {
         marca: "Royal Canin",
-        cantidad: 2,
         unidad: "taza",
-        comidas: ["desayuno", "cena"],
+        raciones: [{ cantidad: 2, comidas: ["desayuno", "cena"] }],
       },
     });
 

@@ -9,7 +9,7 @@
  * ficha" no le sirve a nadie.
  */
 
-import { describirAlimentacion, ETIQUETA_PERIODICIDAD } from "@/lib/rules/perro";
+import { describirAlimentacion, describirDuracion } from "@/lib/rules/perro";
 import { nombreVacuna } from "@/lib/rules/admision";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
 // Con año: `formatearFecha` da "1 de enero" y una vacuna renovada al año
@@ -49,10 +49,18 @@ function enPalabras(perro: Perro): Record<string, string | undefined> {
       ? formatearFechaCorta(perro.fechaNacimiento)
       : undefined,
     Foto: perro.fotoUrl ? "puesta" : undefined,
-    "Carnet de vacunación": perro.carnetVacunasUrl ? "puesto" : undefined,
+    "Carnet de vacunación": perro.carnetVacunasUrls?.length
+      ? `${perro.carnetVacunasUrls.length} ${perro.carnetVacunasUrls.length === 1 ? "hoja" : "hojas"}`
+      : undefined,
     ...vacunas,
     Antiparasitario: perro.antiparasitario
-      ? `${formatearFechaCorta(perro.antiparasitario.ultimaAplicacion)}, ${ETIQUETA_PERIODICIDAD[perro.antiparasitario.periodicidad]}`
+      ? [
+          perro.antiparasitario.marca,
+          formatearFechaCorta(perro.antiparasitario.ultimaAplicacion),
+          describirDuracion(perro.antiparasitario.mesesDeDuracion),
+        ]
+          .filter(Boolean)
+          .join(", ")
       : undefined,
     Comida: describirAlimentacion(perro.alimentacion) ?? undefined,
     Medicamentos: perro.medicamentos?.length
@@ -88,15 +96,17 @@ export function compararFichas(antes: Perro, despues: Perro): CambioDeCampo[] {
   if (antes.fotoUrl !== despues.fotoUrl && antes.fotoUrl && despues.fotoUrl) {
     cambios.push({ campo: "Foto", antes: "otra foto", despues: "una nueva" });
   }
+  // Mismo número de hojas pero fotos distintas: el texto no cambia solo.
+  const hojasAntes = (antes.carnetVacunasUrls ?? []).join("|");
+  const hojasDespues = (despues.carnetVacunasUrls ?? []).join("|");
   if (
-    antes.carnetVacunasUrl !== despues.carnetVacunasUrl &&
-    antes.carnetVacunasUrl &&
-    despues.carnetVacunasUrl
+    hojasAntes !== hojasDespues &&
+    antes.carnetVacunasUrls?.length === despues.carnetVacunasUrls?.length
   ) {
     cambios.push({
       campo: "Carnet de vacunación",
-      antes: "otra foto",
-      despues: "una nueva",
+      antes: "otras fotos",
+      despues: "fotos nuevas",
     });
   }
 

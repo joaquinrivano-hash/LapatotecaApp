@@ -441,9 +441,19 @@ function normalizarDatos(datos: DatosPatoteca): DatosPatoteca {
     }
   }
 
-  if (!datos.configuracion) {
-    datos.configuracion = configuracionPorDefecto();
-  }
+  // La configuración gana campos con el tiempo; los que falten se completan
+  // con los de fábrica en vez de reemplazar lo que Administración ya eligió.
+  const fabrica = configuracionPorDefecto();
+  datos.configuracion = {
+    ...fabrica,
+    ...datos.configuracion,
+    duracionVacunasMeses: {
+      ...fabrica.duracionVacunasMeses,
+      ...datos.configuracion?.duracionVacunasMeses,
+    },
+    catalogos: { ...fabrica.catalogos, ...datos.configuracion?.catalogos },
+    actualizadoEn: datos.configuracion?.actualizadoEn ?? fabrica.actualizadoEn,
+  };
 
   migrarPerros(datos.perros);
 
@@ -465,10 +475,73 @@ function migrarPerros(perros: Perro[]): void {
     const comida = perro.alimentacion as unknown;
     if (typeof comida === "string") {
       perro.alimentacion = comida.trim()
-        ? { comidas: [], notas: comida }
+        ? { raciones: [], notas: comida }
         : undefined;
     }
+
+    // La comida tenía UNA ración suelta y ahora puede tener varias, para los
+    // perros que desayunan distinto de lo que cenan.
+    const plato = perro.alimentacion as unknown as
+      | {
+          cantidad?: number;
+          comidas?: string[];
+          raciones?: unknown[];
+        }
+      | undefined;
+    // "scoop" se llamaba así cuando el campo era nuestro; ahora la opción se
+    // llama "medida", que es como lo dice la gente.
+    if (plato && (plato as { unidad?: string }).unidad === "scoop") {
+      (plato as { unidad?: string }).unidad = "medida";
+    }
+
+    if (plato && !plato.raciones) {
+      plato.raciones =
+        plato.cantidad !== undefined || (plato.comidas ?? []).length > 0
+          ? [{ cantidad: plato.cantidad, comidas: plato.comidas ?? [] }]
+          : [];
+      delete plato.cantidad;
+      delete plato.comidas;
+    }
+
+    // El carnet era una foto y ahora son las hojas que haga falta.
+    const viejo = perro as unknown as { carnetVacunasUrl?: string };
+    if (viejo.carnetVacunasUrl) {
+      perro.carnetVacunasUrls = [
+        ...(perro.carnetVacunasUrls ?? []),
+        viejo.carnetVacunasUrl,
+      ];
+      delete viejo.carnetVacunasUrl;
+    }
+
+    // El antiparasitario se declaraba con una periodicidad y ahora con los
+    // meses que dura el formato.
+    const bicho = perro.antiparasitario as unknown as
+      | { periodicidad?: string; cadaCuantosDias?: number; mesesDeDuracion?: number }
+      | undefined;
+    if (bicho && bicho.mesesDeDuracion === undefined) {
+      bicho.mesesDeDuracion = mesesDeLaPeriodicidad(bicho);
+      delete bicho.periodicidad;
+      delete bicho.cadaCuantosDias;
+    }
   }
+}
+
+/** Las periodicidades viejas, llevadas a meses. */
+function mesesDeLaPeriodicidad(viejo: {
+  periodicidad?: string;
+  cadaCuantosDias?: number;
+}): number {
+  const enMeses: Record<string, number> = {
+    mensual: 1,
+    trimestral: 3,
+    semestral: 6,
+    anual: 12,
+  };
+  if (viejo.periodicidad && enMeses[viejo.periodicidad]) {
+    return enMeses[viejo.periodicidad];
+  }
+  // "otro" se guardaba en días; se redondea al mes más cercano, mínimo uno.
+  return Math.max(1, Math.round((viejo.cadaCuantosDias ?? 30) / 30));
 }
 
 export interface OpcionesRepositorioLocal {

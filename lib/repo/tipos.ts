@@ -15,7 +15,7 @@
 
 import type {
   Cliente,
-  ConfiguracionAdmision,
+  Configuracion,
   CuentaMensual,
   EstadiaJardin,
   FechaISO,
@@ -144,12 +144,12 @@ export interface NotificacionRepo extends ColeccionRepo<Notificacion> {
  * fábrica si todavía nadie la tocó.
  */
 export interface ConfiguracionRepo {
-  obtener(): Promise<ConfiguracionAdmision>;
+  obtener(): Promise<Configuracion>;
   guardar(
-    cambios: Partial<Omit<ConfiguracionAdmision, "actualizadoEn">>,
-  ): Promise<ConfiguracionAdmision>;
+    cambios: Partial<Omit<Configuracion, "actualizadoEn">>,
+  ): Promise<Configuracion>;
   /** Vuelve a los valores de `NEGOCIO`. */
-  restaurar(): Promise<ConfiguracionAdmision>;
+  restaurar(): Promise<Configuracion>;
 }
 
 export interface SistemaRepo {

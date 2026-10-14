@@ -205,7 +205,8 @@ app/
   api/integraciones/whatsapp/   enviar · webhook
 components/
   ui/          shadcn escrito a mano
-  shared/      PrecioCLP, PerroAvatar, EstadoBadge, LogoPatoteca, PWA…
+  shared/      PrecioCLP, PerroAvatar, EstadoBadge, LogoPatoteca, PWA
+               FormularioPerro (el alta, igual en las tres caras)…
   staff/ admin/
 lib/
   config/      precios.ts · negocio.ts   ← única fuente de constantes
@@ -328,13 +329,16 @@ Tres datos de la ficha se **derivan** en vez de preguntarse, porque pedirlos
 sería pedirle al dueño que haga una cuenta que la app puede hacer sola:
 
 - La **edad** sale de `fechaNacimiento`, y el cumpleaños también.
-- `desparasitadoHasta` sale del **antiparasitario**: el dueño dice cuándo se lo
-  dio y cada cuánto se repite. La vigencia la calcula
+- `desparasitadoHasta` sale del **antiparasitario**: el dueño dice la marca,
+  cuándo se lo dio y si el formato dura 1 o 3 meses. La vigencia la calcula
   `vigenciaAntiparasitario`. `desparasitadoHasta` se conserva porque es lo que
-  mira la admisión, que no tiene por qué saber de periodicidades.
-- La **comida** dejó de ser un párrafo: son marca, ración y en qué comidas.
-  `describirAlimentacion` la arma en una línea para la ficha. Lo que estaba
-  escrito antes no se tira, queda como `notas`.
+  mira la admisión, que no tiene por qué saber de duraciones.
+- El **vencimiento de cada vacuna** sale de la fecha en que se puso más la
+  duración que Administración tenga configurada. Al dueño se le pide solo la
+  primera: está escrita en el carnet, la otra es una cuenta.
+- La **comida** dejó de ser un párrafo: son marca, medida y una o más
+  raciones. `describirAlimentacion` la arma en una línea para la ficha. Lo que
+  estaba escrito antes no se tira, queda como `notas`.
 
 ### Qué es obligatorio lo decide Administración
 
@@ -355,6 +359,66 @@ explicación.
 Y `esterilizado` no tiene valor por defecto en el formulario: predeterminarlo
 en "sí" hace que un macho sin castrar pase sin que nadie lo note, y en "no" que
 la mitad de las fichas nazcan mal.
+
+### La comida se pregunta en el orden en que se piensa
+
+Primero **con qué se mide** la porción (medida, gramos o taza), después
+**cuánto y en qué comidas**, y recién entonces **la marca** y la instrucción
+especial. Cada paso aparece cuando el anterior está contestado: diez campos de
+golpe hacen que el dueño llene cualquier cosa para salir del paso.
+
+La cantidad acepta **fracciones**: "1/2", "½" y "0,5" son todas correctas para
+quien las escribe, y rechazar una por no ser la que esperaba el campo es
+culpar a la persona de una limitación nuestra. `parsearCantidad` las entiende
+y el campo escribe abajo lo que entendió ("½ taza"), para que nadie se quede
+con la duda hasta guardar.
+
+Media taza va en **singular**: "½ tazas" no lo dice nadie, así que la
+pluralización mira `cantidad <= 1`, no `cantidad === 1`.
+
+Las **raciones son varias** porque hay perros que desayunan media taza y cenan
+una entera. La pantalla parte con una sola —que es el caso normal— y el "+"
+vive al lado de las comidas, que es donde se nota la diferencia. La **medida**
+es una sola para todas: un perro no come media taza en la mañana y 200 gramos
+en la noche.
+
+Una comida ya tomada por otra ración se muestra apagada: nadie come dos veces
+al almuerzo, y dejar elegirlo produce una ficha que se contradice sola.
+
+Y la sección dice "dinos cómo le gusta comer a tu perrito", no "lo que el
+equipo mira a la hora de almuerzo": al dueño le estamos preguntando por su
+perro, no explicándole nuestra operación.
+
+### Las listas las mantiene Administración
+
+Razas, marcas de comida y marcas de antiparasitario viven en
+`Configuracion.catalogos` y se editan desde `/admin/configuracion`. Una raza
+nueva no puede depender de que alguien toque el código.
+
+Toda lista lleva **"Otra (escríbela)"**, que no es parte del catálogo sino una
+opción del formulario: ninguna lista está completa y el dueño nunca puede
+quedar trancado porque su raza no esté. Por eso tampoco se puede borrar.
+
+Los desplegables son `<select>` **nativos**. En el celular abren la rueda del
+sistema, que se usa con una mano y trae la accesibilidad gratis; veinte razas
+en chips no caben y una lista dibujada a mano se pelea con el teclado de iOS.
+
+### Castrado: desde los 7 meses
+
+Antes de esa edad el veterinario todavía no la indica, así que rechazar a un
+cachorro de cuatro meses sería rechazarlo por algo que ni siquiera puede
+hacer. `leCorrespondeEstarCastrado` lo decide, y sin fecha de nacimiento asume
+que ya tiene la edad: es lo prudente, y el dueño siempre puede agregarla.
+
+### Lo que bloquea el alta y lo que solo avisa
+
+`reparosDeAlta` separa las dos cosas, igual que `evaluarAdmision`:
+
+- **Bloquea** lo que no tiene vuelta: el peso y la castración.
+- **Avisa** una vacuna vencida. Se renueva antes de venir, así que rechazar
+  ahí sería perder un cliente por algo que se arregla en una visita al
+  veterinario. El mensaje dice claro que sin ponerla al día no lo podemos
+  recibir el día de prueba.
 
 ### Los datos guardados se migran, no se botan
 
