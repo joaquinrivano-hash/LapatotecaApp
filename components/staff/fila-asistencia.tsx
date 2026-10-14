@@ -25,6 +25,8 @@ export interface ItemAsistencia {
   finProgramado: string;
   inicioReal?: string;
   finReal?: string;
+  inicioMarcadoEn?: string;
+  finMarcadoEn?: string;
   origen?: OrigenEstadia;
 }
 
@@ -191,7 +193,9 @@ function Horario({ item }: { item: ItemAsistencia }) {
 
     return (
       <span>
-        {item.inicioReal ? `Llegó ${formatearHora(item.inicioReal)}` : formatearHora(inicio)}
+        {item.inicioReal
+          ? `Llegó ${formatearHora(item.inicioReal)}`
+          : formatearHora(inicio)}
         <span className={cn("text-muted-foreground/70")}>
           {" · sale "}
           {formatearHora(item.finProgramado)}

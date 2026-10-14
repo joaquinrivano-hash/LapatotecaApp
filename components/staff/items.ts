@@ -43,6 +43,8 @@ export function itemsDelDia(dia: DiaDeStaff): ItemAsistencia[] {
       inicioProgramado: estadia.inicioProgramado,
       finProgramado: estadia.finProgramado,
       inicioReal: estadia.inicioReal,
+      inicioMarcadoEn: estadia.inicioMarcadoEn,
+      finMarcadoEn: estadia.finMarcadoEn,
       finReal: estadia.finReal,
       origen: estadia.origen,
     });
@@ -62,6 +64,8 @@ export function itemsDelDia(dia: DiaDeStaff): ItemAsistencia[] {
       inicioProgramado: reserva.inicioProgramado,
       finProgramado: reserva.finProgramado,
       inicioReal: reserva.inicioReal,
+      inicioMarcadoEn: reserva.inicioMarcadoEn,
+      finMarcadoEn: reserva.finMarcadoEn,
       finReal: reserva.finReal,
     });
   }

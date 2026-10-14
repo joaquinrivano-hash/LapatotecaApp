@@ -231,6 +231,9 @@ export interface ReservaHotel {
   finProgramado: InstanteISO;
   inicioReal?: InstanteISO;
   finReal?: InstanteISO;
+  /** Cuándo se apretó el botón. Ver `EstadiaJardin.inicioMarcadoEn`. */
+  inicioMarcadoEn?: InstanteISO;
+  finMarcadoEn?: InstanteISO;
   /** Cantidad de paseos contratados durante la estadía, a $4.000 cada uno. */
   paseosContratados: number;
   estado: EstadoReserva;
@@ -259,10 +262,27 @@ export interface EstadiaJardin {
   fecha: FechaISO;
   inicioProgramado: InstanteISO;
   finProgramado: InstanteISO;
-  /** Hora real de check-in registrada por staff. */
+  /**
+   * Hora real de llegada. Es la que vale para el negocio: de acá y de
+   * `finReal` sale el tramo cobrado y el recargo.
+   */
   inicioReal?: InstanteISO;
-  /** Hora real de check-out. De acá sale el recargo fuera de horario. */
+  /** Hora real de retiro. De acá sale el recargo fuera de horario. */
   finReal?: InstanteISO;
+  /**
+   * Cuándo se APRETÓ el botón, que no es lo mismo que cuándo pasó.
+   *
+   * El cuidador marca de un toque, y a veces lo hace después: el perro llegó
+   * a las 8:00 y él alcanzó a marcarlo a las 8:40, con las manos ocupadas.
+   * Entonces corrige la hora y `inicioReal` pasa a ser las 8:00, pero acá
+   * queda que se marcó a las 8:40.
+   *
+   * La diferencia entre las dos no se usa para cobrar —el cobro mira la hora
+   * real— pero sí dice qué tan al día se está marcando, que es información
+   * sobre la operación y no sobre el perro.
+   */
+  inicioMarcadoEn?: InstanteISO;
+  finMarcadoEn?: InstanteISO;
   origen: OrigenEstadia;
   planId?: ID;
   estado: EstadoEstadia;

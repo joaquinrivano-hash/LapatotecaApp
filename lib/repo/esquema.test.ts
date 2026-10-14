@@ -88,15 +88,17 @@ function columnasDeLaTabla(tabla: string): string[] {
     .map((linea) => /^(\w+) /.exec(linea.trim())?.[1])
     .filter((col): col is string => !!col && !reservadas.includes(col));
 
-  // Las que agregó una migración posterior cuentan igual.
+  // Las que agregó una migración posterior cuentan igual. Se toma la
+  // sentencia completa y se buscan todos sus `add column`: un ALTER puede
+  // agregar varias columnas de una, separadas por coma, y mirar solo la
+  // primera haría que esta prueba acusara un desfase que no existe.
   const agregadas = [
-    ...SQL.matchAll(
-      new RegExp(
-        `alter table ${tabla}\\s+add column(?: if not exists)? (\\w+)`,
-        "g",
-      ),
-    ),
-  ].map((g) => g[1]);
+    ...SQL.matchAll(new RegExp(`alter table ${tabla}\\b[^;]*;`, "g")),
+  ].flatMap((sentencia) =>
+    [
+      ...sentencia[0].matchAll(/add column(?: if not exists)? (\w+)/g),
+    ].map((g) => g[1]),
+  );
 
   return [...propias, ...agregadas];
 }

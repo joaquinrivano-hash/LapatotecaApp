@@ -47,6 +47,19 @@ export const NEGOCIO = {
     horasParaCancelarSinCosto: 24,
   },
 
+  asistencia: {
+    /**
+     * Hasta cuántos minutos de desfase entre lo que pasó y cuándo se marcó
+     * se considera "al día".
+     *
+     * Marcar exactamente en el instante es imposible con un perro en brazos,
+     * así que un par de minutos no es un atraso: es la vida real. Avisar de
+     * eso sería enseñarle a la pantalla a quejarse de nada, y una pantalla
+     * que se queja de nada se deja de mirar.
+     */
+    minutosDeMarcaAlDia: 5,
+  },
+
   diaDePrueba: {
     /**
      * Media jornada de un día de jardín normal: el jardín abre 12 horas

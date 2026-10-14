@@ -2,6 +2,7 @@
 
 import { LogIn, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AjustarHora } from "@/components/staff/ajustar-hora";
 import {
   SheetDescription,
   SheetFooter,
@@ -32,6 +33,7 @@ export function FichaPerro({
   perro,
   cliente,
   item,
+  onAjustarHora,
   hoy,
   ocupado,
   onAccion,
@@ -39,6 +41,8 @@ export function FichaPerro({
   perro: Perro;
   cliente?: Cliente;
   item?: ItemAsistencia;
+  /** Corregir la hora real de la llegada o el retiro ya marcados. */
+  onAjustarHora?: (que: "llegada" | "retiro", nueva: string) => void;
   hoy: string;
   ocupado?: boolean;
   onAccion: (accion: "llego" | "se_fue") => void;
@@ -75,6 +79,36 @@ export function FichaPerro({
               : undefined
           }
         />
+        {/* Corregir la hora vive acá y no en la tarjeta: la tarjeta tiene
+            dos blancos —el cuerpo abre la ficha, el botón grande marca— y un
+            tercero los habría puesto a pelear. Además el cuerpo es un botón,
+            así que otro botón adentro sería HTML inválido. */}
+        {item && onAjustarHora && (item.inicioReal || item.finReal) && (
+          <div className="border-border/70 space-y-2 rounded-xl border p-3">
+            <p className="text-sm font-semibold">¿Lo marcaste a destiempo?</p>
+            <div className="flex flex-wrap gap-2">
+              {item.inicioReal && (
+                <AjustarHora
+                  que="llegada"
+                  real={item.inicioReal}
+                  marcadaEn={item.inicioMarcadoEn}
+                  ocupado={ocupado}
+                  onGuardar={(nueva) => onAjustarHora("llegada", nueva)}
+                />
+              )}
+              {item.finReal && (
+                <AjustarHora
+                  que="retiro"
+                  real={item.finReal}
+                  marcadaEn={item.finMarcadoEn}
+                  ocupado={ocupado}
+                  onGuardar={(nueva) => onAjustarHora("retiro", nueva)}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
         <CarnetDeVacunas perro={perro} />
         <HistorialIncidentes perroId={perro.id} hoy={hoy} />
       </div>

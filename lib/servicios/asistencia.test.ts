@@ -500,3 +500,97 @@ describe("opcionesDeRetiro", () => {
     expect(opcionesDeRetiro(en("19:30"))).toHaveLength(0);
   });
 });
+
+describe("marcar a destiempo", () => {
+  beforeEach(() => montar({ estadiasJardin: [estadia()] }));
+
+  it("de un toque, las dos horas son la misma", async () => {
+    // El caso normal: el perro está en la puerta y se marca ahí mismo.
+    const llegada = await registrarLlegadaJardin(repo, "est-001", en("08:00"));
+    expect(llegada.inicioReal).toBe(en("08:00"));
+    expect(llegada.inicioMarcadoEn).toBe(en("08:00"));
+  });
+
+  it("marcando tarde, guarda la hora real y cuándo se apretó", async () => {
+    // Llegó a las 8:00 y alcanzó a marcarlo a las 8:40.
+    const llegada = await registrarLlegadaJardin(
+      repo,
+      "est-001",
+      en("08:40"),
+      en("08:00"),
+    );
+    expect(llegada.inicioReal).toBe(en("08:00"));
+    expect(llegada.inicioMarcadoEn).toBe(en("08:40"));
+  });
+
+  it("corregir después no reescribe cuándo se marcó", async () => {
+    // Lo que se corrige es el dato, no el registro de que alguien lo anotó
+    // tarde: ese es justamente el que dice qué tan al día se está marcando.
+    await registrarLlegadaJardin(repo, "est-001", en("08:40"));
+    const corregida = await registrarLlegadaJardin(
+      repo,
+      "est-001",
+      en("09:15"),
+      en("08:00"),
+    );
+
+    expect(corregida.inicioReal).toBe(en("08:00"));
+    expect(corregida.inicioMarcadoEn).toBe(en("08:40"));
+  });
+
+  it("corregir el retiro VUELVE A COTIZAR", async () => {
+    // Acá está lo que importa: de la hora real sale el tramo del día y el
+    // recargo. Escribir el campo a mano habría dejado la hora corregida y el
+    // cobro con el número viejo.
+    await registrarLlegadaJardin(repo, "est-001", en("08:00"));
+    const marcadoTarde = await registrarSalidaJardin(repo, "est-001", en("20:30"));
+    expect(marcadoTarde.recargo).toBe(2_000);
+
+    // En realidad se lo llevaron a las 17:30; el cuidador marcó a las 20:30.
+    const corregido = await registrarSalidaJardin(
+      repo,
+      "est-001",
+      en("20:30"),
+      en("17:30"),
+    );
+    expect(corregido.recargo).toBe(0);
+    expect(corregido.estadia.finReal).toBe(en("17:30"));
+    expect(corregido.estadia.finMarcadoEn).toBe(en("20:30"));
+    expect(corregido.estadia.cotizacion?.total).toBe(18_000);
+  });
+
+  it("el hotel sigue el mismo criterio", async () => {
+    montar({ reservasHotel: [RESERVA], estadiasJardin: [] });
+    await registrarLlegadaHotel(repo, "res-001", en("10:00", "2026-06-14"));
+    const salida = await registrarSalidaHotel(
+      repo,
+      "res-001",
+      en("18:00", "2026-06-16"),
+      en("10:00", "2026-06-16"),
+    );
+    expect(salida.reserva.finReal).toBe(en("10:00", "2026-06-16"));
+    expect(salida.reserva.finMarcadoEn).toBe(en("18:00", "2026-06-16"));
+  });
+});
+
+describe("corregir no inventa una hora de marca", () => {
+  it("una estadía vieja sin marca se queda sin ella", async () => {
+    // Las que vienen de antes de que el campo existiera. "No se sabe" es la
+    // respuesta correcta; ponerle la hora en que alguien la editó le
+    // inventaría un atraso que nunca ocurrió.
+    montar({
+      estadiasJardin: [
+        { ...estadia(), estado: "presente", inicioReal: en("08:00") },
+      ],
+    });
+
+    const corregida = await registrarLlegadaJardin(
+      repo,
+      "est-001",
+      en("20:00"),
+      en("07:15"),
+    );
+    expect(corregida.inicioReal).toBe(en("07:15"));
+    expect(corregida.inicioMarcadoEn).toBeUndefined();
+  });
+});

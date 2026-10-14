@@ -91,6 +91,35 @@ export default function Hoy() {
     }
   }
 
+  /**
+   * Corrige la hora real de una llegada o un retiro ya marcados.
+   *
+   * Vuelve a llamar al mismo servicio con la hora de verdad: el retiro del
+   * jardín tiene que VOLVER A COTIZAR, porque de la hora real sale el tramo
+   * del día y el recargo. Escribir el campo a mano habría dejado la hora
+   * corregida y el cobro con el número viejo.
+   */
+  async function ajustarHora(
+    item: ItemAsistencia,
+    que: "llegada" | "retiro",
+    nueva: string,
+  ) {
+    const ahora = new Date().toISOString();
+    await ejecutar(async (repo) => {
+      if (que === "llegada") {
+        return item.linea === "hotel"
+          ? registrarLlegadaHotel(repo, item.id, ahora, nueva)
+          : registrarLlegadaJardin(repo, item.id, ahora, nueva);
+      }
+      return item.linea === "hotel"
+        ? registrarSalidaHotel(repo, item.id, ahora, nueva)
+        : registrarSalidaJardin(repo, item.id, ahora, nueva);
+    });
+    toast.success(`Hora corregida`, {
+      description: `${item.perro.nombre}, ${que} a las ${nueva.slice(11, 16)}.`,
+    });
+  }
+
   async function deshacer(item: ItemAsistencia) {
     if (item.linea === "hotel") return;
     await ejecutar((repo) => deshacerLlegadaJardin(repo, item.id));
@@ -230,6 +259,7 @@ export default function Hoy() {
               item={ficha}
               hoy={hoy}
               ocupado={ocupado}
+              onAjustarHora={(que, nueva) => ajustarHora(ficha, que, nueva)}
               onAccion={(accion) => {
                 setFichaDe(null);
                 if (accion === "llego") void llego(ficha);

@@ -438,6 +438,44 @@ pasado ya decididos** —uno de cada seis perdonado—, porque la cola es para l
 que pasó recién y no para 60 días de historia esperando a alguien. Un día
 suelto futuro también nace cobrado: se paga al agendarlo, no al llegar.
 
+### La hora que pasó y la hora en que se marcó
+
+`lib/rules/marca-de-asistencia.ts`. El cuidador marca de un toque, y a veces
+marca después: el perro llegó a las 8:00 y él alcanzó a tocar el botón a las
+8:40, con las manos ocupadas. Las dos horas son verdad y sirven para cosas
+distintas.
+
+- **`inicioReal` / `finReal` es lo que pasó**, y es lo único que cobra. De ahí
+  salen el tramo del día y el recargo.
+- **`inicioMarcadoEn` / `finMarcadoEn` es cuándo se apretó el botón.** No toca
+  un peso: dice qué tan al día se está marcando, que es información sobre la
+  operación y no sobre el perro.
+
+Confundirlas sería cobrarle a un dueño por lo ocupado que estuvo el equipo.
+
+**El check-in sigue siendo de un toque**: por omisión las dos horas son el
+mismo instante, que es el caso normal. Corregir es volver a llamar al mismo
+servicio con la hora de verdad — y eso importa porque el retiro del jardín
+**vuelve a cotizar**: escribir el campo a mano habría dejado la hora corregida
+y el cobro con el número viejo.
+
+**La hora de marca se anota solo la primera vez.** Si ya había una llegada,
+corregirla es arreglar un dato, no marcar de nuevo: ponerle "ahora" le
+inventaría un atraso a quien solo ordenó el registro. Y una estadía vieja, que
+nunca tuvo marca, se queda sin ella — "no se sabe" es la respuesta correcta, no
+la hora en que alguien la editó.
+
+`describirDesfase` devuelve `null` bajo los
+`NEGOCIO.asistencia.minutosDeMarcaAlDia`: marcar en el instante exacto es
+imposible con un perro en brazos, así que un par de minutos no es un atraso, es
+la vida real. Una pantalla que se queja de nada se deja de mirar.
+
+**Dónde se corrige: en la ficha, no en la tarjeta.** La tarjeta tiene dos
+blancos —el cuerpo abre la ficha, el botón grande marca— y un tercero los pone
+a pelear. Probándolo se vio literal: tocar la hora abría la hoja de ajuste *y*
+la ficha encima. Además el cuerpo de la tarjeta **es un `<button>`**, así que
+otro botón adentro era HTML inválido.
+
 ### La ficha del perro
 
 `components/shared/detalle-perro.tsx` es **una sola ficha para las tres

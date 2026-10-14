@@ -97,13 +97,36 @@ export async function cargarDiaDeStaff(
 
 /* ── Jardín ────────────────────────────────────────────────────────── */
 
+/**
+ * Marca la llegada.
+ *
+ * `horaReal` existe porque el cuidador a veces marca después: el perro llegó
+ * a las 8:00 y él alcanzó a tocar el botón a las 8:40, con las manos
+ * ocupadas. Por omisión las dos son el mismo instante, que es el caso normal
+ * y el que mantiene el check-in de un toque.
+ *
+ * Volver a llamarla con otra `horaReal` corrige la llegada sin tocar cuándo
+ * se marcó por primera vez: lo que se corrige es el dato, no el registro de
+ * que alguien lo anotó tarde.
+ */
 export async function registrarLlegadaJardin(
   repo: RepositorioPatoteca,
   estadiaId: ID,
   ahora: InstanteISO = new Date().toISOString(),
+  horaReal: InstanteISO = ahora,
 ): Promise<EstadiaJardin> {
+  const estadia = await repo.estadiasJardin.obtener(estadiaId);
+
+  // La hora de marca se anota SOLO la primera vez. Si ya había una llegada,
+  // esto es una corrección y no una marca nueva: ponerle "ahora" le
+  // inventaría un atraso a quien solo arregló un dato. Y en una estadía
+  // vieja, que nunca tuvo marca, se queda sin ella — "no se sabe" es la
+  // respuesta correcta, no la hora en que alguien la editó.
+  const esPrimeraMarca = !estadia?.inicioReal;
+
   return repo.estadiasJardin.actualizar(estadiaId, {
-    inicioReal: ahora,
+    inicioReal: horaReal,
+    inicioMarcadoEn: esPrimeraMarca ? ahora : estadia?.inicioMarcadoEn,
     estado: "presente",
   });
 }
@@ -123,21 +146,26 @@ export async function registrarSalidaJardin(
   repo: RepositorioPatoteca,
   estadiaId: ID,
   ahora: InstanteISO = new Date().toISOString(),
+  /** La hora a la que se fue de verdad, si no es el momento de marcarlo. */
+  horaReal: InstanteISO = ahora,
 ): Promise<ResultadoSalida> {
   const estadia = await repo.estadiasJardin.obtener(estadiaId);
   if (!estadia) throw new Error(`No existe la estadía ${estadiaId}`);
 
   const inicio = estadia.inicioReal ?? estadia.inicioProgramado;
+  // Todo lo que define plata mira la hora REAL: el tramo del día y el
+  // recargo. El momento en que se apretó el botón no cobra nada.
   const cotizacion = calcularPrecioJardin({
     inicio,
-    fin: ahora,
+    fin: horaReal,
     origen: estadia.origen,
   });
 
-  const recargo = calcularRecargoFueraDeHorario(inicio, ahora);
+  const recargo = calcularRecargoFueraDeHorario(inicio, horaReal);
 
   const actualizada = await repo.estadiasJardin.actualizar(estadiaId, {
-    finReal: ahora,
+    finReal: horaReal,
+    finMarcadoEn: estadia.finReal ? estadia.finMarcadoEn : ahora,
     estado: "finalizada",
     cotizacion,
   });
@@ -166,9 +194,13 @@ export async function registrarLlegadaHotel(
   repo: RepositorioPatoteca,
   reservaId: ID,
   ahora: InstanteISO = new Date().toISOString(),
+  horaReal: InstanteISO = ahora,
 ): Promise<ReservaHotel> {
+  const reserva = await repo.reservasHotel.obtener(reservaId);
+
   return repo.reservasHotel.actualizar(reservaId, {
-    inicioReal: ahora,
+    inicioReal: horaReal,
+    inicioMarcadoEn: reserva?.inicioReal ? reserva.inicioMarcadoEn : ahora,
     estado: "en_curso",
   });
 }
@@ -188,6 +220,8 @@ export async function registrarSalidaHotel(
   repo: RepositorioPatoteca,
   reservaId: ID,
   ahora: InstanteISO = new Date().toISOString(),
+  /** La hora a la que se lo llevaron de verdad. */
+  horaReal: InstanteISO = ahora,
 ): Promise<ResultadoSalidaHotel> {
   const reserva = await repo.reservasHotel.obtener(reservaId);
   if (!reserva) throw new Error(`No existe la reserva ${reservaId}`);
@@ -197,12 +231,13 @@ export async function registrarSalidaHotel(
 
   const cotizacion = calcularPrecioHotel({
     inicio,
-    fin: ahora,
+    fin: horaReal,
     paseosContratados: reserva.paseosContratados,
   });
 
   const actualizada = await repo.reservasHotel.actualizar(reservaId, {
-    finReal: ahora,
+    finReal: horaReal,
+    finMarcadoEn: reserva.finReal ? reserva.finMarcadoEn : ahora,
     estado: "finalizada",
     cotizacion,
   });
