@@ -609,6 +609,60 @@ Las tarjetas de los días tienen todas las filas de alto fijo. "28 sep" en una
 línea se corta en los teléfonos angostos y desalinea la tira completa, así que
 la fecha va en dos líneas ("lun" sobre "28") y el mes vive en el encabezado.
 
+### La nube: las reglas viven pegadas a los datos
+
+`supabase/migraciones/`. Dos archivos que se pegan en el editor SQL de
+Supabase, en orden, y que se pueden correr de nuevo sin hacer daño:
+`0001_esquema.sql` crea las tablas y `0002_permisos.sql` define quién ve
+qué.
+
+Esto es lo que reemplaza al selector de rol. En el prototipo el rol vive en
+el navegador: cualquiera abre las herramientas de desarrollo, lo cambia a
+`admin` y ve la cobranza completa. Con **RLS** las reglas quedan pegadas a
+los datos, así que no hay pantalla que saltarse: si un dueño pide los pagos
+de otro, la base devuelve cero filas. Una pantalla que esconde un dato lo
+está escondiendo; la base que no lo entrega lo está protegiendo.
+
+Tres alcances:
+
+| | Ve |
+|---|---|
+| Dueño | Lo suyo. Sus perros, sus reservas, sus cobros. |
+| Equipo | Los perros y las fichas, porque los cuida. **La plata no.** |
+| Admin | Todo. |
+
+Que el staff no vea la plata no es desconfianza: el que recibe al perro en
+la puerta no necesita saber cuánto debe su dueño, y lo que no se necesita no
+se expone.
+
+Dos decisiones que se explican solas una vez escritas:
+
+- **`configuracion` se lee sin sesión.** La pantalla de crear cuenta
+  necesita las razas y los campos obligatorios para dibujarse, y todavía no
+  hay nadie identificado. No hay nada reservado ahí —son las mismas listas
+  que el folleto— y cerrarla dejaría el formulario sin desplegables.
+- **El rol lo asciende Administración, nunca el interesado.** Si un dueño
+  pudiera editar su fila de `perfiles`, se haría admin en una línea de
+  consola. Una cuenta nueva nace `cliente` por disparador.
+
+`unique (cliente_id, periodo)` en `cuentas_mensuales` baja a la base la
+idempotencia de la cuenta del día 1. Antes la cuidaba el servicio; ahora la
+cuida el lugar donde no se puede olvidar.
+
+#### Las políticas se prueban, no se leen
+
+```
+./supabase/pruebas/aislamiento.sh
+```
+
+Levanta un Postgres desechable, corre las migraciones dos veces, siembra
+cuatro cuentas y le pregunta a la base qué ve cada una; después intenta
+pasarse por encima de las reglas. Correrlo después de tocar cualquier
+`create policy` es obligatorio: una política que aísla hoy puede dejar de
+aislar con el próximo cambio y **la base no avisa**, solo devuelve una fila
+que no correspondía. Con RLS apagado en una sola tabla, la prueba muestra a
+un visitante anónimo leyendo todos los cobros.
+
 ### Datos que persisten
 
 `RepositorioLocal` guarda todo el set en `localStorage` bajo
