@@ -7,6 +7,7 @@
  */
 
 import { NEGOCIO } from "@/lib/config/negocio";
+import { leCorrespondeEstarCastrado } from "@/lib/rules/perro";
 import { diasEntre } from "@/lib/utils/fecha";
 import type { FechaISO, Perro, TipoVacuna, Vacuna } from "@/lib/types";
 
@@ -138,11 +139,16 @@ export function evaluarAdmision(
   if (
     NEGOCIO.admision.esterilizacionObligatoriaEnMachos &&
     perro.sexo === "macho" &&
-    !perro.esterilizado
+    !perro.esterilizado &&
+    leCorrespondeEstarCastrado(
+      perro.fechaNacimiento,
+      fecha,
+      NEGOCIO.admision.mesesParaExigirCastracion,
+    )
   ) {
     problemas.push({
       motivo: "esterilizacion",
-      mensaje: `${perro.nombre} necesita estar esterilizado para quedarse con nosotros.`,
+      mensaje: `${perro.nombre} necesita estar castrado para quedarse con nosotros.`,
       subsanable: true,
       bloquea: true,
     });

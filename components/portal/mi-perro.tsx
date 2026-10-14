@@ -64,13 +64,10 @@ export function MiPerro({
   }
 
   async function guardar() {
-    if (!configuracion.datos) return;
+    const reglas = configuracion.datos;
+    if (!reglas) return;
 
-    const revision = revisarAltaDePerro(
-      aBorrador(ficha),
-      configuracion.datos,
-      hoy,
-    );
+    const revision = revisarAltaDePerro(aBorrador(ficha), reglas, hoy);
     setFaltantes(revision);
     if (revision.length > 0) {
       toast.error("Falta completar la ficha.", {
@@ -80,7 +77,7 @@ export function MiPerro({
     }
 
     const { cambios } = await ejecutar((repo) =>
-      actualizarPerroComoDueno(repo, perro.id, cambiosDePerro(ficha)),
+      actualizarPerroComoDueno(repo, perro.id, cambiosDePerro(ficha, reglas)),
     );
 
     setEditando(false);

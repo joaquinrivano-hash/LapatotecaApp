@@ -19,14 +19,14 @@ import {
 } from "@/components/shared/formulario-perro";
 import { PRECIOS } from "@/lib/config/precios";
 import { NEGOCIO } from "@/lib/config/negocio";
-import { revisarAltaDePerro, type FaltanteDeAlta } from "@/lib/rules/alta-perro";
+import {
+  reparosDeAlta,
+  revisarAltaDePerro,
+  type FaltanteDeAlta,
+} from "@/lib/rules/alta-perro";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { hoyDelStaff } from "@/lib/servicios/asistencia";
-import {
-  crearCuenta,
-  RegistroRechazado,
-  reparosParaEntrar,
-} from "@/lib/servicios/registro";
+import { crearCuenta, RegistroRechazado } from "@/lib/servicios/registro";
 import { useSesion } from "@/lib/store/sesion";
 import { formatearCLP } from "@/lib/utils/moneda";
 import { esTelefonoValido } from "@/lib/utils/telefono";
@@ -52,15 +52,10 @@ export default function CrearCuenta() {
   const [faltantes, setFaltantes] = useState<FaltanteDeAlta[]>([]);
 
   const borrador = aBorrador(perro);
-  const reparos = borrador.pesoKg
-    ? reparosParaEntrar({
-        nombre: perro.nombre,
-        raza: perro.raza,
-        pesoKg: borrador.pesoKg,
-        sexo: borrador.sexo ?? "hembra",
-        esterilizado: borrador.esterilizado,
-      })
+  const reparos = configuracion.datos
+    ? reparosDeAlta(borrador, configuracion.datos, hoy)
     : [];
+  const bloqueos = reparos.filter((r) => r.bloquea);
 
   const datosDelDueno =
     cuenta.nombre.trim() !== "" &&
@@ -111,10 +106,11 @@ export default function CrearCuenta() {
         <div className="space-y-1">
           <h1 className="font-display text-2xl font-bold">Crea tu cuenta</h1>
           <p className="text-muted-foreground text-sm text-pretty">
-            Primero nos conocemos: con la cuenta lista agendas el{" "}
-            <strong className="text-foreground">día de prueba</strong> (
-            {formatearCLP(PRECIOS.diaDePrueba)}), que es media jornada de
-            jardín. Después de eso puedes reservar hotel o días completos.
+            ¡Queremos conocerte! Completa la siguiente información para poder
+            agendar tu <strong className="text-foreground">día de prueba</strong>{" "}
+            con nosotros. El día de prueba consiste en media jornada en La
+            Patoteca con un valor de {formatearCLP(PRECIOS.diaDePrueba)} pesos,
+            donde confirmaremos que es el lugar perfecto para ti y tu perrito.
           </p>
         </div>
 
@@ -158,7 +154,7 @@ export default function CrearCuenta() {
               valor={cuenta.telefono}
               onCambio={(v) => setCuenta({ ...cuenta, telefono: v })}
               autoComplete="tel"
-              ayuda="Acá te mandamos los reportes del día. Ej: 9 8765 4321."
+              ayuda="Acá te mandaremos los reportes diarios. Ej: 9 8765 4321."
               error={
                 cuenta.telefono.trim() !== "" &&
                 !esTelefonoValido(cuenta.telefono)
@@ -179,10 +175,16 @@ export default function CrearCuenta() {
 
         <Card>
           <CardContent className="space-y-4 p-5">
-            <h2 className="font-display flex items-center gap-2 text-lg font-bold">
-              <Dog className="size-5" />
-              Tu perro
-            </h2>
+            <div className="space-y-1">
+              <h2 className="font-display flex items-center gap-2 text-lg font-bold">
+                <Dog className="size-5" />
+                Tu perro
+              </h2>
+              <p className="text-muted-foreground text-sm text-pretty">
+                ¡Cuéntanos de tu perrito! Si tiene uno o más hermanos, podrás
+                agregarlos luego de crear tu cuenta.
+              </p>
+            </div>
 
             {configuracion.datos ? (
               <FormularioPerro
@@ -198,25 +200,32 @@ export default function CrearCuenta() {
           </CardContent>
         </Card>
 
-        {reparos.length > 0 && (
-          <div className="bg-warning/12 text-warning space-y-1 rounded-xl p-3 text-sm">
-            {reparos.map((reparo) => (
-              <p key={reparo} className="flex items-start gap-2">
-                <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-                {reparo}
-              </p>
-            ))}
-            <p className="text-muted-foreground text-xs">
-              Escríbenos igual: a veces hay vuelta, pero no queremos prometerte
-              un cupo que no podemos cumplir.
+        {reparos.map((reparo) => (
+          <div
+            key={reparo.mensaje}
+            className={`space-y-1 rounded-xl p-3 text-sm ${
+              reparo.bloquea
+                ? "bg-destructive/10 text-destructive"
+                : "bg-warning/12 text-warning"
+            }`}
+          >
+            <p className="flex items-start gap-2 text-pretty">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+              {reparo.mensaje}
             </p>
+            {reparo.bloquea && (
+              <p className="text-muted-foreground text-xs text-pretty">
+                Escríbenos igual: a veces hay vuelta, pero no queremos
+                prometerte un cupo que no podemos cumplir.
+              </p>
+            )}
           </div>
-        )}
+        ))}
 
         <Button
           size="xl"
           className="w-full"
-          disabled={!datosDelDueno || reparos.length > 0 || ocupado}
+          disabled={!datosDelDueno || bloqueos.length > 0 || ocupado}
           onClick={crear}
         >
           <PawPrint />

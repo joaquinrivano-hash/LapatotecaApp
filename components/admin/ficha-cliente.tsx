@@ -223,13 +223,10 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
   }
 
   async function guardar() {
-    if (!configuracion.datos) return;
+    const reglas = configuracion.datos;
+    if (!reglas) return;
 
-    const revision = revisarAltaDePerro(
-      aBorrador(ficha),
-      configuracion.datos,
-      hoy,
-    );
+    const revision = revisarAltaDePerro(aBorrador(ficha), reglas, hoy);
     setFaltantes(revision);
     if (revision.length > 0) {
       toast.error("Falta completar la ficha.", {
@@ -240,7 +237,7 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
 
     await ejecutar((repo) =>
       repo.perros.actualizar(perro.id, {
-        ...cambiosDePerro(ficha),
+        ...cambiosDePerro(ficha, reglas),
         diaDePrueba: { ...perro.diaDePrueba, estado: estadoPrueba },
       }),
     );

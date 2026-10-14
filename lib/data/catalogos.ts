@@ -71,6 +71,51 @@ export const NOTAS_PERRO = [
 ] as const;
 
 /** Qué come. Lo que el staff mira a la hora de almuerzo. */
+/**
+ * Las listas que se eligen de un desplegable.
+ *
+ * Son el punto de partida: la lista viva se edita desde Administración
+ * (`Configuracion`), porque una raza o una marca nueva no puede depender de
+ * que alguien toque el código.
+ *
+ * "Otra" no va en ninguna lista: es una opción del formulario para escribir a
+ * mano, y meterla acá dejaría que alguien la borrara sin querer.
+ */
+export const RAZAS_FRECUENTES = [
+  "Mestizo",
+  "Beagle",
+  "Bichón Frisé",
+  "Border Collie",
+  "Bulldog Francés",
+  "Chihuahua",
+  "Cocker Spaniel",
+  "Dachshund (salchicha)",
+  "Fox Terrier",
+  "Jack Russell Terrier",
+  "Maltés",
+  "Pequinés",
+  "Pomerania",
+  "Poodle",
+  "Pug",
+  "Schnauzer",
+  "Shih Tzu",
+  "Westie",
+  "Yorkshire Terrier",
+] as const;
+
+export const MARCAS_ANTIPARASITARIO = [
+  "Bravecto",
+  "NexGard",
+  "Simparica",
+  "Frontline",
+  "Advantage",
+  "Credelio",
+  "Drontal",
+  "Endogard",
+  "Milbemax",
+  "Revolution",
+] as const;
+
 /** Marcas que se ven de verdad en Chile, para que el seed no parezca inventado. */
 export const MARCAS_COMIDA = [
   "Proplan",
@@ -79,6 +124,10 @@ export const MARCAS_COMIDA = [
   "Master Dog",
   "Cannes",
   "Eukanuba",
+  "Dog Chow",
+  "Nutra Nuggets",
+  "Fit Formula",
+  "Monello",
   "Comida casera",
 ] as const;
 
@@ -87,11 +136,12 @@ export const MARCAS_COMIDA = [
  * para que no salga "1 g" ni "200 tazas".
  */
 export const RACIONES = [
+  { cantidad: 0.5, unidad: "taza" },
   { cantidad: 1, unidad: "taza" },
   { cantidad: 1.5, unidad: "taza" },
   { cantidad: 2, unidad: "taza" },
-  { cantidad: 1, unidad: "scoop" },
-  { cantidad: 2, unidad: "scoop" },
+  { cantidad: 1, unidad: "medida" },
+  { cantidad: 2, unidad: "medida" },
   { cantidad: 120, unidad: "g" },
   { cantidad: 200, unidad: "g" },
   { cantidad: 300, unidad: "g" },

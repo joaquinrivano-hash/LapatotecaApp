@@ -5,13 +5,14 @@
  * Funciones puras, como el resto de `lib/rules`: no tocan repositorio ni red.
  */
 
-import { rangoFechas, sumarDias } from "@/lib/utils/fecha";
+import { rangoFechas } from "@/lib/utils/fecha";
 import type {
   Alimentacion,
+  Racion,
+  UnidadRacion,
   Antiparasitario,
   Comida,
   FechaISO,
-  PeriodicidadAntiparasitario,
   Perro,
 } from "@/lib/types";
 
@@ -129,26 +130,28 @@ export function cumpleanosEntre(
 
 /* ── Antiparasitario ───────────────────────────────────────────────── */
 
-export const DIAS_DE_PERIODICIDAD: Record<
-  Exclude<PeriodicidadAntiparasitario, "otro">,
-  number
-> = {
-  mensual: 30,
-  trimestral: 90,
-  semestral: 180,
-  anual: 365,
-};
+/**
+ * Suma meses a una fecha de calendario, sin pasarse de mes.
+ *
+ * El 31 de enero más un mes es el 28 de febrero, no el 3 de marzo: una
+ * vigencia que se corre de mes confunde a quien la lee en el carnet.
+ */
+export function sumarMeses(fecha: FechaISO, meses: number): FechaISO {
+  const [anio, mes, dia] = partes(fecha);
+  const total = (anio * 12 + (mes - 1)) + meses;
+  const anioFinal = Math.floor(total / 12);
+  const mesFinal = (total % 12) + 1;
 
-export const ETIQUETA_PERIODICIDAD: Record<
-  PeriodicidadAntiparasitario,
-  string
-> = {
-  mensual: "cada mes",
-  trimestral: "cada 3 meses",
-  semestral: "cada 6 meses",
-  anual: "una vez al año",
-  otro: "otro período",
-};
+  const diasDelMes = new Date(Date.UTC(anioFinal, mesFinal, 0)).getUTCDate();
+  const diaFinal = Math.min(dia, diasDelMes);
+
+  return `${anioFinal}-${String(mesFinal).padStart(2, "0")}-${String(diaFinal).padStart(2, "0")}`;
+}
+
+/** "cada mes" · "cada 3 meses" */
+export function describirDuracion(meses: number): string {
+  return meses === 1 ? "cada mes" : `cada ${meses} meses`;
+}
 
 /**
  * Hasta cuándo le dura. Es lo que termina guardado en `desparasitadoHasta`,
@@ -157,12 +160,43 @@ export const ETIQUETA_PERIODICIDAD: Record<
 export function vigenciaAntiparasitario(
   antiparasitario: Antiparasitario,
 ): FechaISO {
-  const dias =
-    antiparasitario.periodicidad === "otro"
-      ? (antiparasitario.cadaCuantosDias ?? 0)
-      : DIAS_DE_PERIODICIDAD[antiparasitario.periodicidad];
+  return sumarMeses(
+    antiparasitario.ultimaAplicacion,
+    antiparasitario.mesesDeDuracion,
+  );
+}
 
-  return sumarDias(antiparasitario.ultimaAplicacion, dias);
+/**
+ * Hasta cuándo vale una vacuna puesta ese día.
+ *
+ * Al dueño se le pide la fecha de aplicación —la que está escrita en el
+ * carnet— y el vencimiento se calcula con la duración que Administración
+ * tenga configurada para esa vacuna.
+ */
+export function vigenciaVacuna(
+  fechaAplicacion: FechaISO,
+  mesesDeDuracion: number,
+): FechaISO {
+  return sumarMeses(fechaAplicacion, mesesDeDuracion);
+}
+
+/**
+ * Si a esa fecha ya se le exige estar castrado.
+ *
+ * Antes de los 7 meses el veterinario todavía no la indica, así que rechazar a
+ * un cachorro sería rechazarlo por algo que ni siquiera puede hacer. Sin fecha
+ * de nacimiento se asume que ya tiene la edad: es lo prudente, y el dueño
+ * siempre puede agregar la fecha.
+ */
+export function leCorrespondeEstarCastrado(
+  nacimiento: FechaISO | undefined,
+  hoy: FechaISO,
+  mesesMinimos: number,
+): boolean {
+  if (!nacimiento) return true;
+  const edad = calcularEdad(nacimiento, hoy);
+  if (!edad) return false;
+  return edad.anios * 12 + edad.meses >= mesesMinimos;
 }
 
 /* ── Alimentación ──────────────────────────────────────────────────── */
@@ -173,12 +207,6 @@ export const ETIQUETA_COMIDA: Record<Comida, string> = {
   cena: "cena",
 };
 
-export const ETIQUETA_UNIDAD = {
-  g: "g",
-  taza: "taza",
-  scoop: "scoop",
-} as const;
-
 /** "Pelusa" · "Pelusa y Rocco" · "Pelusa, Rocco y Luna" */
 function enumerar(valores: string[]): string {
   if (valores.length === 0) return "";
@@ -186,8 +214,79 @@ function enumerar(valores: string[]): string {
   return `${valores.slice(0, -1).join(", ")} y ${valores.at(-1)}`;
 }
 
+/* ── Cantidades: números y fracciones ──────────────────────────────── */
+
+const FRACCIONES: Record<string, number> = {
+  "½": 0.5,
+  "⅓": 1 / 3,
+  "⅔": 2 / 3,
+  "¼": 0.25,
+  "¾": 0.75,
+};
+
 /**
- * La comida en una línea, para la ficha: "Proplan · 1 taza en almuerzo y cena".
+ * Lo que escribió el dueño, como número.
+ *
+ * Media taza se escribe de muchas maneras —"1/2", "½", "0,5"— y todas son
+ * correctas para quien las escribe. Rechazar una por no ser la que esperaba
+ * el campo es culpar a la persona de una limitación nuestra.
+ */
+export function parsearCantidad(texto: string): number | undefined {
+  const limpio = texto.trim();
+  if (!limpio) return undefined;
+
+  // "1½" o "½"
+  const conGlifo = /^(\d+)?\s*([½⅓⅔¼¾])$/.exec(limpio);
+  if (conGlifo) {
+    return Number(conGlifo[1] ?? 0) + FRACCIONES[conGlifo[2]];
+  }
+
+  // "1 1/2" o "1/2"
+  const conBarra = /^(?:(\d+)\s+)?(\d+)\s*\/\s*(\d+)$/.exec(limpio);
+  if (conBarra) {
+    const denominador = Number(conBarra[3]);
+    if (denominador === 0) return undefined;
+    return Number(conBarra[1] ?? 0) + Number(conBarra[2]) / denominador;
+  }
+
+  // "1,5" o "1.5"
+  const decimal = /^\d+(?:[.,]\d+)?$/.exec(limpio);
+  if (!decimal) return undefined;
+
+  const valor = Number(limpio.replace(",", "."));
+  return Number.isFinite(valor) && valor > 0 ? valor : undefined;
+}
+
+/** El número como se lee: "½", "1½", "1,3". */
+export function formatearCantidad(cantidad: number): string {
+  const entero = Math.floor(cantidad);
+  const resto = cantidad - entero;
+
+  const glifo = Object.entries(FRACCIONES).find(
+    ([, valor]) => Math.abs(valor - resto) < 0.01,
+  )?.[0];
+
+  if (glifo) return entero > 0 ? `${entero}${glifo}` : glifo;
+  if (Number.isInteger(cantidad)) return String(cantidad);
+
+  return cantidad
+    .toFixed(2)
+    .replace(/0+$/, "")
+    .replace(/\.$/, "")
+    .replace(".", ",");
+}
+
+export const ETIQUETA_UNIDAD: Record<UnidadRacion, { una: string; varias: string }> =
+  {
+    medida: { una: "medida", varias: "medidas" },
+    g: { una: "g", varias: "g" },
+    taza: { una: "taza", varias: "tazas" },
+  };
+
+/**
+ * La comida en una línea, para la ficha:
+ * "Proplan · 1 taza en almuerzo" o "Proplan · media taza en desayuno y 1 taza
+ * en cena".
  *
  * Devuelve `null` cuando no hay nada anotado, para que la pantalla muestre su
  * propio texto de vacío en vez de una línea a medias.
@@ -200,28 +299,43 @@ export function describirAlimentacion(
   const partesTexto: string[] = [];
   if (alimentacion.marca) partesTexto.push(alimentacion.marca);
 
-  if (alimentacion.cantidad && alimentacion.unidad) {
-    const unidad =
-      alimentacion.unidad === "g"
-        ? "g"
-        : alimentacion.cantidad === 1
-          ? alimentacion.unidad
-          : `${alimentacion.unidad}s`;
-    const racion = `${alimentacion.cantidad} ${unidad}`;
+  const raciones = (alimentacion.raciones ?? [])
+    .map((racion) => describirRacion(racion, alimentacion.unidad))
+    .filter((texto): texto is string => texto !== null);
 
-    partesTexto.push(
-      alimentacion.comidas.length > 0
-        ? `${racion} en ${enumerar(alimentacion.comidas.map((c) => ETIQUETA_COMIDA[c]))}`
-        : racion,
-    );
-  } else if (alimentacion.comidas.length > 0) {
-    partesTexto.push(
-      `en ${enumerar(alimentacion.comidas.map((c) => ETIQUETA_COMIDA[c]))}`,
-    );
-  }
+  if (raciones.length > 0) partesTexto.push(raciones.join(", "));
 
   const linea = partesTexto.join(" · ");
   if (!linea) return alimentacion.notas ?? null;
 
   return alimentacion.notas ? `${linea}. ${alimentacion.notas}` : linea;
+}
+
+/** "1 taza en almuerzo y cena" · "en desayuno" · "200 g" */
+function describirRacion(
+  racion: Racion,
+  unidad: UnidadRacion | undefined,
+): string | null {
+  const medida =
+    racion.cantidad && unidad
+      ? `${formatearCantidad(racion.cantidad)} ${pluralizarUnidad(racion.cantidad, unidad)}`
+      : null;
+
+  const cuando =
+    racion.comidas.length > 0
+      ? `en ${enumerar(racion.comidas.map((c) => ETIQUETA_COMIDA[c]))}`
+      : null;
+
+  if (medida && cuando) return `${medida} ${cuando}`;
+  return medida ?? cuando;
+}
+
+/**
+ * "1 taza", "½ taza", "2 tazas".
+ *
+ * Media taza va en singular: "½ tazas" no lo dice nadie.
+ */
+function pluralizarUnidad(cantidad: number, unidad: UnidadRacion): string {
+  const etiqueta = ETIQUETA_UNIDAD[unidad];
+  return cantidad <= 1 ? etiqueta.una : etiqueta.varias;
 }

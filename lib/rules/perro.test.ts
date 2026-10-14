@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   calcularEdad,
+  formatearCantidad,
+  parsearCantidad,
   cumpleQueEdad,
   describirAlimentacion,
   describirEdad,
   esCumpleanos,
+  leCorrespondeEstarCastrado,
+  sumarMeses,
   vigenciaAntiparasitario,
+  vigenciaVacuna,
 } from "@/lib/rules/perro";
 
 describe("calcularEdad", () => {
@@ -65,31 +70,62 @@ describe("esCumpleanos", () => {
   });
 });
 
+describe("sumarMeses", () => {
+  it("suma meses de calendario", () => {
+    expect(sumarMeses("2026-09-01", 3)).toBe("2026-12-01");
+    expect(sumarMeses("2026-11-15", 2)).toBe("2027-01-15");
+  });
+
+  it("no se pasa de mes: el 31 de enero más un mes es el 28 de febrero", () => {
+    expect(sumarMeses("2026-01-31", 1)).toBe("2026-02-28");
+    // 2028 sí es bisiesto.
+    expect(sumarMeses("2028-01-31", 1)).toBe("2028-02-29");
+  });
+});
+
 describe("vigenciaAntiparasitario", () => {
-  it("suma el período a la última aplicación", () => {
+  it("le suma los meses que dura el formato", () => {
     expect(
       vigenciaAntiparasitario({
         ultimaAplicacion: "2026-09-01",
-        periodicidad: "mensual",
+        mesesDeDuracion: 1,
       }),
     ).toBe("2026-10-01");
 
     expect(
       vigenciaAntiparasitario({
         ultimaAplicacion: "2026-09-01",
-        periodicidad: "trimestral",
+        mesesDeDuracion: 3,
       }),
-    ).toBe("2026-11-30");
+    ).toBe("2026-12-01");
+  });
+});
+
+describe("vigenciaVacuna", () => {
+  it("cuenta desde el día en que se puso", () => {
+    expect(vigenciaVacuna("2026-03-10", 12)).toBe("2027-03-10");
+    expect(vigenciaVacuna("2026-03-10", 6)).toBe("2026-09-10");
+  });
+});
+
+describe("leCorrespondeEstarCastrado", () => {
+  const HOY = "2026-09-28";
+
+  it("a un cachorro de cuatro meses todavía no", () => {
+    expect(leCorrespondeEstarCastrado("2026-05-28", HOY, 7)).toBe(false);
   });
 
-  it("con 'otro' usa los días que indicó el dueño", () => {
-    expect(
-      vigenciaAntiparasitario({
-        ultimaAplicacion: "2026-09-01",
-        periodicidad: "otro",
-        cadaCuantosDias: 45,
-      }),
-    ).toBe("2026-10-16");
+  it("desde los siete meses sí", () => {
+    expect(leCorrespondeEstarCastrado("2026-02-28", HOY, 7)).toBe(true);
+  });
+
+  it("justo el día que cumple los siete meses ya cuenta", () => {
+    expect(leCorrespondeEstarCastrado("2026-02-28", "2026-09-28", 7)).toBe(true);
+    expect(leCorrespondeEstarCastrado("2026-02-28", "2026-09-27", 7)).toBe(false);
+  });
+
+  it("sin fecha de nacimiento se asume que ya tiene la edad", () => {
+    expect(leCorrespondeEstarCastrado(undefined, HOY, 7)).toBe(true);
   });
 });
 
@@ -98,24 +134,38 @@ describe("describirAlimentacion", () => {
     expect(
       describirAlimentacion({
         marca: "Proplan",
-        cantidad: 1,
         unidad: "taza",
-        comidas: ["almuerzo", "cena"],
+        raciones: [{ cantidad: 1, comidas: ["almuerzo", "cena"] }],
       }),
     ).toBe("Proplan · 1 taza en almuerzo y cena");
+  });
+
+  it("junta las porciones distintas en una sola línea", () => {
+    expect(
+      describirAlimentacion({
+        marca: "Royal Canin",
+        unidad: "taza",
+        raciones: [
+          { cantidad: 0.5, comidas: ["desayuno"] },
+          { cantidad: 1, comidas: ["cena"] },
+        ],
+      }),
+    ).toBe("Royal Canin · ½ taza en desayuno, 1 taza en cena");
   });
 
   it("pluraliza la medida, pero no los gramos", () => {
     expect(
       describirAlimentacion({
-        cantidad: 2,
-        unidad: "scoop",
-        comidas: ["desayuno"],
+        unidad: "medida",
+        raciones: [{ cantidad: 2, comidas: ["desayuno"] }],
       }),
-    ).toBe("2 scoops en desayuno");
+    ).toBe("2 medidas en desayuno");
 
     expect(
-      describirAlimentacion({ cantidad: 200, unidad: "g", comidas: [] }),
+      describirAlimentacion({
+        unidad: "g",
+        raciones: [{ cantidad: 200, comidas: [] }],
+      }),
     ).toBe("200 g");
   });
 
@@ -123,7 +173,7 @@ describe("describirAlimentacion", () => {
     expect(
       describirAlimentacion({
         marca: "Royal Canin",
-        comidas: ["almuerzo"],
+        raciones: [{ comidas: ["almuerzo"] }],
         notas: "Si no come, no insistir.",
       }),
     ).toBe("Royal Canin · en almuerzo. Si no come, no insistir.");
@@ -131,12 +181,67 @@ describe("describirAlimentacion", () => {
 
   it("sin nada anotado devuelve null para que la pantalla ponga su vacío", () => {
     expect(describirAlimentacion(undefined)).toBeNull();
-    expect(describirAlimentacion({ comidas: [] })).toBeNull();
+    expect(describirAlimentacion({ raciones: [] })).toBeNull();
   });
 
   it("con solo notas, devuelve las notas", () => {
     expect(
-      describirAlimentacion({ comidas: [], notas: "Trae su bolsita." }),
+      describirAlimentacion({ raciones: [], notas: "Trae su bolsita." }),
     ).toBe("Trae su bolsita.");
+  });
+});
+
+describe("parsearCantidad", () => {
+  it("entiende un número", () => {
+    expect(parsearCantidad("1")).toBe(1);
+    expect(parsearCantidad("200")).toBe(200);
+  });
+
+  it("entiende el decimal con coma y con punto", () => {
+    expect(parsearCantidad("1,5")).toBe(1.5);
+    expect(parsearCantidad("1.5")).toBe(1.5);
+  });
+
+  it("entiende la fracción escrita con barra", () => {
+    expect(parsearCantidad("1/2")).toBe(0.5);
+    expect(parsearCantidad("3/4")).toBe(0.75);
+    expect(parsearCantidad("1 1/2")).toBe(1.5);
+  });
+
+  it("entiende el símbolo de la fracción", () => {
+    expect(parsearCantidad("½")).toBe(0.5);
+    expect(parsearCantidad("1½")).toBe(1.5);
+    expect(parsearCantidad("¼")).toBe(0.25);
+  });
+
+  it("no acepta lo que no es una cantidad", () => {
+    expect(parsearCantidad("")).toBeUndefined();
+    expect(parsearCantidad("poquito")).toBeUndefined();
+    expect(parsearCantidad("0")).toBeUndefined();
+    expect(parsearCantidad("1/0")).toBeUndefined();
+  });
+});
+
+describe("formatearCantidad", () => {
+  it("escribe las fracciones como se leen", () => {
+    expect(formatearCantidad(0.5)).toBe("½");
+    expect(formatearCantidad(1.5)).toBe("1½");
+    expect(formatearCantidad(0.25)).toBe("¼");
+  });
+
+  it("deja los enteros como están", () => {
+    expect(formatearCantidad(1)).toBe("1");
+    expect(formatearCantidad(200)).toBe("200");
+  });
+
+  it("lo que no es fracción conocida va con coma", () => {
+    expect(formatearCantidad(1.3)).toBe("1,3");
+  });
+
+  it("lo que se escribe se puede volver a leer", () => {
+    for (const texto of ["1", "½", "1½", "1,5", "200", "¾"]) {
+      const cantidad = parsearCantidad(texto)!;
+      expect(parsearCantidad(formatearCantidad(cantidad))).toBeCloseTo(cantidad);
+    }
   });
 });
