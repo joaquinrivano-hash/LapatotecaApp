@@ -106,10 +106,11 @@ export default function CrearCuenta() {
         <div className="space-y-1">
           <h1 className="font-display text-2xl font-bold">Crea tu cuenta</h1>
           <p className="text-muted-foreground text-sm text-pretty">
-            Primero nos conocemos: con la cuenta lista agendas el{" "}
-            <strong className="text-foreground">día de prueba</strong> (
-            {formatearCLP(PRECIOS.diaDePrueba)}), que es media jornada de
-            jardín. Después de eso puedes reservar hotel o días completos.
+            ¡Queremos conocerte! Completa la siguiente información para poder
+            agendar tu <strong className="text-foreground">día de prueba</strong>{" "}
+            con nosotros. El día de prueba consiste en media jornada en La
+            Patoteca con un valor de {formatearCLP(PRECIOS.diaDePrueba)} pesos,
+            donde confirmaremos que es el lugar perfecto para ti y tu perrito.
           </p>
         </div>
 
@@ -153,7 +154,7 @@ export default function CrearCuenta() {
               valor={cuenta.telefono}
               onCambio={(v) => setCuenta({ ...cuenta, telefono: v })}
               autoComplete="tel"
-              ayuda="Acá te mandamos los reportes del día. Ej: 9 8765 4321."
+              ayuda="Acá te mandaremos los reportes diarios. Ej: 9 8765 4321."
               error={
                 cuenta.telefono.trim() !== "" &&
                 !esTelefonoValido(cuenta.telefono)
@@ -174,10 +175,16 @@ export default function CrearCuenta() {
 
         <Card>
           <CardContent className="space-y-4 p-5">
-            <h2 className="font-display flex items-center gap-2 text-lg font-bold">
-              <Dog className="size-5" />
-              Tu perro
-            </h2>
+            <div className="space-y-1">
+              <h2 className="font-display flex items-center gap-2 text-lg font-bold">
+                <Dog className="size-5" />
+                Tu perro
+              </h2>
+              <p className="text-muted-foreground text-sm text-pretty">
+                ¡Cuéntanos de tu perrito! Si tiene uno o más hermanos, podrás
+                agregarlos luego de crear tu cuenta.
+              </p>
+            </div>
 
             {configuracion.datos ? (
               <FormularioPerro
