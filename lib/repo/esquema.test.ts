@@ -118,9 +118,12 @@ describe("el esquema y los tipos se describen el uno al otro", () => {
     const enElEsquema = [
       ...SQL.matchAll(/create table if not exists (\w+) \(/g),
     ].map((m) => m[1]);
-    // `perfiles` y `configuracion` no son colecciones del dominio: una es el
-    // rol de cada cuenta y la otra es un registro único.
-    const infraestructura = ["perfiles", "configuracion"];
+    // No son colecciones del dominio: `perfiles` es el rol de cada cuenta,
+    // `configuracion` es un registro único e `invitaciones` es el permiso
+    // anotado antes de que la persona exista. Ninguna pasa por el
+    // repositorio, así que no tienen interfaz que cotejar — el día que
+    // alguna entre a `RepositorioPatoteca`, sale de esta lista.
+    const infraestructura = ["perfiles", "configuracion", "invitaciones"];
     const cotejadas = [...Object.values(PARES), ...infraestructura];
     expect(enElEsquema.filter((t) => !cotejadas.includes(t))).toEqual([]);
   });

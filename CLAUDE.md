@@ -838,6 +838,31 @@ Dos decisiones que se explican solas una vez escritas:
   pudiera editar su fila de `perfiles`, se haría admin en una línea de
   consola. Una cuenta nueva nace `cliente` por disparador.
 
+#### Cómo entra alguien del equipo
+
+El alta del portal **exige un perro**, porque es el alta de un dueño. La
+cuidadora no tiene perro que inscribir, así que por ahí no entra. Y el rol no
+se puede pedir al registrarse, porque entonces cualquiera se haría admin en el
+primer formulario.
+
+Por eso la invitación va **al revés**: Administración deja anotado el correo en
+`invitaciones` ANTES, y cuando esa persona se registra, el disparador le pone
+el rol que le corresponde. Quien llega por su cuenta, sin invitación anotada,
+nace `cliente`.
+
+Tres detalles que son la diferencia entre que funcione y que sea un agujero:
+
+- **El correo se compara en minúscula.** "Maria@" y "maria@" son la misma
+  persona para todo el mundo menos para una comparación de texto.
+- **La invitación se gasta al usarse.** Una que sirve para siempre es una que
+  alguien reutiliza.
+- **Nada de esto necesita la `service_role` key.** La decisión la toma el
+  disparador dentro de la base, no una llave viviendo en un servidor. Invitar
+  por la API de administración de Supabase habría exigido esa llave; esto no.
+
+El **primer admin** sí se asciende a mano, una vez, desde el editor SQL: no hay
+ningún admin todavía que pueda invitarlo. De ahí en adelante invita él.
+
 #### Grants y políticas son dos cosas
 
 Se confunden fácil y hacen falta las dos: el **grant** dice si un rol puede

@@ -196,6 +196,52 @@ intento_como "$STAFF" "cambia el precio de la vitrina" "6000" \
 # entera en orden. Alguien va a volver a correr uno suelto en el editor SQL
 # —para releerlo, para arreglar un typo— y si ese archivo borrara en bloque
 # se llevaría las políticas de los que vinieron después, sin devolverlas.
+# ── Cómo entra alguien del equipo ────────────────────────────────────
+echo "▸ invitaciones"
+
+comprobar () {
+  local descripcion=$1 esperado=$2 obtenido=$3
+  if [[ $obtenido == "$esperado" ]]; then
+    printf '  ✓ %-46s %s\n' "$descripcion" "$obtenido"
+  else
+    printf '  ✗ %-46s esperaba [%s], obtuvo [%s]\n' "$descripcion" "$esperado" "$obtenido"
+    fallas=$((fallas + 1))
+  fi
+}
+
+# Quien llega por su cuenta nace cliente, invitación o no.
+sql "insert into auth.users (id, email) values ('55555555-5555-5555-5555-555555555555', 'curiosa@ejemplo.cl');" >/dev/null
+comprobar "sin invitación la cuenta nace cliente" "cliente" \
+  "$(sql "select rol from perfiles where id = '55555555-5555-5555-5555-555555555555';" | tail -1)"
+
+# Con invitación, la base le pone el rol sola.
+sql "insert into invitaciones (email, rol) values ('maria@lapatoteca.cl', 'staff');" >/dev/null
+sql "insert into auth.users (id, email) values ('66666666-6666-6666-6666-666666666666', 'maria@lapatoteca.cl');" >/dev/null
+comprobar "con invitación entra como cuidadora" "staff" \
+  "$(sql "select rol from perfiles where id = '66666666-6666-6666-6666-666666666666';" | tail -1)"
+
+comprobar "la invitación queda gastada" "1" \
+  "$(sql "select count(*) from invitaciones where email = 'maria@lapatoteca.cl' and usada_en is not null;" | tail -1)"
+
+# El correo se compara en minúscula: "Maria@" y "maria@" son la misma persona
+# para todo el mundo menos para una comparación de texto.
+sql "insert into invitaciones (email, rol) values ('pedro@lapatoteca.cl', 'staff');" >/dev/null
+sql "insert into auth.users (id, email) values ('77777777-7777-7777-7777-777777777777', 'Pedro@Lapatoteca.CL');" >/dev/null
+comprobar "no importa cómo escriba las mayúsculas" "staff" \
+  "$(sql "select rol from perfiles where id = '77777777-7777-7777-7777-777777777777';" | tail -1)"
+
+# Una invitación gastada no sirve dos veces.
+sql "insert into auth.users (id, email) values ('88888888-8888-8888-8888-888888888888', 'maria@lapatoteca.cl');" >/dev/null
+comprobar "una invitación usada no sirve de nuevo" "cliente" \
+  "$(sql "select rol from perfiles where id = '88888888-8888-8888-8888-888888888888';" | tail -1)"
+
+intento_como "$STAFF" "el cuidador invita a alguien" "violates row-level security" \
+  "insert into invitaciones (email, rol) values ('colado@ejemplo.cl', 'admin');"
+intento "el dueño se invita a sí mismo como admin" "violates row-level security" \
+  "insert into invitaciones (email, rol) values ('ana@ejemplo.cl', 'admin');"
+intento_como "$STAFF" "el cuidador lee a quién invitaron" "0" \
+  "select count(*) from invitaciones;"
+
 echo "▸ repetir un archivo suelto no rompe los demás"
 psql -h "$D" -U postgres -v ON_ERROR_STOP=1 -q \
   -f "$raiz/supabase/migrations/20261014120100_permisos.sql" >/dev/null 2>&1
