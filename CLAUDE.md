@@ -645,6 +645,23 @@ Dos decisiones que se explican solas una vez escritas:
   pudiera editar su fila de `perfiles`, se haría admin en una línea de
   consola. Una cuenta nueva nace `cliente` por disparador.
 
+#### Grants y políticas son dos cosas
+
+Se confunden fácil y hacen falta las dos: el **grant** dice si un rol puede
+tocar la tabla, la **política** dice qué filas se lleva. Una tabla con
+políticas perfectas y sin grant devuelve "permission denied"; una con grant y
+sin políticas la entrega entera.
+
+El proyecto está creado con **"Automatically expose new tables" apagado** y
+**"Enable automatic RLS" encendido**. Por eso `0002_permisos.sql` nombra cada
+tabla a propósito en su bucle de grants: una tabla nueva nace sin alcance y
+hay que darle permiso explícito. Es más trabajo y es el lado correcto para
+equivocarse — lo que se olvide queda invisible en vez de quedar expuesto.
+
+El visitante sin cuenta alcanza exactamente dos tablas, y solo para leer:
+`productos` (la vitrina) y `configuracion` (las listas que el formulario de
+alta necesita para dibujarse).
+
 `unique (cliente_id, periodo)` en `cuentas_mensuales` baja a la base la
 idempotencia de la cuenta del día 1. Antes la cuidaba el servicio; ahora la
 cuida el lugar donde no se puede olvidar.
@@ -657,7 +674,9 @@ cuida el lugar donde no se puede olvidar.
 
 Levanta un Postgres desechable, corre las migraciones dos veces, siembra
 cuatro cuentas y le pregunta a la base qué ve cada una; después intenta
-pasarse por encima de las reglas. Correrlo después de tocar cualquier
+pasarse por encima de las reglas. El andamio de la prueba arranca tan cerrado
+como el proyecto real —sin privilegios por defecto— así que caza las dos
+fallas: un RLS olvidado y un grant olvidado. Correrlo después de tocar cualquier
 `create policy` es obligatorio: una política que aísla hoy puede dejar de
 aislar con el próximo cambio y **la base no avisa**, solo devuelve una fila
 que no correspondía. Con RLS apagado en una sola tabla, la prueba muestra a

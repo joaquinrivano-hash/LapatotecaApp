@@ -57,6 +57,39 @@ language sql
 stable
 as $$ select mi_rol() in ('staff', 'admin'); $$;
 
+/* ── Permiso de entrada ───────────────────────────────────────────── */
+
+-- Los GRANT son una capa distinta de las políticas, y es fácil confundirlas:
+-- el grant dice si un rol puede TOCAR la tabla, la política dice QUÉ FILAS
+-- se lleva. Hacen falta los dos. Una tabla con políticas perfectas y sin
+-- grant devuelve "permission denied"; una con grant y sin políticas la
+-- entrega entera.
+--
+-- El proyecto está creado con "Automatically expose new tables" apagado, así
+-- que una tabla nueva nace sin alcance y hay que nombrarla acá a propósito.
+-- Es más trabajo y es el lado correcto para equivocarse: lo que se me olvide
+-- queda invisible en vez de quedar expuesto.
+
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'perfiles', 'clientes', 'perros', 'suscripciones', 'planes',
+    'reservas_hotel', 'estadias_jardin', 'servicios', 'cuentas_mensuales',
+    'pagos', 'productos', 'ordenes', 'reportes', 'incidentes', 'mensajes',
+    'notificaciones', 'configuracion'
+  ]
+  loop
+    execute format(
+      'grant select, insert, update, delete on %I to authenticated', t);
+  end loop;
+end $$;
+
+-- El visitante sin cuenta alcanza dos tablas y solo para leer: la vitrina
+-- de la tienda y las listas que el formulario de alta necesita para
+-- dibujarse. Nada más, y nunca para escribir.
+grant select on productos, configuracion to anon;
+
 /* ── RLS encendido en todo ────────────────────────────────────────── */
 
 -- Sin esto las políticas de abajo no se aplican y la tabla queda abierta

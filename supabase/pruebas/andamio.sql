@@ -23,5 +23,8 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 grant usage on schema public, auth to anon, authenticated;
-alter default privileges in schema public
-  grant all on tables to anon, authenticated;
+
+-- A propósito NO se dan privilegios por defecto sobre las tablas nuevas:
+-- el proyecto real tiene "Automatically expose new tables" apagado. Los
+-- permisos los da 0002_permisos.sql, tabla por tabla, así que esta prueba
+-- caza tanto un RLS olvidado como un GRANT olvidado.
