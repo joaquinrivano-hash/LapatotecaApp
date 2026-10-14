@@ -636,12 +636,54 @@ Tres alcances:
 | | Ve |
 |---|---|
 | Dueño | Lo suyo. Sus perros, sus reservas, sus cobros. |
-| Equipo | Los perros y las fichas, porque los cuida. **La plata no.** |
+| Equipo | Los perros, las fichas y los cobros **de su turno**. |
 | Admin | Todo. |
 
-Que el staff no vea la plata no es desconfianza: el que recibe al perro en
-la puerta no necesita saber cuánto debe su dueño, y lo que no se necesita no
-se expone.
+**El dueño no solo mira: agenda y compra.** Puede crear sus reservas, sus
+estadías, sus planes, sus servicios y sus órdenes, y cancelarlos o
+reprogramarlos — siempre con su propio `cliente_id`, que es lo que verifica
+el `with check`. Agendar además le crea el cobro, y ahí hay dos condiciones
+que no son decorativas: nace **pendiente** y **sin fecha de pago**. Nadie se
+da por pagado solo; eso sigue siendo de Administración, que es quien mira la
+transferencia.
+
+La frontera del equipo se corrigió una vez. "El equipo no ve la plata" era
+una buena idea en abstracto y choca con la operación real: el check-out del
+jardín vuelve a cotizar con la hora real —de ahí sale el recargo fuera de
+horario— y tiene que crear, corregir o borrar ese cobro. En vez de abrirle
+los pagos enteros, se le abren los **tres conceptos que nacen de su turno**
+(`dia_suelto`, `dia_de_prueba`, `saldo_hotel`). La deuda del cliente, los
+planes, los abonos y la cuenta del mes siguen siendo de Administración: el
+equipo ve lo que acaba de pasar en la casa, no lo que el dueño debe.
+
+#### Lo que RLS no puede cuidar: el monto
+
+Una política verifica **quién** cobra y **en qué estado** nace el cobro. No
+puede verificar **cuánto**. El monto lo calcula el navegador, así que alguien
+con la consola abierta puede crearse un cobro de $0, y ninguna política lo
+va a detener — no es un agujero en las reglas, es el límite de dónde están
+escritas.
+
+Hoy eso está acotado y a la vista: el cobro nace pendiente y lo marca pagado
+una persona mirando la transferencia, así que un cobro falso aparece raro en
+la pantalla de pagos. **Antes de que exista una pasarela de pago, la
+cotización tiene que moverse al servidor** — una ruta que cotice con las
+mismas reglas puras y escriba el cobro ella. Mientras el único camino a la
+plata sea una transferencia que un humano concilia, se puede vivir con esto;
+con cobro automático, no.
+
+#### Descontar stock sin poder tocar el precio
+
+La tentación era darle `update` sobre `productos` al dueño para que la
+compra descontara stock. Sería un error: con `update` podría cambiarle el
+**precio** a un producto, y ese precio lo leen todos los demás. Un permiso
+que se pide para restar uno al stock no puede venir con la capacidad de
+reescribir la vitrina.
+
+Por eso `descontar_stock()`, una función `security definer` que se salta RLS
+sobre `productos` y lo único que sabe hacer es **restar**, nunca bajo cero.
+Es la misma regla que `ajustarStock` ya tenía en el repositorio local,
+puesta donde no se puede evitar.
 
 Dos decisiones que se explican solas una vez escritas:
 

@@ -22,13 +22,19 @@ insert into perros (id, cliente_id, nombre, raza, peso_kg, sexo, esterilizado) v
   ('dddddddd-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002',
    'Rocky', 'Beagle', 12, 'macho', true);
 
+-- Tres cobros elegidos para que se vea la frontera del equipo: el día de
+-- prueba y el día suelto nacen de su turno, la cuenta del mes no.
 insert into pagos (cliente_id, concepto, monto, estado) values
   ('aaaaaaaa-0000-0000-0000-000000000001', 'dia_de_prueba', 10000, 'pendiente'),
-  ('bbbbbbbb-0000-0000-0000-000000000002', 'hotel', 24000, 'pagado');
+  ('aaaaaaaa-0000-0000-0000-000000000001', 'cuenta_mensual', 86000, 'pendiente'),
+  ('bbbbbbbb-0000-0000-0000-000000000002', 'dia_suelto', 18000, 'pagado');
 
 insert into reportes (perro_ids, fecha, nota, autor_staff) values
   (array['cccccccc-0000-0000-0000-000000000001']::uuid[], current_date, 'Lola durmió la siesta', 'Javi'),
   (array['dddddddd-0000-0000-0000-000000000002']::uuid[], current_date, 'Rocky jugó harto', 'Javi');
+
+insert into productos (id, nombre, categoria, precio, stock) values
+  ('eeeeeeee-0000-0000-0000-000000000001', 'Pelota', 'juguetes', 6000, 10);
 
 insert into configuracion (vacunas_obligatorias, duracion_vacunas_meses, campos_obligatorios, catalogos)
   values (array['octuple','antirrabica','kc'], '{"octuple":12}', array['foto'], '{"razas":["Mestizo"]}');

@@ -74,17 +74,20 @@ comprobar_vista () {
 }
 
 echo "▸ lo que ve cada rol"
-# Ana y Beto: lo suyo y nada más. El staff: los perros sí, la plata no.
-comprobar_vista Ana   "$ANA"   "clientes=1 configuracion=1 pagos=1 perros=1 reportes=1"
+# Ana y Beto: lo suyo y nada más. El equipo ve los dos cobros operativos
+# (el día de prueba y el día suelto) y NO la cuenta del mes de Ana.
+comprobar_vista Ana   "$ANA"   "clientes=1 configuracion=1 pagos=2 perros=1 reportes=1"
 comprobar_vista Beto  "$BETO"  "clientes=1 configuracion=1 pagos=1 perros=1 reportes=1"
-comprobar_vista Staff "$STAFF" "clientes=2 configuracion=1 pagos=0 perros=2 reportes=2"
-comprobar_vista Admin "$ADMIN" "clientes=2 configuracion=1 pagos=2 perros=2 reportes=2"
+comprobar_vista Staff "$STAFF" "clientes=2 configuracion=1 pagos=2 perros=2 reportes=2"
+comprobar_vista Admin "$ADMIN" "clientes=2 configuracion=1 pagos=3 perros=2 reportes=2"
 comprobar_vista Anón  ""       "clientes=0 configuracion=1 pagos=0 perros=0 reportes=0"
 
 # ── Intentos de pasarse por encima ───────────────────────────────────
 intento () {
   local descripcion=$1 esperado=$2 consulta=$3 obtenido
-  obtenido=$(psql -h "$D" -U postgres -tAq 2>&1 <<SQL | grep -v "^$ANA\$" | grep -v '^$' | tail -1
+  # Sin tail acá: Postgres imprime ERROR y después CONTEXT, así que la
+  # última línea sería la pista y no el motivo. Se elige más abajo.
+  obtenido=$(psql -h "$D" -U postgres -tAq 2>&1 <<SQL | grep -v "^$ANA\$" | grep -v '^$' 
 begin;
 set local role authenticated;
 select set_config('prueba.uid', '$ANA', true);
@@ -92,6 +95,9 @@ $consulta
 rollback;
 SQL
 )
+  local error
+  error=$(grep -m1 "^ERROR:" <<<"$obtenido" || true)
+  obtenido=${error:-$(tail -1 <<<"$obtenido")}
   if [[ $obtenido == *"$esperado"* ]]; then
     printf '  ✓ %-42s %s\n' "$descripcion" "$obtenido"
   else
@@ -115,6 +121,22 @@ intento "se muda a la cuenta de otro" "violates row-level security" \
   "update clientes set perfil_id = '$BETO' where perfil_id = '$ANA';"
 intento "edita su propio perro (debe poder)" "10.00" \
   "update perros set peso_kg = 10 where nombre = 'Lola'; select peso_kg from perros where nombre = 'Lola';"
+
+echo "▸ lo que el dueño SÍ tiene que poder hacer"
+intento "agenda y le nace un cobro pendiente" "1" \
+  "insert into pagos (cliente_id, concepto, monto, estado) values ('aaaaaaaa-0000-0000-0000-000000000001', 'dia_de_prueba', 12345, 'pendiente'); select count(*) from pagos where monto = 12345;"
+intento "compra y descuenta stock" "7" \
+  "select stock from descontar_stock('eeeeeeee-0000-0000-0000-000000000001', 3);"
+
+echo "▸ y lo que no, aunque se parezca"
+intento "se crea un cobro ya pagado" "violates row-level security" \
+  "insert into pagos (cliente_id, concepto, monto, estado, pagado_en) values ('aaaaaaaa-0000-0000-0000-000000000001', 'plan', 1, 'pagado', now());"
+intento "le cobra a otro" "violates row-level security" \
+  "insert into pagos (cliente_id, concepto, monto, estado) values ('bbbbbbbb-0000-0000-0000-000000000002', 'plan', 999999, 'pendiente');"
+intento "le cambia el precio a la vitrina" "6000" \
+  "update productos set precio = 1 where nombre = 'Pelota'; select precio from productos where nombre = 'Pelota';"
+intento "se regala stock" "no puede ser negativa" \
+  "select stock from descontar_stock('eeeeeeee-0000-0000-0000-000000000001', -50);"
 
 # ── Que no quede ninguna tabla sin RLS ───────────────────────────────
 echo "▸ cobertura"
