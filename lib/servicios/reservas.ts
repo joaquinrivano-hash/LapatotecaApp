@@ -31,8 +31,15 @@ import {
 import { comprarPlan, elegirPlanParaUsar, planesVigentes } from "@/lib/rules/planes";
 import { cotizarPaseo, cotizarSpa, cotizarTraslado } from "@/lib/rules/servicios";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
-import { fechaISO, instanteEn, rangoFechas } from "@/lib/utils/fecha";
+import { formatearCLP } from "@/lib/utils/moneda";
+import {
+  fechaISO,
+  formatearFechaCorta,
+  instanteEn,
+  rangoFechas,
+} from "@/lib/utils/fecha";
 import type {
+  CambioDeCampo,
   Cotizacion,
   DatosBancarios,
   DuracionPaseo,
@@ -448,6 +455,11 @@ export async function cancelarDiaDeJardin(
   if (!devolucion.devuelve) {
     // El día se pierde: el cobro queda como estaba y el día del pack queda
     // consumido. Devolverlo sería no tener política.
+    //
+    // Pero el aviso sale igual, y es el que MÁS importa: una cancelación
+    // sobre la hora libera un cupo que ya no se alcanza a ofrecer, y es
+    // justamente la que la dueña quiere ver.
+    await avisarDeLaCancelacion(repo, cancelada, devolucion, 0, ahora);
     return { estadia: cancelada, devolucion, planDevuelto: null, aDevolver: 0 };
   }
 
@@ -501,7 +513,61 @@ export async function cancelarDiaDeJardin(
     }
   }
 
+  await avisarDeLaCancelacion(repo, cancelada, devolucion, aDevolver, ahora);
+
   return { estadia: cancelada, devolucion, planDevuelto, aDevolver };
+}
+
+/**
+ * Deja constancia en la bandeja de Administración.
+ *
+ * Sin esto una cancelación es invisible: el día desaparece del calendario y
+ * nadie se entera de quién avisó ni cuándo. Para la dueña eso importa —un
+ * cupo que se libera con dos días es otra cosa que uno que se libera a las
+ * nueve de la noche—, y el aviso es el único lugar donde queda escrito.
+ *
+ * Va por el mismo canal que las correcciones de ficha, que es donde ella ya
+ * mira lo que hicieron los dueños. Una bandeja aparte sería una bandeja que
+ * se deja de abrir.
+ */
+async function avisarDeLaCancelacion(
+  repo: RepositorioPatoteca,
+  estadia: EstadiaJardin,
+  devolucion: DevolucionJardin,
+  aDevolver: number,
+  ahora: InstanteISO,
+): Promise<void> {
+  const [cliente, perro] = await Promise.all([
+    repo.clientes.obtener(estadia.clienteId),
+    repo.perros.obtener(estadia.perroId),
+  ]);
+
+  const horas = Math.floor(devolucion.horasDeAviso);
+  const cambios: CambioDeCampo[] = [
+    { campo: "Día", despues: formatearFechaCorta(estadia.fecha) },
+    {
+      campo: "Aviso",
+      despues:
+        horas < 0 ? "después de la hora de llegada" : `${horas} h antes`,
+    },
+    {
+      campo: "Cobro",
+      despues: !devolucion.devuelve
+        ? "se mantiene, canceló fuera de plazo"
+        : aDevolver > 0
+          ? `hay que devolverle ${formatearCLP(aDevolver)}`
+          : "anulado, no alcanzó a pagarlo",
+    },
+  ];
+
+  await repo.notificaciones.crear({
+    clienteId: estadia.clienteId,
+    perroId: estadia.perroId,
+    titulo: `${cliente ? `${cliente.nombre} ${cliente.apellido}` : "Un dueño"} canceló el día de ${perro?.nombre ?? "su perro"}`,
+    cambios,
+    leida: false,
+    creadaEn: ahora,
+  });
 }
 
 /* ── Jardín: plan ──────────────────────────────────────────────────── */

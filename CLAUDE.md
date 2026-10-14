@@ -355,6 +355,30 @@ manera de que la devolución quede a medias. El RUT es **del titular**, que
 puede no ser el cliente —hay cuentas a nombre de la pareja— y el banco rechaza
 la transferencia si el nombre no calza.
 
+#### Y la cancelación en sí llega a la bandeja
+
+Una cancelación sin aviso es **invisible**: el día desaparece del calendario y
+nadie se entera de quién avisó ni cuándo. Para la dueña eso importa — un cupo
+que se libera con dos días es otra cosa que uno que se libera a las nueve de
+la noche.
+
+Por eso cada cancelación deja una `Notificacion` por el mismo canal que las
+correcciones de ficha, en `/admin`. Una bandeja aparte sería una bandeja que
+se deja de abrir.
+
+El aviso dice el día, **con cuánta anticipación avisó** y en qué terminó el
+cobro, que son los tres finales posibles: anulado porque no alcanzó a pagarlo,
+pendiente de devolución porque sí pagó, o en pie porque canceló fuera de plazo.
+
+**El aviso sale siempre, también fuera de plazo** — y ese es el que más
+importa. La primera versión no lo mandaba en ese caso, porque esa rama volvía
+antes; justamente la cancelación sobre la hora, que es la que deja un cupo que
+ya no se alcanza a ofrecer.
+
+Y como el día y la anticipación son **hechos y no cambios**, van sin `antes`:
+la bandeja escribe la línea sola, sin el tachado ni la flecha que sí
+corresponden a "9 kg → 12 kg".
+
 Y la otra mitad: `/admin/pagos` tiene su propia tarjeta **"Por devolver"**, con
 la cuenta completa a la vista para copiarla. Va aparte de los cobros pendientes
 porque es al revés —ahí entra plata, acá sale— y juntarlas haría fácil

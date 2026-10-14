@@ -608,3 +608,65 @@ describe("devolver la plata cuando ya estaba pagada", () => {
     );
   });
 });
+
+describe("Administración se entera de la cancelación", () => {
+  const MANANA = "2026-06-16";
+
+  async function cancelar(ahora: string, pagar = false) {
+    const { estadia, pago } = await reservarDiaJardin(repo, {
+      perroId: "perro-001",
+      fecha: MANANA,
+    });
+    if (pagar) {
+      await repo.pagos.actualizar(pago!.id, {
+        estado: "pagado",
+        pagadoEn: en("10:00", "2026-06-13"),
+      });
+    }
+    await cancelarDiaDeJardin(repo, estadia.id, ahora);
+    const [aviso] = await repo.notificaciones.listar();
+    return aviso;
+  }
+
+  it("deja un aviso con quién, qué perro y qué día", async () => {
+    // Sin esto la cancelación es invisible: el día desaparece del calendario
+    // y nadie se entera de quién avisó ni cuándo.
+    const aviso = await cancelar(en("08:00", "2026-06-14"));
+
+    expect(aviso.titulo).toContain("canceló el día de");
+    expect(aviso.perroId).toBe("perro-001");
+    expect(aviso.leida).toBe(false);
+    expect(aviso.cambios.map((c) => c.campo)).toEqual(["Día", "Aviso", "Cobro"]);
+  });
+
+  it("dice con cuánta anticipación avisó", async () => {
+    // Un cupo que se libera con dos días es otra cosa que uno que se libera
+    // a las nueve de la noche.
+    const aviso = await cancelar(en("08:00", "2026-06-14"));
+    expect(aviso.cambios.find((c) => c.campo === "Aviso")?.despues).toContain("h antes");
+  });
+
+  it("distingue los tres finales del cobro", async () => {
+    const anulado = await cancelar(en("08:00", "2026-06-14"));
+    expect(anulado.cambios.find((c) => c.campo === "Cobro")?.despues)
+      .toBe("anulado, no alcanzó a pagarlo");
+
+    montar();
+    const porDevolver = await cancelar(en("08:00", "2026-06-14"), true);
+    expect(porDevolver.cambios.find((c) => c.campo === "Cobro")?.despues)
+      .toContain("hay que devolverle");
+
+    montar();
+    const fueraDePlazo = await cancelar(en("20:00", "2026-06-15"));
+    expect(fueraDePlazo.cambios.find((c) => c.campo === "Cobro")?.despues)
+      .toBe("se mantiene, canceló fuera de plazo");
+  });
+
+  it("los hechos van sin 'antes', porque no son un cambio", async () => {
+    // El día y la anticipación no cambiaron de un valor a otro: son datos.
+    const aviso = await cancelar(en("08:00", "2026-06-14"));
+    for (const cambio of aviso.cambios) {
+      expect(cambio.antes).toBeUndefined();
+    }
+  });
+});
