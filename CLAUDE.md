@@ -348,6 +348,21 @@ Y por eso **"¿ya se decidió?" se contesta con "¿existe un cobro de este
 concepto para esta estadía?"**: perdonar deja un cobro en cero, no deja un
 vacío, así que la cola no lo vuelve a ofrecer.
 
+La tarjeta vive en `/admin/pagos` y **se esconde sola cuando no hay nada**: un
+negocio al día no necesita mirar una tarjeta vacía todos los días. Muestra seis
+filas por sección y resume el resto, porque un fin de semana largo puede dejar
+quince retiros tarde y quince filas con dos botones no se leen, se barren.
+
+En `/staff` el cierre avisa el atraso **en horas, sin el monto**: hay que
+conversarlo con el dueño que está ahí parado, pero poner un precio en esa
+pantalla convertiría la entrega del perro en una negociación con alguien que
+no tiene nada que decidir.
+
+El seed emite los dos cobros por separado y **deja los retiros tarde del
+pasado ya decididos** —uno de cada seis perdonado—, porque la cola es para lo
+que pasó recién y no para 60 días de historia esperando a alguien. Un día
+suelto futuro también nace cobrado: se paga al agendarlo, no al llegar.
+
 ### La ficha del perro
 
 `components/shared/detalle-perro.tsx` es **una sola ficha para las tres

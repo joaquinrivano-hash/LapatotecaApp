@@ -78,11 +78,13 @@ export default function Hoy() {
       registrarSalidaJardin(repo, item.id),
     );
 
-    // El recargo fuera de horario recién se sabe acá, así que hay que decirlo
-    // en el momento: si no, aparece después en la cuenta sin explicación.
-    if (resultado.recargo > 0) {
+    // El atraso se avisa en el momento, porque es lo que hay que conversar
+    // con el dueño que está ahí parado. El monto NO: el recargo no se cobra
+    // solo y la decisión no es de quien está entregando al perro. Poner un
+    // precio en esta pantalla convertiría la entrega en una negociación.
+    if (resultado.horasFueraDeHorario > 0) {
       toast.warning(`Se fue ${item.perro.nombre}, fuera de horario`, {
-        description: `${resultado.horasFueraDeHorario} h después del cierre: se agregaron ${formatearCLP(resultado.recargo)}.`,
+        description: `${resultado.horasFueraDeHorario} h después del cierre. Queda anotado.`,
       });
     } else {
       toast.success(`Se fue ${item.perro.nombre}`);

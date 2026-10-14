@@ -20,7 +20,6 @@ import {
   registrarSalidaHotel,
   registrarSalidaJardin,
 } from "@/lib/servicios/asistencia";
-import { formatearCLP } from "@/lib/utils/moneda";
 import type { Perro } from "@/lib/types";
 
 export default function Buscar() {
@@ -61,22 +60,17 @@ export default function Buscar() {
     }
 
     if (item.linea === "hotel") {
-      const resultado = await ejecutar((repo) =>
-        registrarSalidaHotel(repo, item.id),
-      );
-      toast.success(`Se fue ${perro.nombre}`, {
-        description:
-          resultado.saldoPorCobrar > 0
-            ? `Queda por cobrar ${formatearCLP(resultado.saldoPorCobrar)}.`
-            : undefined,
-      });
+      // Sin el saldo: lo emite Administración y acá no aporta nada que el
+      // cuidador no pueda hacer igual.
+      await ejecutar((repo) => registrarSalidaHotel(repo, item.id));
+      toast.success(`Se fue ${perro.nombre}`);
     } else {
       const resultado = await ejecutar((repo) =>
         registrarSalidaJardin(repo, item.id),
       );
-      if (resultado.recargo > 0) {
+      if (resultado.horasFueraDeHorario > 0) {
         toast.warning(`Se fue ${perro.nombre}, fuera de horario`, {
-          description: `Se agregaron ${formatearCLP(resultado.recargo)}.`,
+          description: `${resultado.horasFueraDeHorario} h después del cierre. Queda anotado.`,
         });
       } else {
         toast.success(`Se fue ${perro.nombre}`);
