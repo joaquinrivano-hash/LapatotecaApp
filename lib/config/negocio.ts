@@ -58,6 +58,14 @@ export const NEGOCIO = {
      * que se queja de nada se deja de mirar.
      */
     minutosDeMarcaAlDia: 5,
+    /**
+     * Margen antes de llamar "temprano" o "tarde" a una llegada o un retiro.
+     *
+     * Un perro que llega diez minutos antes de lo agendado no llegó
+     * temprano: llegó. Sin este margen, el análisis diría que casi nadie es
+     * puntual, que es una manera elegante de no decir nada.
+     */
+    minutosDePuntualidad: 15,
   },
 
   diaDePrueba: {

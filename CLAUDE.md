@@ -803,6 +803,52 @@ Siempre `grid-cols-1` junto al variante del breakpoint:
 El chequeo es de una línea en el navegador:
 `document.documentElement.scrollWidth > clientWidth`.
 
+### A qué hora llegan y a qué hora los buscan
+
+`lib/rules/horarios.ts` y `lib/servicios/horarios.ts`. El calendario dice qué
+tan lleno estuvo cada día; esto dice **a qué hora pasa el movimiento** dentro
+del día, y cuánto se parece a lo agendado.
+
+**Son dos paneles, no dos series en un mismo gráfico.** El tablero ya tiene
+arriba un gráfico donde el ámbar es jardín y el marino es hotel; meter dos
+colores para llegadas y retiros haría que alguien leyera "ámbar = jardín" sin
+querer. Con un panel por pregunta cada uno tiene **una sola serie**, el título
+dice cuál es, y no hay identidad de color que malinterpretar.
+
+Los dos **comparten la escala vertical**: si cada uno se escalara solo, un
+panel con 3 retiros se vería igual de alto que otro con 30 y la forma del día
+—llegadas amontonadas en la mañana, retiros en la tarde— se perdería, que es
+justo lo que se quiere ver.
+
+La distribución devuelve **solo las horas entre la primera y la última con
+movimiento**. Las 24 completas dejan quince barras vacías a los lados y el
+movimiento real apretado en el medio.
+
+El número va **solo en el pico**: uno en cada barra es ruido y no cabe en un
+teléfono. Y el contenedor lleva `pt-4` para reservarle el espacio — sin eso la
+barra más alta llega al techo y el número queda ENCIMA de ella. Se vio así al
+abrirlo; el panel con el pico más bajo no lo notaba, que es exactamente por lo
+que un gráfico hay que mirarlo y no solo escribirlo.
+
+#### El detalle: cuánto se parece a lo agendado
+
+Detrás de un toque, porque es la segunda pregunta y no la primera. Son
+**porcentajes, no una serie en el tiempo**, así que van como números: un
+gráfico de tres barras para tres cifras es decorar.
+
+`clasificarPuntualidad` usa el margen de
+`NEGOCIO.asistencia.minutosDePuntualidad`. Un perro que llega diez minutos
+antes de lo agendado no llegó temprano: llegó. Sin margen el análisis diría que
+casi nadie es puntual, que es una manera elegante de no decir nada.
+
+Y hay una cifra que no es sobre los perros sino **sobre cuánto creerle a todo
+lo demás**: cuántos registros se marcaron a destiempo. Si la mitad se marcó
+horas después, las horas que se están analizando son las que el equipo alcanzó
+a anotar, no las que pasaron. Se muestra solo cuando hay algo que advertir.
+
+Solo entran jornadas y estadías **cerradas**. Una en curso no tiene hora de
+retiro, y contarla como "retiro a las 00:00" sería inventar un dato.
+
 ### El calendario y su semáforo
 
 En la tira de días el color va al revés de un semáforo de alerta: **verde desde
