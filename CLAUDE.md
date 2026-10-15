@@ -438,6 +438,29 @@ pasado ya decididos** —uno de cada seis perdonado—, porque la cola es para l
 que pasó recién y no para 60 días de historia esperando a alguien. Un día
 suelto futuro también nace cobrado: se paga al agendarlo, no al llegar.
 
+#### Emitir un cobro es avisarlo
+
+Un cobro que aparece sin explicación es la manera segura de que el dueño
+escriba preguntando qué es. Por eso `cobrarPendiente` emite **y avisa**, en la
+misma llamada: si fueran dos, el día que alguien agregue otra pantalla que
+cobre se le va a olvidar la segunda.
+
+Lo que el dueño **agenda desde el portal no avisa**: ya vio el precio cotizado
+antes de confirmar, y mandarle un mensaje sería contarle algo que acaba de
+hacer. El aviso es para lo otro — el recargo que decidió Administración, el
+saldo que salió de la hora real de salida, el día que se registró en la puerta.
+
+Va por la capa de mensajería, así que con el canal `simulado` no toca la red y
+el mensaje **queda igual en la bandeja**: el día que se enchufe WhatsApp, eso
+mismo sale de verdad sin tocar una línea. Y **sin canal el cobro se emite
+igual**: un mensaje que no sale no puede ser motivo para no cobrar.
+
+En la app el dueño lo ve en la pestaña **Cobros** de Mi cuenta, con el total
+por pagar arriba y cada cobro con su estado. Un cobro **reembolsado en cero no
+se muestra**: es la constancia de algo que se anuló, y al dueño le diría "te
+cobramos $0". Uno reembolsado **con monto** sí, pero dice "te lo devolvemos",
+porque es plata que la casa le debe y no un cobro suyo.
+
 ### La hora que pasó y la hora en que se marcó
 
 `lib/rules/marca-de-asistencia.ts`. El cuidador marca de un toque, y a veces

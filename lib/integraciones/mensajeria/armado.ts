@@ -12,12 +12,14 @@ import {
   PLANTILLAS,
   renderizarPlantilla,
 } from "@/lib/integraciones/mensajeria/plantillas";
+import { formatearCLP } from "@/lib/utils/moneda";
 import { aE164 } from "@/lib/utils/telefono";
 import type { SinId } from "@/lib/repo/tipos";
 import type {
   Cliente,
   ID,
   Incidente,
+  Pago,
   InstanteISO,
   MensajeSaliente,
   Perro,
@@ -161,6 +163,61 @@ export function armarMensajeDeIncidente({
         parametros,
         vistaPrevia: renderizarPlantilla(plantilla, parametros),
         referencia: { tipo: "incidente", id: incidente.id },
+      },
+    ],
+  };
+}
+
+/**
+ * El aviso de un cobro que el dueño NO pidió.
+ *
+ * Lo que agenda desde el portal ya lo vio cotizado antes de confirmar, así
+ * que avisarle de eso sería contarle algo que acaba de hacer. Esto es para
+ * lo otro: el recargo que decidió Administración, el saldo del hotel que
+ * salió de la hora real de salida, el día que se registró en la puerta. Un
+ * cobro que aparece sin explicación es la manera segura de que el dueño
+ * escriba preguntando qué es.
+ */
+export function armarMensajeDeCobro({
+  pago,
+  cliente,
+  motivo,
+  ahora,
+}: {
+  pago: Pago;
+  cliente: Cliente;
+  /** En palabras del dueño: "el retiro fuera de horario del 14-10". */
+  motivo: string;
+  ahora: InstanteISO;
+}): ArmadoMensajes {
+  const plantilla = PLANTILLAS.cobro_emitido;
+  const destino = aE164(cliente.telefono);
+
+  if (!destino) {
+    return {
+      mensajes: [],
+      omitidos: [
+        {
+          clienteId: cliente.id,
+          nombre: `${cliente.nombre} ${cliente.apellido}`,
+          motivo: "El teléfono no sirve para WhatsApp.",
+        },
+      ],
+    };
+  }
+
+  const parametros = [cliente.nombre, motivo, formatearCLP(pago.monto)];
+
+  return {
+    omitidos: [],
+    mensajes: [
+      {
+        ...base(cliente, destino, ahora),
+        plantilla: plantilla.nombre,
+        idioma: plantilla.idioma,
+        parametros,
+        vistaPrevia: renderizarPlantilla(plantilla, parametros),
+        referencia: { tipo: "pago", id: pago.id },
       },
     ],
   };

@@ -19,6 +19,9 @@
  * para esta estadía?". Si no existe, está pendiente de decidir.
  */
 
+import { armarMensajeDeCobro } from "@/lib/integraciones/mensajeria/armado";
+import { despacharArmado } from "@/lib/integraciones/mensajeria/servicio";
+import type { CanalMensajeria } from "@/lib/integraciones/tipos";
 import { calcularPrecioHotel } from "@/lib/rules/precio-hotel";
 import { fechaISO } from "@/lib/utils/fecha";
 import { calcularRecargoFueraDeHorario } from "@/lib/rules/precio-jardin";
@@ -433,14 +436,67 @@ export async function cobrosPendientesPorCliente(
     );
 }
 
-/** Resuelve un pendiente cobrándolo, sea del tipo que sea. */
+/** En palabras del dueño, para el mensaje que le llega. */
+const POR_QUE: Record<TipoPendiente, string> = {
+  recargo: "el retiro fuera de horario",
+  saldo_hotel: "el saldo de la estadía en el hotel",
+  dia: "el día de jardín",
+};
+
+/**
+ * Resuelve un pendiente cobrándolo, sea del tipo que sea, y le avisa al dueño.
+ *
+ * El aviso va acá adentro y no en la pantalla a propósito: emitir un cobro y
+ * avisarlo son el mismo acto. Si fueran dos llamadas separadas, el día que
+ * alguien agregue otra pantalla que cobre se le va a olvidar la segunda, y el
+ * dueño se va a enterar de un cobro cuando le llegue la cuenta del mes.
+ *
+ * Lo que el dueño agenda desde el portal NO pasa por acá: ya vio el precio
+ * antes de confirmar, y avisarle sería contarle algo que acaba de hacer.
+ *
+ * Sin `canal` no se manda nada. El cobro se emite igual: un mensaje que no
+ * sale no puede ser motivo para no cobrar.
+ */
 export async function cobrarPendiente(
   repo: RepositorioPatoteca,
   pendiente: Pendiente,
   ahora: InstanteISO = new Date().toISOString(),
+  canal?: CanalMensajeria,
 ): Promise<Pago> {
   const { tipo, referenciaId } = pendiente;
-  if (tipo === "recargo") return cobrarRecargo(repo, referenciaId, ahora);
-  if (tipo === "saldo_hotel") return emitirSaldoHotel(repo, referenciaId, ahora);
-  return emitirDiaDeJardin(repo, referenciaId, ahora);
+  const pago =
+    tipo === "recargo"
+      ? await cobrarRecargo(repo, referenciaId, ahora)
+      : tipo === "saldo_hotel"
+        ? await emitirSaldoHotel(repo, referenciaId, ahora)
+        : await emitirDiaDeJardin(repo, referenciaId, ahora);
+
+  if (canal) await avisarDelCobro(repo, canal, pago, POR_QUE[tipo], ahora);
+  return pago;
+}
+
+/**
+ * Le manda el aviso al dueño por el canal que esté configurado.
+ *
+ * Con el canal simulado no toca la red y el mensaje queda igual en la
+ * bandeja: cuando se enchufe WhatsApp, lo mismo sale de verdad sin tocar una
+ * línea acá. Y si el envío falla, el cobro ya está emitido — queda en la
+ * bandeja con su motivo, para reintentarlo.
+ */
+async function avisarDelCobro(
+  repo: RepositorioPatoteca,
+  canal: CanalMensajeria,
+  pago: Pago,
+  motivo: string,
+  ahora: InstanteISO,
+): Promise<void> {
+  const cliente = await repo.clientes.obtener(pago.clienteId);
+  if (!cliente) return;
+
+  await despacharArmado(
+    repo,
+    canal,
+    armarMensajeDeCobro({ pago, cliente, motivo, ahora }),
+    ahora,
+  );
 }

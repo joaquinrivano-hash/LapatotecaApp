@@ -3,6 +3,7 @@ import type { DatosPatoteca } from "@/lib/data/seed";
 import { crearAlmacenMemoria } from "@/lib/repo/almacen";
 import { CLAVE_ALMACEN, crearRepositorioLocal } from "@/lib/repo/local";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
+import { crearCanalSimulado } from "@/lib/integraciones/mensajeria";
 import { instanteEnHora } from "@/lib/utils/fecha";
 import type {
   Cliente,
@@ -429,5 +430,57 @@ describe("las devoluciones que todavía no salen", () => {
     await expect(
       marcarDevolucionTransferida(repo, "pago-dev"),
     ).rejects.toThrow(DecisionImposible);
+  });
+});
+
+describe("avisarle al dueño del cobro que no pidió", () => {
+  beforeEach(() => montar({ estadiasJardin: [cerrada("20:30")] }));
+
+  it("sin canal cobra igual: un mensaje que no sale no frena un cobro", async () => {
+    const [grupo] = await cobrosPendientesPorCliente(repo);
+    await cobrarPendiente(repo, grupo.pendientes[0], en("21:00"));
+
+    expect(await repo.pagos.listar()).toHaveLength(1);
+    expect(await repo.mensajes.listar()).toEqual([]);
+  });
+
+  it("con canal deja el mensaje en la bandeja, con el monto y el motivo", async () => {
+    const [grupo] = await cobrosPendientesPorCliente(repo);
+    await cobrarPendiente(
+      repo,
+      grupo.pendientes[0],
+      en("21:00"),
+      crearCanalSimulado(),
+    );
+
+    const [mensaje] = await repo.mensajes.listar();
+    expect(mensaje.plantilla).toBe("cobro_emitido");
+    expect(mensaje.vistaPrevia).toContain("retiro fuera de horario");
+    expect(mensaje.vistaPrevia).toContain("$2.000");
+    expect(mensaje.vistaPrevia).toContain("Javiera");
+    // Queda amarrado al cobro: desde la bandeja se puede llegar a él.
+    expect(mensaje.referencia).toEqual({
+      tipo: "pago",
+      id: (await repo.pagos.listar())[0].id,
+    });
+  });
+
+  it("el saldo de hotel se explica como saldo, no como recargo", async () => {
+    montar({ estadiasJardin: [], reservasHotel: [reservaCerrada("10:00")] });
+    const [grupo] = await cobrosPendientesPorCliente(repo);
+    await cobrarPendiente(
+      repo,
+      grupo.pendientes[0],
+      en("11:00"),
+      crearCanalSimulado(),
+    );
+
+    const [mensaje] = await repo.mensajes.listar();
+    expect(mensaje.vistaPrevia).toContain("saldo de la estadía en el hotel");
+  });
+
+  it("perdonar no manda nada: no hay cobro que avisar", async () => {
+    await perdonarRecargo(repo, "est-001", en("21:00"));
+    expect(await repo.mensajes.listar()).toEqual([]);
   });
 });

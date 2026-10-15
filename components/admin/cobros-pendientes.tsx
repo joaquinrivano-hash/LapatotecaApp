@@ -13,6 +13,7 @@ import {
   type ClienteConPendientes,
   type Pendiente,
 } from "@/lib/servicios/cobros-pendientes";
+import { crearCanalMensajeria } from "@/lib/integraciones/mensajeria";
 import { formatearFechaCorta } from "@/lib/utils/fecha";
 
 /**
@@ -109,7 +110,7 @@ function Dueno({
 
   async function cobrarTodo() {
     for (const pendiente of pendientes) {
-      await ejecutar((repo) => cobrarPendiente(repo, pendiente));
+      await ejecutar((repo) => cobrarPendiente(repo, pendiente, new Date().toISOString(), crearCanalMensajeria()));
     }
     toast.success(`Cobrado a ${cliente.nombre}`, {
       description: `${pendientes.length} ${pendientes.length === 1 ? "cobro emitido" : "cobros emitidos"}.`,
@@ -163,7 +164,7 @@ function Dueno({
                 variant={pendientes.length > 1 ? "outline" : "default"}
                 disabled={ocupado}
                 onClick={async () => {
-                  await ejecutar((repo) => cobrarPendiente(repo, pendiente));
+                  await ejecutar((repo) => cobrarPendiente(repo, pendiente, new Date().toISOString(), crearCanalMensajeria()));
                   toast.success("Cobro emitido");
                 }}
               >

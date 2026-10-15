@@ -8,6 +8,7 @@ import {
   PawPrint,
   Ticket,
   TriangleAlert,
+  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +29,8 @@ import { useId, useState } from "react";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { useCliente } from "@/lib/hooks/use-cliente";
 import { NEGOCIO } from "@/lib/config/negocio";
-import type { DatosBancarios } from "@/lib/types";
+import type { DatosBancarios, Pago } from "@/lib/types";
+import { etiquetaConcepto } from "@/lib/rules/cobro-mensual";
 import { calcularDevolucionJardin } from "@/lib/rules/precio-jardin";
 import { nombreDePlan, planVigente, saldoPlan } from "@/lib/rules/planes";
 import {
@@ -62,11 +64,17 @@ export default function MiCuenta() {
         repo.estadiasJardin.porCliente(clienteId),
         repo.reportes.listar(),
       ]);
+      const pagos = await repo.pagos.porCliente(clienteId);
 
       return {
         planes,
         reservas,
         estadias,
+        // Un cobro reembolsado en cero no se muestra: es la constancia de
+        // algo que se anuló, y al dueño le diría "te cobramos $0".
+        pagos: pagos
+          .filter((p) => !(p.estado === "reembolsado" && p.monto === 0))
+          .sort((a, b) => b.emitidoEn.localeCompare(a.emitidoEn)),
         reportes: reportes
           .filter((r) => r.perroIds.some((id) => ids.has(id)))
           .sort((a, b) => b.creadoEn.localeCompare(a.creadoEn))
@@ -115,6 +123,10 @@ export default function MiCuenta() {
         esDiaDePrueba: e.origen === "dia_de_prueba",
       })),
   ].sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+  const porPagar = (datos?.pagos ?? []).filter(
+    (p) => p.estado === "pendiente" || p.estado === "vencido",
+  );
 
   const nombrePerro = (id: string) =>
     perros.find((p) => p.id === id)?.nombre ?? "Tu perro";
@@ -243,6 +255,14 @@ export default function MiCuenta() {
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="cobros">
+            Cobros
+            {porPagar.length > 0 && (
+              <span className="bg-primary/15 text-primary rounded-full px-1.5 text-xs tabular-nums">
+                {porPagar.length}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="reportes">Reportes</TabsTrigger>
         </TabsList>
 
@@ -290,6 +310,56 @@ export default function MiCuenta() {
                 )}
               </Card>
             ))
+          )}
+        </TabsContent>
+
+        <TabsContent value="cobros" className="mt-3 space-y-2">
+          {extra.cargando && !datos ? (
+            <Skeleton className="h-40" />
+          ) : (datos?.pagos ?? []).length === 0 ? (
+            <EstadoVacio
+              titulo="No tienes cobros"
+              descripcion="Acá vas a ver lo que debes y lo que ya pagaste."
+              icono={Wallet}
+            />
+          ) : (
+            <>
+              {porPagar.length > 0 && (
+                <Card className="border-primary/40">
+                  <CardContent className="flex flex-wrap items-baseline justify-between gap-2 p-3">
+                    <span className="font-semibold">Por pagar</span>
+                    <PrecioCLP
+                      monto={porPagar.reduce((s, p) => s + p.monto, 0)}
+                      tamano="xl"
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {(datos?.pagos ?? []).map((pago) => (
+                <Card key={pago.id}>
+                  <CardContent className="flex items-center gap-3 p-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">
+                        {etiquetaConcepto(pago.concepto)}
+                      </p>
+                      <p className="text-muted-foreground truncate text-sm">
+                        {formatearFecha(pago.emitidoEn)}
+                      </p>
+                    </div>
+                    <EstadoDelCobro pago={pago} />
+                    <PrecioCLP monto={pago.monto} />
+                  </CardContent>
+                </Card>
+              ))}
+
+              {/* Las condiciones de pago a la vista, no detrás de un enlace:
+                  si no hay pasarela, el dueño tiene que saber cómo pagar. */}
+              <p className="text-muted-foreground px-1 text-xs text-pretty">
+                Los cobros se pagan por transferencia o en el local. Cuando
+                recibamos el pago lo marcamos acá.
+              </p>
+            </>
           )}
         </TabsContent>
 
@@ -563,4 +633,15 @@ function CampoCuenta({
       />
     </div>
   );
+}
+
+/** Cómo se ve un cobro según en qué quedó. */
+function EstadoDelCobro({ pago }: { pago: Pago }) {
+  if (pago.estado === "pagado") return <Badge variant="success">Pagado</Badge>;
+  if (pago.estado === "vencido") return <Badge variant="warning">Vencido</Badge>;
+  // Un reembolsado con monto es plata que la casa le debe, no un cobro suyo.
+  if (pago.estado === "reembolsado") {
+    return <Badge variant="jardin">Te lo devolvemos</Badge>;
+  }
+  return <Badge>Por pagar</Badge>;
 }

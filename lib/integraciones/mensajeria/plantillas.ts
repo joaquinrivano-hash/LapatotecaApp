@@ -60,6 +60,15 @@ export const PLANTILLAS = {
     cuerpo:
       "Hola {{1}}, te recordamos la reserva de {{2}} en La Patoteca: {{3}}.\n\n¡Te esperamos!",
   },
+  cobro_emitido: {
+    nombre: "cobro_emitido",
+    idioma: IDIOMA_PLANTILLAS,
+    descripcion:
+      "Aviso al dueño de un cobro que emitió Administración y él no pidió.",
+    parametros: ["nombre del dueño", "por qué", "monto"],
+    cuerpo:
+      "Hola {{1}}, te emitimos un cobro en La Patoteca por {{2}}: {{3}}.\n\nPuedes pagarlo por transferencia o en el local, y lo ves en tu cuenta. ¡Gracias!",
+  },
   cuenta_mensual: {
     nombre: "cuenta_mensual",
     idioma: IDIOMA_PLANTILLAS,
