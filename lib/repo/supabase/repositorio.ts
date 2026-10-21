@@ -34,7 +34,10 @@ import type {
   ColeccionRepo,
   ConfiguracionRepo,
   CuentaMensualRepo,
+  EquipoRepo,
   EstadiaJardinRepo,
+  Invitacion,
+  MiembroDelEquipo,
   IncidenteRepo,
   MensajeRepo,
   NotificacionRepo,
@@ -650,6 +653,73 @@ function configuracionDe(cliente: Cliente0): ConfiguracionRepo {
   };
 }
 
+/**
+ * Quién tiene cuenta, y a quién se invitó.
+ *
+ * Las dos tablas son de Administración de punta a punta: las políticas dejan
+ * que solo un admin las lea y las escriba. Si esto lo pide otra persona, la
+ * base devuelve cero filas y el insert falla; no hace falta esconder la
+ * pantalla para que el dato esté protegido.
+ */
+function equipoDe(cliente: Cliente0): EquipoRepo {
+  return {
+    async miembros() {
+      const { data, error } = await cliente
+        .from("perfiles")
+        .select("*")
+        .order("creado_en", { ascending: true });
+      if (error) reventar("No se pudo leer el equipo", error);
+      return ((data as Fila[] | null) ?? []).map((f) =>
+        aEntidad<MiembroDelEquipo>(f),
+      );
+    },
+
+    async invitaciones() {
+      const { data, error } = await cliente
+        .from("invitaciones")
+        .select("*")
+        .order("creada_en", { ascending: false });
+      if (error) reventar("No se pudieron leer las invitaciones", error);
+      return ((data as Fila[] | null) ?? []).map((f) => aEntidad<Invitacion>(f));
+    },
+
+    async invitar(email, rol) {
+      // En minúscula desde acá y también en el disparador de la base:
+      // "Maria@" y "maria@" son la misma persona para todo el mundo menos
+      // para una comparación de texto.
+      const { data, error } = await cliente
+        .from("invitaciones")
+        .upsert({ email: email.trim().toLowerCase(), rol, usada_en: null })
+        .select()
+        .single();
+      if (error) reventar("No se pudo invitar", error);
+      return aEntidad<Invitacion>(data as Fila);
+    },
+
+    async cancelarInvitacion(email) {
+      const { error } = await cliente
+        .from("invitaciones")
+        .delete()
+        .eq("email", email.trim().toLowerCase());
+      if (error) reventar("No se pudo cancelar la invitación", error);
+    },
+
+    async cambiarRol(id, rol) {
+      const { data, error } = await cliente
+        .from("perfiles")
+        .update({ rol })
+        .eq("id", id)
+        .select()
+        .maybeSingle();
+      if (error) reventar("No se pudo cambiar el rol", error);
+      if (!data) {
+        throw new ErrorRepositorio(`No existe la cuenta ${id}`);
+      }
+      return aEntidad<MiembroDelEquipo>(data as Fila);
+    },
+  };
+}
+
 /** Las tablas del dominio, en el orden en que se exportan. */
 const TABLAS_DEL_DOMINIO = [
   ["clientes", "clientes"],
@@ -768,6 +838,7 @@ export function crearRepositorioSupabase(
       "creada_en",
     ),
     configuracion,
+    equipo: equipoDe(cliente),
     sistema: sistemaDe(cliente, configuracion),
   };
 }

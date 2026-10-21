@@ -17,6 +17,7 @@ import type {
   ColeccionRepo,
   ConfiguracionRepo,
   CuentaMensualRepo,
+  EquipoRepo,
   EstadiaJardinRepo,
   IncidenteRepo,
   MensajeRepo,
@@ -625,6 +626,35 @@ export function crearRepositorioLocal(
     },
   };
 
+  /**
+   * En el prototipo no hay cuentas de acceso: el rol se elige en un selector
+   * y vive en el navegador. Así que no hay a quién invitar ni rol que
+   * ascender, y eso se dice en vez de simularlo — una invitación de mentira
+   * haría creer que la cuidadora puede entrar, y no habría cómo.
+   */
+  const equipo: EquipoRepo = {
+    async miembros() {
+      return [];
+    },
+    async invitaciones() {
+      return [];
+    },
+    async invitar() {
+      throw new ErrorRepositorio(
+        "En el prototipo no hay cuentas: el rol se elige en el selector de " +
+          "ingreso. Invitar sirve con la base en la nube.",
+      );
+    },
+    async cancelarInvitacion() {
+      throw new ErrorRepositorio("En el prototipo no hay invitaciones.");
+    },
+    async cambiarRol() {
+      throw new ErrorRepositorio(
+        "En el prototipo no hay roles que ascender: se eligen al ingresar.",
+      );
+    },
+  };
+
   return {
     clientes: new ClientesLocal(ctx, "cli", (d) => d.clientes),
     perros: new PerrosLocal(ctx, "perro", (d) => d.perros),
@@ -646,6 +676,7 @@ export function crearRepositorioLocal(
     mensajes: new MensajesLocal(ctx, "msg", (d) => d.mensajes),
     notificaciones: new NotificacionesLocal(ctx, "avi", (d) => d.notificaciones),
     configuracion,
+    equipo,
     sistema,
   };
 }

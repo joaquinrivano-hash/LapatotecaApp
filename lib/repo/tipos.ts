@@ -32,6 +32,8 @@ import type {
   ReservaHotel,
   ServicioAgendado,
   Suscripcion,
+  InstanteISO,
+  Rol,
 } from "@/lib/types";
 
 /** Datos para crear una entidad: el id lo pone el repositorio. */
@@ -152,6 +154,48 @@ export interface ConfiguracionRepo {
   restaurar(): Promise<Configuracion>;
 }
 
+/**
+ * Quién tiene cuenta y con qué rol.
+ *
+ * Vive acá y no en `lib/types` a propósito: no es una entidad del negocio
+ * —no es un perro ni una reserva— sino la administración de los accesos, que
+ * existe por tener cuentas de verdad.
+ */
+export interface MiembroDelEquipo {
+  id: ID;
+  nombre: string;
+  rol: Rol;
+  creadoEn: InstanteISO;
+}
+
+export interface Invitacion {
+  /** Siempre en minúscula: "Maria@" y "maria@" son la misma persona. */
+  email: string;
+  rol: Rol;
+  creadaEn: InstanteISO;
+  /** Cuándo se gastó. Una invitación que sirve para siempre la reutiliza alguien. */
+  usadaEn?: InstanteISO;
+}
+
+/**
+ * El alta de la gente que trabaja acá.
+ *
+ * Va al revés que el alta de un dueño: el formulario del portal exige un
+ * perro, así que una cuidadora no entra por ahí. Y el rol no se puede pedir
+ * al registrarse, porque entonces cualquiera se haría admin en el primer
+ * formulario. Por eso Administración anota el correo ANTES y la base le pone
+ * el rol cuando esa persona se registre.
+ */
+export interface EquipoRepo {
+  /** Todas las cuentas con su rol, para ver quién es quién. */
+  miembros(): Promise<MiembroDelEquipo[]>;
+  invitaciones(): Promise<Invitacion[]>;
+  invitar(email: string, rol: Rol): Promise<Invitacion>;
+  /** Solo tiene sentido con una que no se haya usado. */
+  cancelarInvitacion(email: string): Promise<void>;
+  cambiarRol(id: ID, rol: Rol): Promise<MiembroDelEquipo>;
+}
+
 export interface SistemaRepo {
   /** Día de referencia con el que se generaron los datos actuales. */
   anclaje(): Promise<FechaISO>;
@@ -178,5 +222,6 @@ export interface RepositorioPatoteca {
   mensajes: MensajeRepo;
   notificaciones: NotificacionRepo;
   configuracion: ConfiguracionRepo;
+  equipo: EquipoRepo;
   sistema: SistemaRepo;
 }

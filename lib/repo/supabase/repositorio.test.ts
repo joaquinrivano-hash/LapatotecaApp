@@ -457,3 +457,62 @@ describe("sistema", () => {
     expect(set.hoy).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
+
+describe("equipo", () => {
+  it("invita en minúscula y sin espacios", async () => {
+    const { repo: r, argumentosDe } = repo(() => ({
+      data: { email: "maria@lapatoteca.cl", rol: "staff" },
+    }));
+
+    await r.equipo.invitar("  Maria@LaPatoteca.CL ", "staff");
+
+    const [fila] = argumentosDe("upsert") as [Record<string, unknown>];
+    expect(fila.email).toBe("maria@lapatoteca.cl");
+    expect(fila.rol).toBe("staff");
+  });
+
+  // Volver a invitar a quien ya gastó su invitación tiene que servir: si no,
+  // una cuidadora que se equivocó de correo al registrarse quedaría trancada
+  // para siempre.
+  it("volver a invitar reabre una invitación ya usada", async () => {
+    const { repo: r, argumentosDe } = repo(() => ({
+      data: { email: "maria@lapatoteca.cl", rol: "staff" },
+    }));
+
+    await r.equipo.invitar("maria@lapatoteca.cl", "staff");
+
+    const [fila] = argumentosDe("upsert") as [Record<string, unknown>];
+    expect(fila.usada_en).toBeNull();
+  });
+
+  it("cancelar también normaliza el correo", async () => {
+    const { repo: r, argumentosDe } = repo(() => filas());
+    await r.equipo.cancelarInvitacion(" Maria@LaPatoteca.CL ");
+    expect(argumentosDe("eq")).toEqual(["email", "maria@lapatoteca.cl"]);
+  });
+
+  it("cambiar el rol escribe en perfiles", async () => {
+    const { repo: r, llamadas, argumentosDe } = repo(() => ({
+      data: { id: "uuid-p", nombre: "María", rol: "admin" },
+    }));
+
+    const miembro = await r.equipo.cambiarRol("uuid-p", "admin");
+
+    expect(llamadas.map((l) => l.tabla)).toEqual(["perfiles"]);
+    expect(argumentosDe("update")).toEqual([{ rol: "admin" }]);
+    expect(miembro.rol).toBe("admin");
+  });
+
+  it("cambiar el rol de una cuenta que no existe falla claro", async () => {
+    const { repo: r } = repo(() => ({ data: null }));
+    await expect(r.equipo.cambiarRol("uuid-x", "staff")).rejects.toThrow(
+      /No existe la cuenta uuid-x/,
+    );
+  });
+
+  it("el equipo sale en el orden en que se fue sumando", async () => {
+    const { repo: r, argumentosDe } = repo(() => filas());
+    await r.equipo.miembros();
+    expect(argumentosDe("order")).toEqual(["creado_en", { ascending: true }]);
+  });
+});

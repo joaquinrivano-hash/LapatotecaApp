@@ -33,9 +33,27 @@ export function SesionViva() {
   useEffect(() => {
     if (!hayAuthReal()) return;
 
-    const auth = autenticacion();
     const { sincronizar } = useSesion.getState();
     let vigente = true;
+
+    /**
+     * Armar el cliente de Supabase puede fallar: si falta una de las dos
+     * variables de entorno, `clienteSupabase()` lanza a propósito.
+     *
+     * Esto corre en TODAS las páginas, así que una excepción acá se lleva
+     * por delante hasta la portada pública. Un despliegue al que se le
+     * olvidó una llave tiene que quedar sin sesión y ruidoso en la consola,
+     * no sin sitio: las pantallas protegidas van a mostrar igual que nadie
+     * entró, que es la verdad.
+     */
+    let auth;
+    try {
+      auth = autenticacion();
+    } catch (problema) {
+      console.error("La Patoteca: no se pudo preparar la sesión.", problema);
+      sincronizar(null);
+      return;
+    }
 
     /**
      * Quien se registró con confirmación de correo tiene cuenta pero no
