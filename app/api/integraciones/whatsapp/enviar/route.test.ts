@@ -5,12 +5,20 @@
  * como "el mensaje no salió" sin más explicación. Por eso se verifica la forma
  * exacta del payload y no solo que la ruta responda 200.
  *
- * No toca la red: `fetch` está reemplazado.
+ * No toca la red: `fetch` está reemplazado, y la sesión también. La lectura
+ * real de la sesión con Supabase tiene sus propios tests en `lib/auth`.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
-import type { MensajeSaliente } from "@/lib/types";
+import type { MensajeSaliente, Rol } from "@/lib/types";
+
+const sesion = vi.hoisted(() => ({ rol: "staff" as Rol | null }));
+
+vi.mock("@/lib/auth/sesion", async (original) => ({
+  ...(await original<typeof import("@/lib/auth/sesion")>()),
+  rolDeLaSesion: async () => sesion.rol,
+}));
 
 const MENSAJE: MensajeSaliente = {
   id: "msg-1",
@@ -59,6 +67,7 @@ function payloadDe(llamada: { init: RequestInit }) {
 }
 
 beforeEach(() => {
+  sesion.rol = "staff";
   process.env.WHATSAPP_PHONE_NUMBER_ID = "111222";
   process.env.WHATSAPP_ACCESS_TOKEN = "token-secreto";
   process.env.WHATSAPP_API_VERSION = "v21.0";
@@ -67,6 +76,54 @@ beforeEach(() => {
 afterEach(() => {
   process.env = { ...ENTORNO };
   vi.unstubAllGlobals();
+});
+
+describe("quién puede mandar", () => {
+  it("sin sesión responde 401 y no llama a Meta", async () => {
+    sesion.rol = null;
+    const llamadas = fingirFetch({ cuerpo: { messages: [{ id: "wamid.1" }] } });
+
+    const respuesta = await POST(pedir(MENSAJE));
+
+    expect(respuesta.status).toBe(401);
+    expect((await respuesta.json()).ok).toBe(false);
+    expect(llamadas).toHaveLength(0);
+  });
+
+  it("sin sesión no cuenta si la cuenta de WhatsApp está configurada", async () => {
+    sesion.rol = null;
+    delete process.env.WHATSAPP_ACCESS_TOKEN;
+
+    const respuesta = await POST(pedir(MENSAJE));
+
+    expect(respuesta.status).toBe(401);
+    expect((await respuesta.json()).error).not.toMatch(/WHATSAPP/);
+  });
+
+  it("un dueño con sesión recibe 403: los reportes los manda el equipo", async () => {
+    sesion.rol = "cliente";
+    const llamadas = fingirFetch({ cuerpo: { messages: [{ id: "wamid.1" }] } });
+
+    const respuesta = await POST(pedir(MENSAJE));
+
+    expect(respuesta.status).toBe(403);
+    expect(llamadas).toHaveLength(0);
+  });
+
+  it.each<Rol>(["staff", "admin"])(
+    "con sesión de %s el mensaje sale",
+    async (rol) => {
+      sesion.rol = rol;
+      const llamadas = fingirFetch({
+        cuerpo: { messages: [{ id: "wamid.1" }] },
+      });
+
+      const respuesta = await POST(pedir(MENSAJE));
+
+      expect(respuesta.status).toBe(200);
+      expect(llamadas).toHaveLength(1);
+    },
+  );
 });
 
 describe("cuando falta configurar la cuenta", () => {

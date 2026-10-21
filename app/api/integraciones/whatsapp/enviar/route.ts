@@ -7,9 +7,14 @@
  * Para activarla: completa las credenciales en `.env.local` y pon
  * `NEXT_PUBLIC_CANAL_MENSAJERIA=whatsapp`. Sin credenciales responde 503 con
  * el motivo, y el mensaje queda como fallido en la bandeja con ese texto.
+ *
+ * Solo la usa el equipo: con el token configurado, cualquiera que conociera
+ * la URL podría mandar plantillas a cualquier número a costo de la cuenta de
+ * Meta. Sin una sesión de staff o admin validada en el servidor, responde 401.
  */
 
 import { NextResponse } from "next/server";
+import { esEquipo, rolDeLaSesion } from "@/lib/auth/sesion";
 import {
   credencialesWhatsApp,
   whatsAppConfigurado,
@@ -115,6 +120,30 @@ async function subirFoto(
 }
 
 export async function POST(request: Request) {
+  // Antes que todo lo demás: a quien no tiene sesión no se le cuenta ni
+  // siquiera si la cuenta de WhatsApp está configurada.
+  const rol = await rolDeLaSesion(request);
+  if (!rol) {
+    return NextResponse.json<ResultadoEnvio>(
+      {
+        ok: false,
+        simulado: false,
+        error: "Para mandar mensajes tienes que entrar con tu cuenta.",
+      },
+      { status: 401 },
+    );
+  }
+  if (!esEquipo(rol)) {
+    return NextResponse.json<ResultadoEnvio>(
+      {
+        ok: false,
+        simulado: false,
+        error: "Solo el equipo de La Patoteca puede mandar mensajes.",
+      },
+      { status: 403 },
+    );
+  }
+
   if (!whatsAppConfigurado()) {
     return NextResponse.json<ResultadoEnvio>(
       {
