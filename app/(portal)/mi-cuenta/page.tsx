@@ -135,6 +135,7 @@ export default function MiCuenta() {
 
   const nombrePerro = (id: string) =>
     perros.find((p) => p.id === id)?.nombre ?? "Tu perro";
+  const fotoPerro = (id: string) => perros.find((p) => p.id === id)?.fotoUrl;
 
   return (
     <div className="space-y-4">
@@ -299,6 +300,7 @@ export default function MiCuenta() {
                   <PerroAvatar
                     id={item.perroId}
                     nombre={nombrePerro(item.perroId)}
+                    fotoUrl={fotoPerro(item.perroId)}
                     tamano="sm"
                   />
                   <div className="min-w-0 flex-1">
@@ -404,6 +406,7 @@ export default function MiCuenta() {
                         key={id}
                         id={id}
                         nombre={nombrePerro(id)}
+                        fotoUrl={fotoPerro(id)}
                         tamano="sm"
                       />
                     ))}
