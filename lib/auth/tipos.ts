@@ -1,0 +1,66 @@
+/**
+ * Quién está usando la app.
+ *
+ * Mismo criterio que el repositorio: la app habla con una interfaz y hay dos
+ * implementaciones. En el prototipo la identidad sale de un clic en el
+ * selector de rol; en la nube sale de una sesión de Supabase y el rol lo
+ * dice la tabla `perfiles`, que solo Administración puede escribir.
+ *
+ * Lo que la app lee sigue siendo el store de `lib/store/sesion`. En modo
+ * nube ese store se llena desde la sesión real en vez de desde el clic, así
+ * que las pantallas no tienen que saber en cuál de los dos mundos están.
+ */
+
+import type { ID, Rol } from "@/lib/types";
+
+export interface Identidad {
+  /** `auth.users.id`. En el prototipo no existe. */
+  usuarioId?: ID;
+  email?: string;
+  rol: Rol;
+  /** Si es dueño: su ficha de cliente. */
+  clienteId?: ID;
+  /** Si trabaja acá: con qué nombre firma reportes e incidentes. */
+  staff?: string;
+}
+
+export interface DatosDeRegistro {
+  email: string;
+  password: string;
+  /** Para saludarlo y para firmar, si después lo asciende Administración. */
+  nombre: string;
+}
+
+export interface Registro {
+  /** Nula cuando todavía no hay sesión porque falta confirmar el correo. */
+  identidad: Identidad | null;
+  /**
+   * Supabase puede exigir confirmar el correo antes de dar sesión. Cuando lo
+   * exige, la cuenta YA existe pero no hay con qué escribir en la base: el
+   * resto del alta tiene que esperar a que la persona confirme y entre.
+   */
+  faltaConfirmar: boolean;
+}
+
+/** Lo que falló al entrar o al registrarse, ya traducido. */
+export class ErrorAutenticacion extends Error {
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = "ErrorAutenticacion";
+  }
+}
+
+export interface Autenticacion {
+  /** Quién está, o null si nadie. */
+  actual(): Promise<Identidad | null>;
+  entrar(email: string, password: string): Promise<Identidad>;
+  registrar(datos: DatosDeRegistro): Promise<Registro>;
+  salir(): Promise<void>;
+  /** Manda el correo para elegir una contraseña nueva. */
+  recuperar(email: string): Promise<void>;
+  /**
+   * Avisa cuando la sesión cambia: entró, salió, se venció el token, o
+   * alguien entró en otra pestaña. Devuelve cómo desuscribirse.
+   */
+  alCambiar(escucha: (identidad: Identidad | null) => void): () => void;
+}

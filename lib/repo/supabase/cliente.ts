@@ -17,8 +17,14 @@
  */
 
 import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Cliente0 } from "@/lib/repo/supabase/repositorio";
+/**
+ * Lo que la app usa del cliente de Supabase: las tablas, las funciones y la
+ * sesión. Se nombra en vez de usar `SupabaseClient` entero para que en los
+ * tests se pueda pasar un doble sin tener que imitar la librería completa.
+ */
+export type ClienteSupabase = Pick<SupabaseClient, "from" | "rpc" | "auth">;
 
 export const URL_SUPABASE = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 export const LLAVE_SUPABASE = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
@@ -27,9 +33,9 @@ export function haySupabaseConfigurado(): boolean {
   return URL_SUPABASE.length > 0 && LLAVE_SUPABASE.length > 0;
 }
 
-let cliente: Cliente0 | null = null;
+let cliente: ClienteSupabase | null = null;
 
-export function clienteSupabase(): Cliente0 {
+export function clienteSupabase(): ClienteSupabase {
   if (cliente) return cliente;
 
   if (!haySupabaseConfigurado()) {
