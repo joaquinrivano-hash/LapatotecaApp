@@ -27,6 +27,8 @@ export function credencialesWhatsApp() {
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN ?? "",
     businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ?? "",
     verifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN ?? "",
+    // Con él se verifica la firma de cada aviso del webhook.
+    appSecret: process.env.WHATSAPP_APP_SECRET ?? "",
     version: process.env.WHATSAPP_API_VERSION ?? "v21.0",
     // Configurable para poder apuntar a un Meta de mentira y probar el envío
     // completo —el multipart de la foto incluido— sin cuenta ni red.

@@ -10,10 +10,15 @@
  * localStorage del navegador, que el servidor no puede tocar. Así que acá los
  * estados se reciben y se validan, pero no se persisten. Cuando entre la base
  * de datos real, el punto de enganche está marcado abajo.
+ *
+ * Cada POST trae `X-Hub-Signature-256`: el HMAC-SHA256 del cuerpo crudo con
+ * el App Secret. Sin esa firma cualquiera podría inventar estados de entrega,
+ * así que un aviso que no la trae, o que no coincide, se rechaza con 401.
  */
 
 import { NextResponse } from "next/server";
 import { credencialesWhatsApp } from "@/lib/integraciones/config";
+import { firmaValida } from "@/lib/integraciones/mensajeria/firma";
 import { extraerCambiosDeEstado } from "@/lib/integraciones/mensajeria/webhook";
 
 export async function GET(request: Request) {
@@ -38,9 +43,29 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const { appSecret } = credencialesWhatsApp();
+
+  if (!appSecret) {
+    return new NextResponse("Webhook sin WHATSAPP_APP_SECRET.", {
+      status: 503,
+    });
+  }
+
+  const cuerpoCrudo = await request.text();
+
+  if (
+    !firmaValida(
+      cuerpoCrudo,
+      request.headers.get("x-hub-signature-256"),
+      appSecret,
+    )
+  ) {
+    return NextResponse.json({ ok: false }, { status: 401 });
+  }
+
   let cuerpo: unknown;
   try {
-    cuerpo = await request.json();
+    cuerpo = JSON.parse(cuerpoCrudo);
   } catch {
     return NextResponse.json({ ok: false }, { status: 400 });
   }

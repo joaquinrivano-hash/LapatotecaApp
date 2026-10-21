@@ -287,6 +287,23 @@ entrega de Meta, pero **no los persiste**: la bandeja vive en el localStorage
 del navegador y el servidor no la alcanza. El punto de enganche para cuando
 exista base de datos está marcado en el archivo.
 
+Las dos rutas están cerradas a quien no corresponde, porque con el token
+configurado cada mensaje sale a costo de la cuenta de Meta:
+
+- **`enviar` exige una sesión de staff o admin** validada en el servidor
+  (`lib/auth/sesion.ts`): `getUser()` contra Supabase Auth —no `getSession`,
+  que le cree a la cookie— y el rol leído de `perfiles`. Sin sesión responde
+  401; un dueño con sesión, 403. Sin `NEXT_PUBLIC_SUPABASE_URL` no hay sesión
+  que validar y responde 401 a todo: mientras el login siga siendo el selector
+  mock, el envío real queda cerrado, y así tiene que ser.
+- **El webhook verifica `X-Hub-Signature-256`**: HMAC-SHA256 del **cuerpo
+  crudo** con `WHATSAPP_APP_SECRET`, comparado en tiempo constante. Firma mala
+  o ausente → 401; sin el secreto configurado → 503. La firma se calcula sobre
+  los bytes tal como llegaron: parsear el JSON y volver a serializarlo antes
+  de verificar rompe todos los avisos legítimos. Vive en
+  `mensajeria/firma.ts` y no en `webhook.ts` porque usa `node:crypto` y
+  `webhook.ts` lo reexporta un índice que llega al navegador.
+
 ### Capa de servicios
 
 `/lib/servicios` junta las reglas puras con el repositorio. Las reglas siguen
