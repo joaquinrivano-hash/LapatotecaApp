@@ -242,6 +242,45 @@ intento "el dueño se invita a sí mismo como admin" "violates row-level securit
 intento_como "$STAFF" "el cuidador lee a quién invitaron" "0" \
   "select count(*) from invitaciones;"
 
+# ── El alta de una cuenta de dueño, desde el navegador ───────────────
+#
+# Es el flujo que estrena `clientes.perfil_id default auth.uid()`. Sin ese
+# default la app no manda la columna —no existe en el tipo `Cliente`, a
+# propósito—, el insert llega con perfil_id nulo y la política lo rechaza:
+# o sea, nadie podría crearse una cuenta. El seed no lo cubre porque
+# siembra como superusuario, saltándose las políticas.
+echo "▸ el alta de una cuenta nueva"
+NUEVA=55555555-5555-5555-5555-555555555555
+ficha="insert into clientes (nombre, apellido, email, telefono, comuna) values ('Curiosa', 'Perez', 'curiosa@ejemplo.cl', '+56900000000', 'Providencia');"
+
+intento_como "$NUEVA" "crea su ficha sin mandar perfil_id" "1" \
+  "$ficha select count(*) from clientes where perfil_id = '$NUEVA';"
+
+# La ficha tiene que quedar amarrada a SU cuenta. Si el default fuera null
+# el insert pasaría igual (la política mira auth.uid() contra la columna) y
+# el dueño quedaría sin poder ver sus propios datos después.
+# Se pregunta como booleano y no devolviendo la columna: `intento_como`
+# filtra las líneas iguales al uid para borrar el ruido de `set_config`, y
+# un perfil_id correcto ES ese uid, así que se lo llevaría el filtro.
+# El valor esperado lleva etiqueta porque `intento` compara por subcadena:
+# un "t" pelado lo satisface hasta un mensaje de error que tenga una t, y el
+# chequeo pasaría en falso justamente cuando el alta está rota.
+intento_como "$NUEVA" "y le queda amarrada a su cuenta" "amarrada=true" \
+  "$ficha select 'amarrada=' || (perfil_id = '$NUEVA')::text from clientes where email = 'curiosa@ejemplo.cl';"
+
+# Y recién con la ficha creada `mi_cliente_id()` resuelve, que es lo que
+# habilita inscribir al perro: los dos pasos del alta, en orden.
+intento_como "$NUEVA" "y después inscribe a su perro" "Quiltro" \
+  "$ficha
+   insert into perros (cliente_id, nombre, raza, peso_kg, sexo, esterilizado)
+     select id, 'Nube', 'Quiltro', 8, 'hembra', true from clientes where perfil_id = '$NUEVA';
+   select raza from perros where nombre = 'Nube';"
+
+# El default no es una comodidad: es lo que impide que el navegador apunte
+# la ficha a la cuenta de otra persona mandando la columna a mano.
+intento_como "$NUEVA" "no puede apuntar la ficha a otra cuenta" "violates row-level security" \
+  "insert into clientes (perfil_id, nombre, apellido, email, telefono, comuna) values ('$ANA', 'Colada', 'Perez', 'x@ejemplo.cl', '+56900000001', 'Nunoa');"
+
 echo "▸ repetir un archivo suelto no rompe los demás"
 psql -h "$D" -U postgres -v ON_ERROR_STOP=1 -q \
   -f "$raiz/supabase/migrations/20261014120100_permisos.sql" >/dev/null 2>&1

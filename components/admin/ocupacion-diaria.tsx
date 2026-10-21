@@ -25,6 +25,25 @@ export function OcupacionDiaria({
 
   if (dias.length === 0) return null;
 
+  /**
+   * Hay días, pero ninguno con un solo perro.
+   *
+   * No es lo mismo que no tener días: acá el gráfico SÍ se dibuja, con su
+   * eje, sus fechas y la línea de los 25 cupos, y adentro no hay una sola
+   * barra. Una caja vacía con ejes no dice "no ha pasado nada", dice "se
+   * rompió el gráfico". Pasa en una casa recién abierta y pasaría también
+   * tras un periodo sin movimiento.
+   */
+  if (dias.every((d) => d.pico === 0)) {
+    return (
+      <p className="text-muted-foreground py-8 text-center text-sm text-pretty">
+        Todavía no ha pasado ningún perro por acá en este periodo. Cuando
+        empiecen a llegar, cada barra va a mostrar qué tan llena estuvo la
+        casa ese día. 🐾
+      </p>
+    );
+  }
+
   const diaActivo = activo !== null ? dias[activo] : null;
   const techo = Math.max(capacidad, ...dias.map((d) => d.pico));
   const porcentaje = (n: number) => `${(n / techo) * 100}%`;

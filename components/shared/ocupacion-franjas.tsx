@@ -36,6 +36,23 @@ export function OcupacionFranjas({
 
   if (slots.length === 0) return null;
 
+  /**
+   * Hay franjas, pero ninguna con un perro.
+   *
+   * El gráfico se dibuja igual —eje, horas y la línea de los 25 cupos— y
+   * adentro no hay una sola barra. Una caja vacía con ejes no dice "no ha
+   * llegado nadie", dice "se rompió esto". Se ve a primera hora de la
+   * mañana todos los días, que es cuando el equipo más mira esta pantalla.
+   */
+  if (ocupacion.pico === 0) {
+    return (
+      <p className="text-muted-foreground py-6 text-center text-sm text-pretty">
+        Todavía no ha llegado nadie. Cuando marques la primera llegada, acá
+        vas a ver cómo se va llenando el día. 🐾
+      </p>
+    );
+  }
+
   const slotActivo = activo !== null ? slots[activo] : null;
   // El eje llega al tope de capacidad salvo que ya estemos por encima.
   const techo = Math.max(capacidad, ocupacion.pico);

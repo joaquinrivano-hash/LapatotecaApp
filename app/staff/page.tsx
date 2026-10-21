@@ -154,12 +154,23 @@ export default function Hoy() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle>Cómo se llena el día</CardTitle>
+          {/* Sin nadie en la casa no hay hora del peak que nombrar. La
+              versión anterior decía "0 a las 00:00", que es una hora
+              inventada: el minuto cero es lo que devuelve la cuenta cuando
+              no encontró nada, no un momento en que pasó algo. */}
           <p className="text-muted-foreground text-sm text-pretty">
             El cupo se mide por el momento más lleno, no por cuántos perros
-            pasaron. Hoy el peak son{" "}
-            <strong className="text-foreground">{ocupacion.pico}</strong> a las{" "}
-            {hhmmDesdeMinutos(ocupacion.picoMinutoDelDia)}, con{" "}
-            {ocupacion.perrosDistintos} perros distintos en el día.
+            pasaron.{" "}
+            {ocupacion.pico === 0 ? (
+              <>Hoy todavía no hay nadie en la casa.</>
+            ) : (
+              <>
+                Hoy el peak son{" "}
+                <strong className="text-foreground">{ocupacion.pico}</strong> a
+                las {hhmmDesdeMinutos(ocupacion.picoMinutoDelDia)}, con{" "}
+                {ocupacion.perrosDistintos} perros distintos en el día.
+              </>
+            )}
           </p>
         </CardHeader>
         <CardContent>
@@ -192,9 +203,21 @@ export default function Hoy() {
 
         <TabsContent value="por-llegar" className="mt-3 space-y-2">
           {porLlegar.length === 0 ? (
+            /* "Ya llegaron todos" solo es cierto si alguien estaba
+               esperado. En un día sin nadie agendado —una casa recién
+               abierta, un feriado— decirlo suena a que el equipo se perdió
+               algo. */
             <EstadoVacio
-              titulo="Ya llegaron todos"
-              descripcion="No queda nadie por marcar. Buen día."
+              titulo={
+                adentro.length + cerrados.length > 0
+                  ? "Ya llegaron todos"
+                  : "No hay nadie agendado para hoy"
+              }
+              descripcion={
+                adentro.length + cerrados.length > 0
+                  ? "No queda nadie por marcar. Buen día."
+                  : "Cuando haya reservas para hoy, van a aparecer acá para marcar la llegada."
+              }
             />
           ) : (
             porLlegar.map((item) => (

@@ -30,7 +30,23 @@ export function HorariosDelDia({
   const [detalle, setDetalle] = React.useState(false);
   const { franjas } = analisis;
 
-  if (franjas.length === 0) return null;
+  /**
+   * Sin movimiento todavía.
+   *
+   * Devolver null dejaba la tarjeta con su título y su explicación y NADA
+   * adentro, que no se lee como "no ha pasado nada" sino como "esto está
+   * roto". Se ve apenas se entra a una casa recién abierta, que es
+   * justamente la primera impresión que no conviene regalar.
+   */
+  if (franjas.length === 0) {
+    return (
+      <p className="text-muted-foreground py-6 text-center text-sm text-pretty">
+        Todavía no hay jornadas cerradas en este periodo. Apenas el equipo
+        marque la primera llegada y la primera salida, acá aparece la forma
+        del día. 🐾
+      </p>
+    );
+  }
 
   const techo = Math.max(
     ...franjas.map((f) => Math.max(f.llegadas, f.retiros)),

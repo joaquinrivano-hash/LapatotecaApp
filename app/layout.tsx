@@ -5,6 +5,7 @@ import {
   AvisoDeInstalacion,
   RegistrarServiceWorker,
 } from "@/components/shared/pwa";
+import { SesionViva } from "@/components/shared/sesion-viva";
 import "./globals.css";
 
 const nunito = Nunito({
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${nunito.variable} ${baloo.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <SesionViva />
         {children}
         <Toaster />
         <RegistrarServiceWorker />
