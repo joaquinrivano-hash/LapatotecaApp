@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { LogoPatoteca } from "@/components/shared/logo";
 import { useMontado } from "@/lib/hooks/use-montado";
+import { useSalir } from "@/lib/hooks/use-salir";
 import { useSesion } from "@/lib/store/sesion";
 import { cn } from "@/lib/utils";
 
@@ -38,9 +39,10 @@ export default function AdminLayout({
 }) {
   const ruta = usePathname();
   const montado = useMontado();
-  const { rol, salir } = useSesion();
+  const { rol, resuelta } = useSesion();
+  const { salir, saliendo } = useSalir();
 
-  if (montado && rol !== "admin") {
+  if (montado && resuelta && rol !== "admin") {
     return (
       <main className="mx-auto flex w-full max-w-md flex-1 items-center px-4">
         <EstadoVacio
@@ -67,10 +69,14 @@ export default function AdminLayout({
                 Backoffice
               </p>
             </div>
-            <Button variant="ghost" size="icon" aria-label="Salir" asChild>
-              <Link href="/ingresar" onClick={salir}>
-                <LogOut />
-              </Link>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={salir}
+              disabled={saliendo}
+              aria-label="Salir"
+            >
+              <LogOut />
             </Button>
           </div>
 

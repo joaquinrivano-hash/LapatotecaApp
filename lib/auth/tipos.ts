@@ -59,6 +59,14 @@ export interface Autenticacion {
   /** Manda el correo para elegir una contraseña nueva. */
   recuperar(email: string): Promise<void>;
   /**
+   * Escribe una contraseña nueva para quien tenga sesión abierta.
+   *
+   * No pide la anterior a propósito: se llama después del enlace del correo,
+   * cuando justamente el problema es que la persona no se la acuerda. Lo que
+   * autoriza el cambio es la sesión que creó ese enlace.
+   */
+  cambiarClave(nueva: string): Promise<void>;
+  /**
    * Avisa cuando la sesión cambia: entró, salió, se venció el token, o
    * alguien entró en otra pestaña. Devuelve cómo desuscribirse.
    */

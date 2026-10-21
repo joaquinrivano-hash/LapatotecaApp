@@ -158,6 +158,11 @@ export function crearAutenticacionSupabase(
       if (error) throw new ErrorAutenticacion(explicarAuth(error));
     },
 
+    async cambiarClave(nueva) {
+      const { error } = await sb.auth.updateUser({ password: nueva });
+      if (error) throw new ErrorAutenticacion(explicarAuth(error));
+    },
+
     async salir() {
       const { error } = await sb.auth.signOut();
       if (error) throw new ErrorAutenticacion(explicarAuth(error));
