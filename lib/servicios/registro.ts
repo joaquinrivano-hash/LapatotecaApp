@@ -37,6 +37,7 @@ import type {
   EstadiaJardin,
   FechaISO,
   ID,
+  Configuracion,
   InstanteISO,
   Medicamento,
   Pago,
@@ -113,12 +114,21 @@ export interface CuentaCreada {
   perro: Perro;
 }
 
-/** Crea el cliente y su primer perro, con el día de prueba pendiente. */
-export async function crearCuenta(
+/**
+ * Revisa que la ficha se pueda recibir, sin crear nada.
+ *
+ * Está separada porque con cuentas reales hay que poder revisar ANTES de
+ * crear la cuenta de acceso: si se hiciera al revés, un perro de 30 kg
+ * dejaría una cuenta huérfana en Supabase Auth que la app no puede borrar, y
+ * esa persona no podría volver a registrarse con su propio correo.
+ *
+ * Lanza `RegistroRechazado` con los motivos, o no hace nada.
+ */
+export async function validarAlta(
   repo: RepositorioPatoteca,
   datos: { cuenta: DatosDeCuenta; perro: DatosDePerro },
   ahora: InstanteISO = new Date().toISOString(),
-): Promise<CuentaCreada> {
+): Promise<Configuracion> {
   // La ficha se revisa acá y no solo en el formulario: la pantalla puede
   // adelantar el aviso, pero la que no deja pasar una ficha incompleta es
   // esta función, que es por donde entra todo el mundo.
@@ -142,6 +152,17 @@ export async function crearCuenta(
       faltan.map((f) => f.mensaje),
     );
   }
+
+  return configuracion;
+}
+
+/** Crea el cliente y su primer perro, con el día de prueba pendiente. */
+export async function crearCuenta(
+  repo: RepositorioPatoteca,
+  datos: { cuenta: DatosDeCuenta; perro: DatosDePerro },
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<CuentaCreada> {
+  const configuracion = await validarAlta(repo, datos, ahora);
 
   const cliente = await repo.clientes.crear({
     nombre: datos.cuenta.nombre.trim(),
