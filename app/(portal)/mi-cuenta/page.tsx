@@ -24,6 +24,7 @@ import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import { MiPerro } from "@/components/portal/mi-perro";
 import { ContactoCasa } from "@/components/shared/contacto-casa";
+import { ComoPagar } from "@/components/shared/como-pagar";
 import { excedePeso } from "@/lib/rules/admision";
 import { PrecioCLP } from "@/components/shared/precio";
 import { BarraParticipacion } from "@/components/admin/barra-participacion";
@@ -111,6 +112,7 @@ export default function MiCuenta() {
         total: r.cotizacion.total,
         inicioProgramado: r.inicioProgramado,
         esDiaDePrueba: false,
+        porConfirmar: r.estado === "pendiente",
       })),
     ...(datos?.estadias ?? [])
       .filter((e) => e.fecha >= hoy && e.estado !== "cancelada")
@@ -123,6 +125,7 @@ export default function MiCuenta() {
         total: e.cotizacion?.total ?? 0,
         inicioProgramado: e.inicioProgramado,
         esDiaDePrueba: e.origen === "dia_de_prueba",
+        porConfirmar: false,
       })),
   ].sort((a, b) => a.fecha.localeCompare(b.fecha));
 
@@ -305,6 +308,12 @@ export default function MiCuenta() {
                     <p className="text-muted-foreground truncate text-sm">
                       {nombrePerro(item.perroId)} · {item.detalle}
                     </p>
+                    {/* Tomada pero sin abono: el cupo es suyo, falta pagar. */}
+                    {item.porConfirmar && (
+                      <p className="text-warning text-xs font-semibold">
+                        Por confirmar: falta el abono
+                      </p>
+                    )}
                   </div>
                   <Badge variant={item.linea === "hotel" ? "hotel" : "jardin"}>
                     {item.linea === "hotel" ? "Hotel" : "Jardín"}
@@ -340,12 +349,17 @@ export default function MiCuenta() {
             <>
               {porPagar.length > 0 && (
                 <Card className="border-primary/40">
-                  <CardContent className="flex flex-wrap items-baseline justify-between gap-2 p-3">
-                    <span className="font-semibold">Por pagar</span>
-                    <PrecioCLP
-                      monto={porPagar.reduce((s, p) => s + p.monto, 0)}
-                      tamano="xl"
-                    />
+                  <CardContent className="space-y-3 p-3">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="font-semibold">Por pagar</span>
+                      <PrecioCLP
+                        monto={porPagar.reduce((s, p) => s + p.monto, 0)}
+                        tamano="xl"
+                      />
+                    </div>
+                    {/* Cómo pagar va junto a lo que se debe, no al final de
+                        la lista: con veinte cobros abajo nadie lo encuentra. */}
+                    <ComoPagar />
                   </CardContent>
                 </Card>
               )}
@@ -367,12 +381,6 @@ export default function MiCuenta() {
                 </Card>
               ))}
 
-              {/* Las condiciones de pago a la vista, no detrás de un enlace:
-                  si no hay pasarela, el dueño tiene que saber cómo pagar. */}
-              <p className="text-muted-foreground px-1 text-xs text-pretty">
-                Los cobros se pagan por transferencia o en el local. Cuando
-                recibamos el pago lo marcamos acá.
-              </p>
             </>
           )}
         </TabsContent>
@@ -659,3 +667,4 @@ function EstadoDelCobro({ pago }: { pago: Pago }) {
   }
   return <Badge>Por pagar</Badge>;
 }
+

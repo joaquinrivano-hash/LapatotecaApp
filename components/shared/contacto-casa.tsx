@@ -14,11 +14,25 @@ import { Button } from "@/components/ui/button";
 import { useConsulta } from "@/lib/hooks/use-consulta";
 import { aE164, formatearTelefono } from "@/lib/utils/telefono";
 
-export function ContactoCasa({ mensaje }: { mensaje?: string }) {
+/** El WhatsApp de la casa en E.164, o null si nadie lo configuró. */
+export function useWhatsappDeLaCasa(): { cargando: boolean; numero: string | null } {
   const configuracion = useConsulta((repo) => repo.configuracion.obtener(), []);
-  const numero = aE164(configuracion.datos?.whatsappDeContacto ?? "");
+  return {
+    cargando: !configuracion.datos,
+    numero: aE164(configuracion.datos?.whatsappDeContacto ?? ""),
+  };
+}
 
-  if (!configuracion.datos) return null;
+/** El enlace que abre la conversación, con el mensaje ya escrito. */
+export function enlaceWhatsapp(numero: string, mensaje?: string): string {
+  const texto = mensaje ? `?text=${encodeURIComponent(mensaje)}` : "";
+  return `https://wa.me/${numero.slice(1)}${texto}`;
+}
+
+export function ContactoCasa({ mensaje }: { mensaje?: string }) {
+  const { cargando, numero } = useWhatsappDeLaCasa();
+
+  if (cargando) return null;
 
   if (!numero) {
     return (
@@ -28,13 +42,11 @@ export function ContactoCasa({ mensaje }: { mensaje?: string }) {
     );
   }
 
-  const texto = mensaje ? `?text=${encodeURIComponent(mensaje)}` : "";
-
   return (
     <div className="flex flex-wrap gap-2">
       <Button asChild size="sm">
         <a
-          href={`https://wa.me/${numero.slice(1)}${texto}`}
+          href={enlaceWhatsapp(numero, mensaje)}
           target="_blank"
           rel="noreferrer"
         >
