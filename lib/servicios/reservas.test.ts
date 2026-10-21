@@ -21,10 +21,12 @@ import {
   crearReservaHotel,
   diasConCupo,
   cancelarDiaDeJardin,
+  ocupantesEnRango,
   reservarDiaJardin,
   simularCancelacionDeJardin,
   ReservaRechazada,
 } from "./reservas";
+import { marcarPagado } from "./cobranza";
 
 const LUNES = "2026-06-15";
 const en = (hora: string, dia = LUNES) => instanteEnHora(dia, hora);
@@ -174,18 +176,44 @@ describe("cotizar hotel", () => {
 });
 
 describe("crear reserva de hotel", () => {
-  it("deja la reserva confirmada y el abono pagado", async () => {
+  it("deja la reserva por confirmar y el abono por pagar", async () => {
     const { reserva, abono } = await crearReservaHotel(repo, {
       perroId: "perro-001",
       inicio: en("10:00"),
       fin: en("10:00", "2026-06-18"),
     });
 
-    expect(reserva.estado).toBe("confirmada");
-    expect(reserva.abonoPagado).toBe(true);
+    expect(reserva.estado).toBe("pendiente");
+    expect(reserva.abonoPagado).toBe(false);
     expect(abono.monto).toBe(72_000 * NEGOCIO.hotel.fraccionAbono);
-    expect(abono.estado).toBe("pagado");
+    expect(abono.estado).toBe("pendiente");
+    expect(abono.pagadoEn).toBeUndefined();
     expect(await repo.reservasHotel.listar()).toHaveLength(1);
+  });
+
+  it("marcar pagado el abono confirma la reserva", async () => {
+    const { reserva, abono } = await crearReservaHotel(repo, {
+      perroId: "perro-001",
+      inicio: en("10:00"),
+      fin: en("10:00", "2026-06-18"),
+    });
+
+    await marcarPagado(repo, abono.id, "transferencia");
+
+    const confirmada = await repo.reservasHotel.obtener(reserva.id);
+    expect(confirmada?.estado).toBe("confirmada");
+    expect(confirmada?.abonoPagado).toBe(true);
+  });
+
+  it("una reserva por confirmar igual ocupa su cupo", async () => {
+    await crearReservaHotel(repo, {
+      perroId: "perro-001",
+      inicio: en("10:00"),
+      fin: en("10:00", "2026-06-18"),
+    });
+
+    const ocupantes = await ocupantesEnRango(repo, LUNES, LUNES);
+    expect(ocupantes.some((o) => o.perroId === "perro-001")).toBe(true);
   });
 
   it("no crea nada si hay reparos, y dice cuáles", async () => {

@@ -198,9 +198,10 @@ export const NEGOCIO = {
   },
 
   /**
-   * Datos para transferir. Van vacíos a propósito: son de la cuenta real del
-   * negocio y hay que completarlos antes de cobrarle a alguien. Mientras
-   * estén vacíos, la app dice que los datos llegan por WhatsApp.
+   * Datos para transferir de fábrica. Van vacíos a propósito: son de la
+   * cuenta real del negocio y los completa Administración en
+   * /admin/configuracion (`Configuracion.transferencia`). Mientras estén
+   * vacíos, la app dice que los datos llegan por WhatsApp.
    */
   transferencia: {
     titular: "",

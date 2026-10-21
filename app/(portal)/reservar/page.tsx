@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ComoPagar } from "@/components/shared/como-pagar";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import { PrecioCLP } from "@/components/shared/precio";
@@ -326,6 +327,9 @@ function DiaDeJardin({ perro }: { perro: Perro }) {
               </p>
             )}
             <Desglose cotizacion={datos.cotizacion} />
+            {!datos.planDisponible && datos.cotizacion.total > 0 && (
+              <ComoPagar />
+            )}
             <Reparos
               motivos={[
                 ...datos.admision.problemas.map((p) => p.mensaje),
@@ -483,8 +487,8 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
           paseosContratados: paseos,
         }),
       );
-      toast.success("Reserva confirmada", {
-        description: `Pagaste el abono del ${PORCENTAJE_ABONO}%. El saldo se cobra al retiro.`,
+      toast.success("Reserva tomada", {
+        description: `Transfiere el abono del ${PORCENTAJE_ABONO}% y avísanos: con eso la confirmamos. El saldo se paga al retiro.`,
       });
     } catch (error) {
       avisarError(error);
@@ -589,6 +593,9 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
               </span>
               <PrecioCLP monto={datos.abono} tamano="lg" />
             </p>
+            {/* La reserva queda tomada al tocar el botón, pero se confirma
+                cuando llega el abono: eso se dice antes, no después. */}
+            <ComoPagar />
             <Reparos
               motivos={[
                 ...datos.admision.problemas.map((p) => p.mensaje),

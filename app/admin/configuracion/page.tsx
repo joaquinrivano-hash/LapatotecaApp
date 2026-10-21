@@ -11,6 +11,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import {
+  Landmark,
   List,
   MessageCircle,
   Plus,
@@ -33,6 +34,7 @@ import { formatearFechaLarga } from "@/lib/utils/fecha";
 import { aE164, formatearTelefono } from "@/lib/utils/telefono";
 import type {
   CampoDeAlta,
+  DatosDeTransferencia,
   NombreDeCatalogo,
   TipoVacuna,
 } from "@/lib/types";
@@ -152,6 +154,12 @@ export default function Configuracion() {
     toast.success(
       whatsappDeContacto ? "Guardamos el WhatsApp" : "Quitamos el WhatsApp",
     );
+  }
+
+  async function guardarTransferencia(transferencia: DatosDeTransferencia) {
+    await ejecutar((repo) => repo.configuracion.guardar({ transferencia }));
+    setVersion((v) => v + 1);
+    toast.success("Guardamos los datos de la cuenta");
   }
 
   async function restaurar() {
@@ -287,6 +295,28 @@ export default function Configuracion() {
             valor={actual.whatsappDeContacto}
             ocupado={ocupado}
             onCambio={guardarWhatsapp}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2">
+            <Landmark className="size-5" />
+            Dónde nos pagan
+          </CardTitle>
+          <p className="text-muted-foreground text-sm text-pretty">
+            Los datos que ve el dueño al tocar &ldquo;transferencia&rdquo; en
+            sus cobros. Sin titular ni número de cuenta, la app le dice que se
+            los mandamos por WhatsApp.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <EditorDeTransferencia
+            key={JSON.stringify(actual.transferencia)}
+            valor={actual.transferencia}
+            ocupado={ocupado}
+            onCambio={guardarTransferencia}
           />
         </CardContent>
       </Card>
@@ -458,6 +488,69 @@ function EditorDeWhatsapp({
           Revisa el número: tiene que ser un celular chileno.
         </p>
       )}
+    </div>
+  );
+}
+
+const CAMPOS_TRANSFERENCIA: {
+  campo: keyof DatosDeTransferencia;
+  etiqueta: string;
+  placeholder: string;
+  tipo?: string;
+}[] = [
+  { campo: "titular", etiqueta: "Titular", placeholder: "Ej: La Patoteca SpA" },
+  { campo: "rut", etiqueta: "RUT", placeholder: "Ej: 76.123.456-7" },
+  { campo: "banco", etiqueta: "Banco", placeholder: "Ej: Banco de Chile" },
+  { campo: "tipoDeCuenta", etiqueta: "Tipo de cuenta", placeholder: "Ej: Cuenta corriente" },
+  { campo: "numero", etiqueta: "Número de cuenta", placeholder: "Ej: 00-123-45678-09" },
+  {
+    campo: "email",
+    etiqueta: "Email para el comprobante",
+    placeholder: "Ej: pagos@lapatoteca.cl",
+    tipo: "email",
+  },
+];
+
+function EditorDeTransferencia({
+  valor,
+  ocupado,
+  onCambio,
+}: {
+  valor: DatosDeTransferencia;
+  ocupado: boolean;
+  onCambio: (datos: DatosDeTransferencia) => void;
+}) {
+  const [datos, setDatos] = useState(valor);
+  const limpio = Object.fromEntries(
+    Object.entries(datos).map(([k, v]) => [k, v.trim()]),
+  ) as unknown as DatosDeTransferencia;
+  const sinCambios = JSON.stringify(limpio) === JSON.stringify(valor);
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {CAMPOS_TRANSFERENCIA.map(({ campo, etiqueta, placeholder, tipo }) => (
+          <div key={campo} className="space-y-1.5">
+            <Label htmlFor={`transferencia-${campo}`}>{etiqueta}</Label>
+            <Input
+              id={`transferencia-${campo}`}
+              type={tipo ?? "text"}
+              value={datos[campo]}
+              placeholder={placeholder}
+              onChange={(e) => setDatos({ ...datos, [campo]: e.target.value })}
+            />
+          </div>
+        ))}
+      </div>
+      <Button
+        variant="outline"
+        className="w-full sm:w-auto"
+        disabled={ocupado || sinCambios}
+        onClick={() => onCambio(limpio)}
+      >
+        <Save />
+        Guardar la cuenta
+      </Button>
     </div>
   );
 }

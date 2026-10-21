@@ -452,6 +452,10 @@ function normalizarDatos(datos: DatosPatoteca): DatosPatoteca {
       ...datos.configuracion?.duracionVacunasMeses,
     },
     catalogos: { ...fabrica.catalogos, ...datos.configuracion?.catalogos },
+    transferencia: {
+      ...fabrica.transferencia,
+      ...datos.configuracion?.transferencia,
+    },
     actualizadoEn: datos.configuracion?.actualizadoEn ?? fabrica.actualizadoEn,
   };
 

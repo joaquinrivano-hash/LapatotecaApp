@@ -604,7 +604,19 @@ export interface Configuracion {
    * resuelve en la app ("escríbenos"). Vacío mientras nadie lo configure.
    */
   whatsappDeContacto: string;
+  /** La cuenta donde el dueño paga. Vacía mientras nadie la configure. */
+  transferencia: DatosDeTransferencia;
   actualizadoEn: InstanteISO;
+}
+
+export interface DatosDeTransferencia {
+  titular: string;
+  rut: string;
+  banco: string;
+  tipoDeCuenta: string;
+  numero: string;
+  /** Adónde mandar el comprobante. */
+  email: string;
 }
 
 /* ── Avisos para Administración ────────────────────────────────────── */

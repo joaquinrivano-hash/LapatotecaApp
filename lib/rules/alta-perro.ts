@@ -78,6 +78,7 @@ export function configuracionPorDefecto(
       marcasAntiparasitario: [...MARCAS_ANTIPARASITARIO],
     },
     whatsappDeContacto: "",
+    transferencia: { ...NEGOCIO.transferencia },
     actualizadoEn: ahora,
   };
 }

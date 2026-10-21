@@ -172,7 +172,15 @@ export interface ResultadoReservaHotel {
   abono: Pago;
 }
 
-/** Confirma la reserva y deja pagado el abono (mock). */
+/**
+ * Toma la reserva y emite el cobro del abono.
+ *
+ * Queda **por confirmar** hasta que llegue el abono: no hay pasarela, el
+ * dueño transfiere y Administración lo marca pagado (`marcarPagado`), que es
+ * lo que la confirma. El cupo sí queda tomado desde ya —una reserva
+ * pendiente ocupa, ver `ESTADOS_RESERVA_OCUPAN`—, porque si no dos dueños
+ * podrían transferir por el mismo lugar.
+ */
 export async function crearReservaHotel(
   repo: RepositorioPatoteca,
   entrada: EntradaReservaHotel,
@@ -194,21 +202,22 @@ export async function crearReservaHotel(
     inicioProgramado: entrada.inicio,
     finProgramado: entrada.fin,
     paseosContratados: entrada.paseosContratados ?? 0,
-    estado: "confirmada",
+    estado: "pendiente",
     cotizacion: previa.cotizacion,
-    abonoPagado: true,
+    abonoPagado: false,
     creadaEn: ahora,
   });
 
+  // Pendiente y sin fecha de pago, igual que exige la base (_permisos): nadie
+  // se da por pagado solo.
   const abono = await repo.pagos.crear({
     clienteId: perro.clienteId,
     concepto: "abono_hotel",
     referenciaId: reserva.id,
     monto: previa.abono,
-    estado: "pagado",
-    metodo: "webpay",
+    estado: "pendiente",
     emitidoEn: ahora,
-    pagadoEn: ahora,
+    venceEn: fechaISO(entrada.inicio),
   });
 
   return { reserva, abono };

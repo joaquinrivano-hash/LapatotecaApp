@@ -684,8 +684,18 @@ cliente reserva a futuro y no hay ningún perro en la puerta que registrar.
   de aviso para cancelar una jornada dejaría sin salida a cualquiera que se
   enferme la noche antes. Pasado el corte el cupo ya no se alcanza a
   revender, así que el día se cobra igual.
-- La reserva de hotel deja el **abono del 50% pagado** y el saldo se cobra al
-  retiro.
+- La reserva de hotel queda **por confirmar** con el cobro del abono del 50%
+  **pendiente**: no hay pasarela, el dueño transfiere y la reserva se
+  confirma cuando Administración marca el abono pagado (`marcarPagado`). El
+  cupo queda tomado desde que reserva —una reserva pendiente ocupa—, porque
+  si no dos dueños podrían transferir por el mismo lugar. El saldo se cobra
+  al retiro.
+- **Cómo se paga se dice donde se paga.** `<ComoPagar />` va junto al abono,
+  al día suelto y al total "Por pagar" de Mi cuenta: "transferencia" abre
+  los datos ahí mismo y "escríbenos" / "avísanos" abren el WhatsApp de la
+  casa con el mensaje escrito. Los datos de la cuenta son
+  `Configuracion.transferencia`, se editan en `/admin/configuracion`, y
+  vacíos dicen que llegan por WhatsApp.
 - La tienda, si un producto no alcanza, **compra lo que hay y lo avisa**, en
   vez de fallar la orden entera: en una tienda de mostrador eso es lo que pasa.
 - El desglose que ve el cliente muestra **cada descuento por separado**.
