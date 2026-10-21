@@ -613,11 +613,31 @@ que ya tiene la edad: es lo prudente, y el dueño siempre puede agregarla.
 
 `reparosDeAlta` separa las dos cosas, igual que `evaluarAdmision`:
 
-- **Bloquea** lo que no tiene vuelta: el peso y la castración.
-- **Avisa** una vacuna vencida. Se renueva antes de venir, así que rechazar
-  ahí sería perder un cliente por algo que se arregla en una visita al
-  veterinario. El mensaje dice claro que sin ponerla al día no lo podemos
-  recibir el día de prueba.
+- **Bloquea** lo que no tiene vuelta: la castración.
+- **Avisa** una vacuna o un antiparasitario vencidos. Se renuevan antes de
+  venir, así que rechazar ahí sería perder un cliente por algo que se arregla
+  en una visita al veterinario. El mensaje dice claro que sin ponerlos al día
+  no lo podemos recibir el día de prueba.
+- **Se conversa** el peso. A veces hay vuelta y eso lo decide Administración
+  mirando al perro, no el formulario: la cuenta se crea, Administración recibe
+  una `Notificacion`, y el día de prueba queda bloqueado hasta que lo habilite
+  desde la ficha del cliente (`habilitarPeso`). La excepción guarda **hasta
+  cuántos kilos** se dio: si la ficha sube después, ya no es el perro que
+  alguien miró. La regla es `excedePeso`, en `admision.ts`.
+
+"Escríbenos" sin un número es una puerta pintada. `<ContactoCasa />` pone el
+WhatsApp de la casa, que es `Configuracion.whatsappDeContacto` y se edita en
+`/admin/configuracion`. Vacío, promete lo único que se puede cumplir: que le
+escribimos nosotros.
+
+### Lo que impide agendar se ve antes de elegir hora
+
+`/dia-de-prueba` revisa la admisión apenas se elige el perro y el día, no
+después de tocar una hora. Si falta algo que el dueño arregla solo (vacuna,
+antiparasitario) le abre su ficha ahí mismo para corregir la fecha; si es algo
+que se conversa (peso, castración), le pone el WhatsApp. Y siempre hay un
+"Volver a mi cuenta": una pantalla que dice "no puedes" sin decir qué hacer es
+la que ya nos reportaron.
 
 ### Los datos guardados se migran, no se botan
 
@@ -687,7 +707,10 @@ portada, con letra chica—.
 El alta pide los datos del dueño y del perro, incluidos los **vencimientos de
 las vacunas**: el día de prueba ya es una jornada completa en la casa con otros
 perros, así que la admisión se aplica igual. Lo único que impide crear la
-cuenta es lo que no tiene vuelta: el peso y la esterilización de los machos.
+cuenta es lo que no tiene vuelta: la esterilización de los machos. Con
+sobrepeso la cuenta se crea igual, el botón dice "Crear cuenta" y no "Crear
+cuenta y agendar", y en vez del calendario va a su cuenta, que explica que lo
+conversamos.
 
 ### El día de prueba
 
@@ -734,6 +757,14 @@ pedir permiso —son suyos y nadie los conoce mejor—, pero cada cambio deja un
 castración que se desmarca cambian si el perro puede quedarse. Por eso la
 comparación es en palabras (`"9 kg"` → `"12 kg"`, `"sí"` → `"no"`) y no entre
 propiedades: lo que importa es lo que cambió a la vista.
+
+**Menos el sexo y la castración.** Son los que deciden si un macho entra, y
+desmarcarlos después de reservar le da la vuelta a la admisión. En la ficha
+del dueño se ven pero no se tocan (`sexoYCastracionFijos`), y
+`actualizarPerroComoDueno` los descarta aunque lleguen: la regla vive en la
+capa de servicios, no en la pantalla. En Supabase la cuida además un trigger
+(`proteger_ficha_de_la_casa`), porque ahí el dueño tiene la API a mano. Si
+cambiaron de verdad, los corrige Administración.
 
 Dos detalles que costaron un bug cada uno:
 

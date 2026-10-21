@@ -10,7 +10,16 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { List, Plus, RotateCcw, Save, ShieldCheck, Syringe, X } from "lucide-react";
+import {
+  List,
+  MessageCircle,
+  Plus,
+  RotateCcw,
+  Save,
+  ShieldCheck,
+  Syringe,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,6 +30,7 @@ import { NEGOCIO } from "@/lib/config/negocio";
 import { nombreVacuna } from "@/lib/rules/admision";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { formatearFechaLarga } from "@/lib/utils/fecha";
+import { aE164, formatearTelefono } from "@/lib/utils/telefono";
 import type {
   CampoDeAlta,
   NombreDeCatalogo,
@@ -136,6 +146,14 @@ export default function Configuracion() {
     setVersion((v) => v + 1);
   }
 
+  async function guardarWhatsapp(whatsappDeContacto: string) {
+    await ejecutar((repo) => repo.configuracion.guardar({ whatsappDeContacto }));
+    setVersion((v) => v + 1);
+    toast.success(
+      whatsappDeContacto ? "Guardamos el WhatsApp" : "Quitamos el WhatsApp",
+    );
+  }
+
   async function restaurar() {
     await ejecutar((repo) => repo.configuracion.restaurar());
     setVersion((v) => v + 1);
@@ -247,6 +265,29 @@ export default function Configuracion() {
               onCambio={(valores) => guardarLista(lista.valor, valores)}
             />
           ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2">
+            <MessageCircle className="size-5" />
+            Dónde nos escriben
+          </CardTitle>
+          <p className="text-muted-foreground text-sm text-pretty">
+            El WhatsApp que ve el dueño cuando algo se conversa, como un perro
+            que pasa del peso. Sin número, la app le dice que le escribimos
+            nosotros.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <EditorDeWhatsapp
+            // La clave lo reinicia cuando cambia desde afuera (restaurar).
+            key={actual.whatsappDeContacto}
+            valor={actual.whatsappDeContacto}
+            ocupado={ocupado}
+            onCambio={guardarWhatsapp}
+          />
         </CardContent>
       </Card>
 
@@ -373,5 +414,50 @@ function EditorDeLista({
         </Button>
       </div>
     </section>
+  );
+}
+
+function EditorDeWhatsapp({
+  valor,
+  ocupado,
+  onCambio,
+}: {
+  valor: string;
+  ocupado: boolean;
+  onCambio: (e164: string) => void;
+}) {
+  const [texto, setTexto] = useState(valor ? formatearTelefono(valor) : "");
+  const limpio = texto.trim();
+  const e164 = aE164(limpio);
+  const invalido = limpio !== "" && !e164;
+  const sinCambios = (e164 ?? "") === valor;
+
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="whatsapp-contacto">WhatsApp de la casa</Label>
+      <div className="flex gap-2">
+        <Input
+          id="whatsapp-contacto"
+          type="tel"
+          inputMode="tel"
+          value={texto}
+          placeholder="Ej: 9 8765 4321"
+          onChange={(e) => setTexto(e.target.value)}
+        />
+        <Button
+          variant="outline"
+          disabled={ocupado || invalido || sinCambios}
+          onClick={() => onCambio(e164 ?? "")}
+        >
+          <Save />
+          Guardar
+        </Button>
+      </div>
+      {invalido && (
+        <p className="text-destructive text-xs">
+          Revisa el número: tiene que ser un celular chileno.
+        </p>
+      )}
+    </div>
   );
 }

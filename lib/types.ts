@@ -148,7 +148,19 @@ export interface Perro {
   indicaciones?: string;
   /** Todo lo demás, en texto libre. */
   notas?: string;
+  /**
+   * Administración lo recibe aunque pase del peso máximo.
+   *
+   * Guarda hasta cuántos kilos se habilitó: si después la ficha dice que
+   * subió más, la excepción ya no cubre ese peso y hay que volver a mirarlo.
+   */
+  excepcionPeso?: ExcepcionPeso;
   creadoEn: InstanteISO;
+}
+
+export interface ExcepcionPeso {
+  hastaKg: number;
+  habilitadaEn: InstanteISO;
 }
 
 /**
@@ -587,6 +599,11 @@ export interface Configuracion {
   duracionVacunasMeses: Record<TipoVacuna, number>;
   camposObligatorios: CampoDeAlta[];
   catalogos: Catalogos;
+  /**
+   * El WhatsApp de la casa, en E.164. Lo que el dueño ve cuando algo no se
+   * resuelve en la app ("escríbenos"). Vacío mientras nadie lo configure.
+   */
+  whatsappDeContacto: string;
   actualizadoEn: InstanteISO;
 }
 

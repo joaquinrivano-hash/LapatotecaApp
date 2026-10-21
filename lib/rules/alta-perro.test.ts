@@ -244,11 +244,18 @@ describe("reparosDeAlta", () => {
     expect(reparos(completo())).toEqual([]);
   });
 
-  it("el peso de más bloquea", () => {
+  it("el peso de más no bloquea la cuenta: se conversa", () => {
     const [reparo] = reparos(completo({ pesoKg: 25 }));
 
-    expect(reparo.bloquea).toBe(true);
+    expect(reparo.bloquea).toBe(false);
+    expect(reparo.conversar).toBe(true);
     expect(reparo.mensaje).toContain(`${NEGOCIO.admision.pesoMaximoKg} kg`);
+  });
+
+  it("el peso justo en el máximo no es un reparo", () => {
+    expect(
+      reparos(completo({ pesoKg: NEGOCIO.admision.pesoMaximoKg })),
+    ).toEqual([]);
   });
 
   it("un macho sin castrar de más de 7 meses bloquea", () => {
@@ -286,6 +293,28 @@ describe("reparosDeAlta", () => {
     expect(reparo.bloquea).toBe(false);
     expect(reparo.mensaje).toContain("óctuple");
     expect(reparo.mensaje).toContain("vencida");
+  });
+
+  it("un antiparasitario vencido avisa, pero no bloquea", () => {
+    const [reparo] = reparos(
+      completo({
+        antiparasitario: { ultimaAplicacion: "2026-07-01", mesesDeDuracion: 1 },
+      }),
+    );
+
+    expect(reparo.bloquea).toBe(false);
+    expect(reparo.mensaje).toContain("antiparasitario");
+    expect(reparo.mensaje).toContain("día de prueba");
+  });
+
+  it("uno de 3 meses dado hace dos sigue vigente", () => {
+    expect(
+      reparos(
+        completo({
+          antiparasitario: { ultimaAplicacion: "2026-07-28", mesesDeDuracion: 3 },
+        }),
+      ),
+    ).toEqual([]);
   });
 });
 

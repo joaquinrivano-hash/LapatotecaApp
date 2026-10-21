@@ -7,6 +7,9 @@
  * los datos. El dueño puede cambiarlos sin pedir permiso —son suyos y nadie
  * los conoce mejor—, pero cada cambio le avisa a Administración con el antes y
  * el después: un peso que sube de 8 a 21 kg cambia si el perro puede quedarse.
+ *
+ * Menos el sexo y la castración, que deciden si un macho entra: esos los
+ * corrige Administración.
  */
 
 import { useState } from "react";
@@ -45,13 +48,16 @@ export function MiPerro({
   perro,
   hoy,
   onGuardado,
+  editarAlAbrir = false,
 }: {
   perro: Perro;
   hoy: string;
   onGuardado: () => void;
+  /** Para cuando se abre justamente a corregir algo, como una vacuna vencida. */
+  editarAlAbrir?: boolean;
 }) {
   const { ocupado, ejecutar } = useAccion();
-  const [editando, setEditando] = useState(false);
+  const [editando, setEditando] = useState(editarAlAbrir);
   const [ficha, setFicha] = useState<EstadoPerro>(() => estadoDesde(perro));
   const [faltantes, setFaltantes] = useState<FaltanteDeAlta[]>([]);
 
@@ -121,6 +127,7 @@ export function MiPerro({
               configuracion={configuracion.datos}
               faltantes={faltantes}
               hoy={hoy}
+              sexoYCastracionFijos
             />
           ) : (
             <Skeleton className="h-96 rounded-2xl" />
