@@ -10,7 +10,11 @@
 import { NEGOCIO } from "@/lib/config/negocio";
 import { PRECIOS } from "@/lib/config/precios";
 import { evaluarAdmision } from "@/lib/rules/admision";
-import { reparosDeAlta, revisarAltaDePerro } from "@/lib/rules/alta-perro";
+import {
+  pasaDelPeso,
+  reparosDeAlta,
+  revisarAltaDePerro,
+} from "@/lib/rules/alta-perro";
 import { vigenciaAntiparasitario, vigenciaVacuna } from "@/lib/rules/perro";
 import {
   bloquesDeEntrada,
@@ -188,6 +192,25 @@ export async function crearCuenta(
     notas: datos.perro.notas?.trim() || undefined,
     creadoEn: ahora,
   });
+
+  // El sobrepeso no impide crear la cuenta, pero sin que alguien lo habilite
+  // el perro no puede agendar nada. Si Administración no se entera, el dueño
+  // queda esperando una llamada que nadie sabe que tiene que hacer.
+  if (pasaDelPeso(datos.perro)) {
+    await repo.notificaciones.crear({
+      clienteId: cliente.id,
+      perroId: perro.id,
+      titulo: `${cliente.nombre} ${cliente.apellido} creó la cuenta de ${perro.nombre}, que pasa del peso: hay que conversarlo y habilitarlo para agendar`,
+      cambios: [
+        {
+          campo: "Peso",
+          despues: `${perro.pesoKg} kg (máximo ${NEGOCIO.admision.pesoMaximoKg} kg)`,
+        },
+      ],
+      leida: false,
+      creadaEn: ahora,
+    });
+  }
 
   return { cliente, perro };
 }

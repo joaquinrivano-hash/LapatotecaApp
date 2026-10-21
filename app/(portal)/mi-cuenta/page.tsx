@@ -23,6 +23,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import { MiPerro } from "@/components/portal/mi-perro";
+import { ContactoCasa } from "@/components/shared/contacto-casa";
+import { excedePeso } from "@/lib/rules/admision";
 import { PrecioCLP } from "@/components/shared/precio";
 import { BarraParticipacion } from "@/components/admin/barra-participacion";
 import { useId, useState } from "react";
@@ -186,6 +188,18 @@ export default function MiCuenta() {
                 )}
                 <ChevronRight className="text-muted-foreground size-5 shrink-0" />
                 </button>
+                {excedePeso(perro) && (
+                  <div className="space-y-2 border-t border-border/60 p-3 text-sm">
+                    <p className="text-pretty">
+                      {perro.nombre} pasa de los{" "}
+                      {NEGOCIO.admision.pesoMaximoKg} kg que recibimos, así que
+                      antes de agendar su día de prueba lo conversamos.
+                    </p>
+                    <ContactoCasa
+                      mensaje={`Hola, creé la cuenta de ${perro.nombre} (${perro.pesoKg} kg) y quiero conversar su día de prueba.`}
+                    />
+                  </div>
+                )}
               </CardContent>
             </Card>
           );

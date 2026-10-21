@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CabeceraPublica } from "@/components/shared/cabecera-publica";
+import { ContactoCasa } from "@/components/shared/contacto-casa";
 import {
   aBorrador,
   aDatosDePerro,
@@ -56,6 +57,7 @@ export default function CrearCuenta() {
     ? reparosDeAlta(borrador, configuracion.datos, hoy)
     : [];
   const bloqueos = reparos.filter((r) => r.bloquea);
+  const conversar = reparos.some((r) => r.conversar);
 
   const datosDelDueno =
     cuenta.nombre.trim() !== "" &&
@@ -84,9 +86,13 @@ export default function CrearCuenta() {
       entrar({ rol: "cliente", clienteId: cliente.id });
       // Sin género: "bienvenida" le erraba a la mitad de la gente.
       toast.success(`Tu cuenta está lista, ${cliente.nombre}`, {
-        description: `Ahora agenda el día de prueba de ${creado.nombre}.`,
+        description: conversar
+          ? `Te contactamos para conversar sobre ${creado.nombre} y habilitar su día de prueba.`
+          : `Ahora agenda el día de prueba de ${creado.nombre}.`,
       });
-      router.push("/dia-de-prueba");
+      // Si hay que conversarlo antes, mandarlo a elegir hora sería mostrarle
+      // un calendario que no puede usar: va a su cuenta, que dice qué falta.
+      router.push(conversar ? "/mi-cuenta" : "/dia-de-prueba");
     } catch (problema: unknown) {
       if (problema instanceof RegistroRechazado) {
         toast.error(problema.message, {
@@ -219,6 +225,11 @@ export default function CrearCuenta() {
                 prometerte un cupo que no podemos cumplir.
               </p>
             )}
+            {(reparo.bloquea || reparo.conversar) && (
+              <ContactoCasa
+                mensaje={`Hola, quiero inscribir a mi perro${perro.nombre ? ` ${perro.nombre}` : ""}${borrador.pesoKg ? ` (${borrador.pesoKg} kg)` : ""} en La Patoteca.`}
+              />
+            )}
           </div>
         ))}
 
@@ -229,7 +240,11 @@ export default function CrearCuenta() {
           onClick={crear}
         >
           <PawPrint />
-          {ocupado ? "Creando…" : "Crear cuenta y agendar"}
+          {ocupado
+            ? "Creando…"
+            : conversar
+              ? "Crear cuenta"
+              : "Crear cuenta y agendar"}
         </Button>
 
         <p className="text-muted-foreground text-center text-xs text-pretty">

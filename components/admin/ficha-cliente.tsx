@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Pencil, Save, Trash2, TriangleAlert } from "lucide-react";
+import { Pencil, Save, Scale, Trash2, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,9 @@ import {
 } from "@/components/shared/detalle-perro";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { alertasDePerro, type ClienteConPerros } from "@/lib/servicios/clientes";
+import { habilitarPeso, quitarHabilitacionDePeso } from "@/lib/servicios/perros";
+import { excedePeso } from "@/lib/rules/admision";
+import { NEGOCIO } from "@/lib/config/negocio";
 import { cn } from "@/lib/utils";
 import { formatearTelefono } from "@/lib/utils/telefono";
 import type { EstadoDiaDePrueba, Perro } from "@/lib/types";
@@ -245,6 +248,18 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
     toast.success(`${perro.nombre} actualizado`);
   }
 
+  async function alternarPeso() {
+    if (excedePeso(perro)) {
+      await ejecutar((repo) => habilitarPeso(repo, perro.id));
+      toast.success(`${perro.nombre} quedó habilitado`, {
+        description: `Ya puede agendar con ${perro.pesoKg} kg.`,
+      });
+    } else {
+      await ejecutar((repo) => quitarHabilitacionDePeso(repo, perro.id));
+      toast.success(`Le quitaste la habilitación a ${perro.nombre}`);
+    }
+  }
+
   async function eliminar() {
     await ejecutar((repo) => repo.perros.eliminar(perro.id));
     toast.success(`${perro.nombre} eliminado`);
@@ -293,6 +308,23 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {/* El peso no se corrige editando la ficha: se decide mirando al
+          perro, y la decisión queda anotada aparte. */}
+      {perro.pesoKg > NEGOCIO.admision.pesoMaximoKg && (
+        <Button
+          variant={excedePeso(perro) ? "default" : "outline"}
+          size="sm"
+          className="mt-2 w-full"
+          disabled={ocupado}
+          onClick={alternarPeso}
+        >
+          <Scale />
+          {excedePeso(perro)
+            ? `Recibirlo igual con ${perro.pesoKg} kg`
+            : "Quitar la habilitación por peso"}
+        </Button>
       )}
 
       {abierto && (

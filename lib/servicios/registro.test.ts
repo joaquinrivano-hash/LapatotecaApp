@@ -16,6 +16,7 @@ import {
   reprogramarDiaDePrueba,
   RegistroRechazado,
 } from "./registro";
+import { habilitarPeso } from "./perros";
 
 const LUNES = "2026-06-15";
 const MARTES = "2026-06-16";
@@ -112,14 +113,63 @@ describe("crearCuenta", () => {
 
   it("no crea nada si el perro no cumple los requisitos de entrada", async () => {
     await expect(
-      crearCuenta(repo, {
-        cuenta: CUENTA,
-        perro: { ...PERRO, pesoKg: NEGOCIO.admision.pesoMaximoKg + 5 },
-      }),
+      crearCuenta(
+        repo,
+        {
+          cuenta: CUENTA,
+          perro: {
+            ...PERRO,
+            sexo: "macho",
+            esterilizado: false,
+            fechaNacimiento: "2024-01-01",
+          },
+        },
+        DOMINGO,
+      ),
     ).rejects.toThrow(RegistroRechazado);
 
     expect(await repo.clientes.listar()).toHaveLength(0);
     expect(await repo.perros.listar()).toHaveLength(0);
+  });
+
+  it("con sobrepeso crea la cuenta y le avisa a Administración", async () => {
+    const { perro } = await crearCuenta(
+      repo,
+      {
+        cuenta: CUENTA,
+        perro: { ...PERRO, pesoKg: NEGOCIO.admision.pesoMaximoKg + 5 },
+      },
+      DOMINGO,
+    );
+
+    const [aviso] = await repo.notificaciones.listar();
+    expect(aviso.perroId).toBe(perro.id);
+    expect(aviso.titulo).toContain("habilitarlo");
+  });
+
+  it("pero el día de prueba espera a que lo habiliten", async () => {
+    const { perro } = await crearCuenta(
+      repo,
+      {
+        cuenta: CUENTA,
+        perro: { ...PERRO, pesoKg: NEGOCIO.admision.pesoMaximoKg + 5 },
+      },
+      DOMINGO,
+    );
+
+    const antes = await cotizarDiaDePrueba(repo, perro.id, LUNES, 9 * 60, DOMINGO);
+    expect(antes.sePuede).toBe(false);
+    expect(antes.admision.bloqueos[0].motivo).toBe("peso");
+
+    await habilitarPeso(repo, perro.id, DOMINGO);
+
+    const despues = await cotizarDiaDePrueba(repo, perro.id, LUNES, 9 * 60, DOMINGO);
+    expect(despues.sePuede).toBe(true);
+  });
+
+  it("una cuenta sin sobrepeso no deja avisos", async () => {
+    await crearCuenta(repo, { cuenta: CUENTA, perro: PERRO }, DOMINGO);
+    expect(await repo.notificaciones.listar()).toEqual([]);
   });
 
   it("no deja crear la cuenta de un macho sin castrar de más de 7 meses", async () => {
