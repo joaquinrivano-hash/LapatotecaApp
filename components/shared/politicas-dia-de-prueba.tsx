@@ -8,16 +8,14 @@
  * segura de que se sienta una letra chica.
  */
 
-import { CalendarX, CreditCard, Landmark } from "lucide-react";
+import { CalendarX, CreditCard } from "lucide-react";
+import { DatosTransferencia } from "@/components/shared/datos-transferencia";
 import { NEGOCIO } from "@/lib/config/negocio";
 import { PRECIOS } from "@/lib/config/precios";
 import { formatearCLP } from "@/lib/utils/moneda";
 
 export function PoliticasDelDiaDePrueba() {
   const horas = NEGOCIO.diaDePrueba.horasParaCancelarSinCosto;
-  const { titular, rut, banco, tipoDeCuenta, numero, email } =
-    NEGOCIO.transferencia;
-  const hayDatos = titular !== "" && numero !== "";
 
   return (
     <section className="space-y-3 rounded-2xl border border-border/70 p-4">
@@ -54,37 +52,7 @@ export function PoliticasDelDiaDePrueba() {
           <CreditCard className="size-4" />
           Cómo se paga
         </h3>
-        {hayDatos ? (
-          <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-2 text-xs">
-            <dt className="font-semibold">Titular</dt>
-            <dd>{titular}</dd>
-            {rut && (
-              <>
-                <dt className="font-semibold">RUT</dt>
-                <dd>{rut}</dd>
-              </>
-            )}
-            <dt className="font-semibold">Banco</dt>
-            <dd>
-              {banco}
-              {tipoDeCuenta && ` · ${tipoDeCuenta}`}
-            </dd>
-            <dt className="font-semibold">Cuenta</dt>
-            <dd>{numero}</dd>
-            {email && (
-              <>
-                <dt className="font-semibold">Aviso</dt>
-                <dd>{email}</dd>
-              </>
-            )}
-          </dl>
-        ) : (
-          <p className="text-muted-foreground flex items-start gap-2 text-xs text-pretty">
-            <Landmark className="mt-0.5 size-3.5 shrink-0" />
-            Al agendar te dejamos el cobro pendiente en tu cuenta y te
-            escribimos por WhatsApp con los datos para transferir.
-          </p>
-        )}
+        <DatosTransferencia />
       </div>
     </section>
   );

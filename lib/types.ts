@@ -148,7 +148,39 @@ export interface Perro {
   indicaciones?: string;
   /** Todo lo demás, en texto libre. */
   notas?: string;
+  /**
+   * Administración lo recibe aunque pase del peso máximo.
+   *
+   * Guarda hasta cuántos kilos se habilitó: si después la ficha dice que
+   * subió más, la excepción ya no cubre ese peso y hay que volver a mirarlo.
+   */
+  excepcionPeso?: ExcepcionPeso;
   creadoEn: InstanteISO;
+}
+
+export interface ExcepcionPeso {
+  hastaKg: number;
+  habilitadaEn: InstanteISO;
+}
+
+/**
+ * Dónde devolverle la plata a un cliente.
+ *
+ * Los pide él cuando cancela algo que ya pagó, y se guardan en su ficha para
+ * no volver a pedírselos la próxima vez: nadie se sabe su número de cuenta de
+ * memoria y tener que ir a buscarlo es la manera de que la devolución quede
+ * a medias.
+ *
+ * `rut` es del TITULAR, que puede no ser el cliente: hay cuentas a nombre de
+ * la pareja o de un familiar, y el banco rechaza la transferencia si el
+ * nombre no calza con el RUT.
+ */
+export interface DatosBancarios {
+  titular: string;
+  rut: string;
+  banco: string;
+  tipoDeCuenta: string;
+  numero: string;
 }
 
 export interface Cliente {
@@ -159,6 +191,8 @@ export interface Cliente {
   telefono: string;
   comuna: string;
   direccion?: string;
+  /** Para devoluciones. Se pide recién cuando hace falta una. */
+  datosBancarios?: DatosBancarios;
   creadoEn: InstanteISO;
 }
 
@@ -187,7 +221,7 @@ export interface Cotizacion {
   subtotal: number;
   descuentos: DescuentoAplicado[];
   total: number;
-  /** Solo en hotel: 30% que se paga al reservar. */
+  /** Solo en hotel: la fracción del total que se paga al reservar. */
   abono?: number;
 }
 
@@ -209,6 +243,9 @@ export interface ReservaHotel {
   finProgramado: InstanteISO;
   inicioReal?: InstanteISO;
   finReal?: InstanteISO;
+  /** Cuándo se apretó el botón. Ver `EstadiaJardin.inicioMarcadoEn`. */
+  inicioMarcadoEn?: InstanteISO;
+  finMarcadoEn?: InstanteISO;
   /** Cantidad de paseos contratados durante la estadía, a $4.000 cada uno. */
   paseosContratados: number;
   estado: EstadoReserva;
@@ -237,10 +274,27 @@ export interface EstadiaJardin {
   fecha: FechaISO;
   inicioProgramado: InstanteISO;
   finProgramado: InstanteISO;
-  /** Hora real de check-in registrada por staff. */
+  /**
+   * Hora real de llegada. Es la que vale para el negocio: de acá y de
+   * `finReal` sale el tramo cobrado y el recargo.
+   */
   inicioReal?: InstanteISO;
-  /** Hora real de check-out. De acá sale el recargo fuera de horario. */
+  /** Hora real de retiro. De acá sale el recargo fuera de horario. */
   finReal?: InstanteISO;
+  /**
+   * Cuándo se APRETÓ el botón, que no es lo mismo que cuándo pasó.
+   *
+   * El cuidador marca de un toque, y a veces lo hace después: el perro llegó
+   * a las 8:00 y él alcanzó a marcarlo a las 8:40, con las manos ocupadas.
+   * Entonces corrige la hora y `inicioReal` pasa a ser las 8:00, pero acá
+   * queda que se marcó a las 8:40.
+   *
+   * La diferencia entre las dos no se usa para cobrar —el cobro mira la hora
+   * real— pero sí dice qué tan al día se está marcando, que es información
+   * sobre la operación y no sobre el perro.
+   */
+  inicioMarcadoEn?: InstanteISO;
+  finMarcadoEn?: InstanteISO;
   origen: OrigenEstadia;
   planId?: ID;
   estado: EstadoEstadia;
@@ -316,6 +370,8 @@ export type ConceptoPago =
   | "abono_hotel"
   | "saldo_hotel"
   | "dia_suelto"
+  /** Retiro tarde del jardín. Lo decide Administración, no nace solo. */
+  | "recargo_jardin"
   | "plan"
   | "servicio"
   | "tienda"
@@ -339,6 +395,14 @@ export interface Pago {
   emitidoEn: InstanteISO;
   venceEn?: FechaISO;
   pagadoEn?: InstanteISO;
+  /**
+   * Cuándo se le transfirió de vuelta al cliente.
+   *
+   * Solo aplica a un cobro reembolsado que el cliente ALCANZÓ a pagar: si
+   * estaba pendiente, anularlo ya fue la devolución y no hay plata que mover.
+   * Mientras esté vacío, la plata todavía no sale de la casa.
+   */
+  devolucionTransferidaEn?: InstanteISO;
 }
 
 /**
@@ -535,7 +599,24 @@ export interface Configuracion {
   duracionVacunasMeses: Record<TipoVacuna, number>;
   camposObligatorios: CampoDeAlta[];
   catalogos: Catalogos;
+  /**
+   * El WhatsApp de la casa, en E.164. Lo que el dueño ve cuando algo no se
+   * resuelve en la app ("escríbenos"). Vacío mientras nadie lo configure.
+   */
+  whatsappDeContacto: string;
+  /** La cuenta donde el dueño paga. Vacía mientras nadie la configure. */
+  transferencia: DatosDeTransferencia;
   actualizadoEn: InstanteISO;
+}
+
+export interface DatosDeTransferencia {
+  titular: string;
+  rut: string;
+  banco: string;
+  tipoDeCuenta: string;
+  numero: string;
+  /** Adónde mandar el comprobante. */
+  email: string;
 }
 
 /* ── Avisos para Administración ────────────────────────────────────── */

@@ -1,5 +1,4 @@
 import Image from "next/image";
-import Link from "next/link";
 import {
   Bath,
   Car,
@@ -12,10 +11,9 @@ import {
   MessageCircle,
   Moon,
   Sun,
-  Users,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { InterruptorDelPrototipo } from "@/components/shared/interruptor-prototipo";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   AccionesPortada,
@@ -350,28 +348,7 @@ export default function Landing() {
           </Card>
         </section>
 
-        {/* Esto no es del negocio: es el interruptor del prototipo. Va al
-            final y con letra chica, pero tiene que estar en la portada para
-            poder mostrar las tres caras sin saberse la URL de memoria. */}
-        <section className="border-t border-border/60 bg-secondary/30">
-          <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-3 px-4 py-8 text-center">
-            <p className="text-muted-foreground text-sm text-pretty">
-              Esto es un prototipo con datos de prueba. Puedes entrar como
-              cliente, como cuidador o como administración.
-            </p>
-            <div className="flex flex-wrap justify-center gap-2">
-              <Button asChild variant="outline">
-                <Link href="/ingresar">
-                  <Users />
-                  Elegir con qué cara entrar
-                </Link>
-              </Button>
-              <Button asChild variant="ghost">
-                <Link href="/crear-cuenta">Crear una cuenta nueva</Link>
-              </Button>
-            </div>
-          </div>
-        </section>
+        <InterruptorDelPrototipo />
       </main>
     </>
   );

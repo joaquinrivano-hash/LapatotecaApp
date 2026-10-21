@@ -4,11 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Dog, PawPrint, TriangleAlert, User } from "lucide-react";
+import { Dog, MailCheck, PawPrint, TriangleAlert, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CabeceraPublica } from "@/components/shared/cabecera-publica";
+import { ContactoCasa } from "@/components/shared/contacto-casa";
 import {
   aBorrador,
   aDatosDePerro,
@@ -27,9 +28,14 @@ import {
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { hoyDelStaff } from "@/lib/servicios/asistencia";
 import { crearCuenta, RegistroRechazado } from "@/lib/servicios/registro";
+import { autenticacion, hayAuthReal } from "@/lib/auth";
+import { registrarDueno } from "@/lib/servicios/alta-de-cuenta";
 import { useSesion } from "@/lib/store/sesion";
 import { formatearCLP } from "@/lib/utils/moneda";
 import { esTelefonoValido } from "@/lib/utils/telefono";
+
+/** El mínimo que exige Supabase. */
+const LARGO_MINIMO_CLAVE = 6;
 
 export default function CrearCuenta() {
   const router = useRouter();
@@ -38,6 +44,12 @@ export default function CrearCuenta() {
   const { ocupado, ejecutar } = useAccion();
 
   const configuracion = useConsulta((repo) => repo.configuracion.obtener(), []);
+
+  // Con cuentas de verdad el alta pide contraseña; en el prototipo no hay
+  // cuentas, así que el campo ni aparece.
+  const conCuentaReal = hayAuthReal();
+  const [clave, setClave] = useState("");
+  const [porConfirmar, setPorConfirmar] = useState<string | null>(null);
 
   const [cuenta, setCuenta] = useState({
     nombre: "",
@@ -56,13 +68,15 @@ export default function CrearCuenta() {
     ? reparosDeAlta(borrador, configuracion.datos, hoy)
     : [];
   const bloqueos = reparos.filter((r) => r.bloquea);
+  const conversar = reparos.some((r) => r.conversar);
 
   const datosDelDueno =
     cuenta.nombre.trim() !== "" &&
     cuenta.apellido.trim() !== "" &&
     cuenta.email.trim() !== "" &&
     esTelefonoValido(cuenta.telefono) &&
-    cuenta.comuna.trim() !== "";
+    cuenta.comuna.trim() !== "" &&
+    (!conCuentaReal || clave.length >= LARGO_MINIMO_CLAVE);
 
   async function crear() {
     if (!configuracion.datos) return;
@@ -77,16 +91,39 @@ export default function CrearCuenta() {
     }
 
     try {
-      const { cliente, perro: creado } = await ejecutar((repo) =>
-        crearCuenta(repo, { cuenta, perro: aDatosDePerro(perro) }),
-      );
+      const alta = { cuenta, perro: aDatosDePerro(perro) };
 
+      // En el prototipo no hay cuentas de acceso: se crean las dos filas y
+      // listo. Pasar por `registrarDueno` ahí fallaría, porque la identidad
+      // de mentira no sabe de contraseñas — y eso está bien que falle.
+      const resultado = conCuentaReal
+        ? await ejecutar((repo) =>
+            registrarDueno(repo, autenticacion(), { ...alta, password: clave }),
+          )
+        : ({
+            estado: "lista" as const,
+            cuenta: await ejecutar((repo) => crearCuenta(repo, alta)),
+          });
+
+      // La casa puede exigir confirmar el correo antes de dar sesión. Ahí la
+      // cuenta ya existe y la ficha quedó guardada esperando: no hay nada
+      // más que pedirle a esta persona hasta que abra el correo.
+      if (resultado.estado === "falta_confirmar") {
+        setPorConfirmar(resultado.email);
+        return;
+      }
+
+      const { cliente, perro: creado } = resultado.cuenta;
       entrar({ rol: "cliente", clienteId: cliente.id });
       // Sin género: "bienvenida" le erraba a la mitad de la gente.
       toast.success(`Tu cuenta está lista, ${cliente.nombre}`, {
-        description: `Ahora agenda el día de prueba de ${creado.nombre}.`,
+        description: conversar
+          ? `Te contactamos para conversar sobre ${creado.nombre} y habilitar su día de prueba.`
+          : `Ahora agenda el día de prueba de ${creado.nombre}.`,
       });
-      router.push("/dia-de-prueba");
+      // Si hay que conversarlo antes, mandarlo a elegir hora sería mostrarle
+      // un calendario que no puede usar: va a su cuenta, que dice qué falta.
+      router.push(conversar ? "/mi-cuenta" : "/dia-de-prueba");
     } catch (problema: unknown) {
       if (problema instanceof RegistroRechazado) {
         toast.error(problema.message, {
@@ -97,6 +134,11 @@ export default function CrearCuenta() {
       toast.error("No pudimos crear la cuenta.");
     }
   }
+
+  // La casa puede exigir confirmar el correo antes de dar sesión. Ahí no
+  // queda nada que llenar: la cuenta existe, la ficha está guardada y lo
+  // único que falta pasa en la bandeja de entrada.
+  if (porConfirmar) return <RevisaTuCorreo email={porConfirmar} />;
 
   return (
     <>
@@ -146,6 +188,23 @@ export default function CrearCuenta() {
               onCambio={(v) => setCuenta({ ...cuenta, email: v })}
               autoComplete="email"
             />
+
+            {conCuentaReal && (
+              <Campo
+                id="clave"
+                etiqueta="Elige una contraseña"
+                tipo="password"
+                valor={clave}
+                onCambio={setClave}
+                autoComplete="new-password"
+                ayuda={`Con esta entras después a ver las reservas y los reportes. Al menos ${LARGO_MINIMO_CLAVE} caracteres.`}
+                error={
+                  clave !== "" && clave.length < LARGO_MINIMO_CLAVE
+                    ? `Necesita al menos ${LARGO_MINIMO_CLAVE} caracteres.`
+                    : undefined
+                }
+              />
+            )}
 
             <Campo
               id="telefono"
@@ -219,6 +278,11 @@ export default function CrearCuenta() {
                 prometerte un cupo que no podemos cumplir.
               </p>
             )}
+            {(reparo.bloquea || reparo.conversar) && (
+              <ContactoCasa
+                mensaje={`Hola, quiero inscribir a mi perro${perro.nombre ? ` ${perro.nombre}` : ""}${borrador.pesoKg ? ` (${borrador.pesoKg} kg)` : ""} en La Patoteca.`}
+              />
+            )}
           </div>
         ))}
 
@@ -229,7 +293,11 @@ export default function CrearCuenta() {
           onClick={crear}
         >
           <PawPrint />
-          {ocupado ? "Creando…" : "Crear cuenta y agendar"}
+          {ocupado
+            ? "Creando…"
+            : conversar
+              ? "Crear cuenta"
+              : "Crear cuenta y agendar"}
         </Button>
 
         <p className="text-muted-foreground text-center text-xs text-pretty">
@@ -243,6 +311,54 @@ export default function CrearCuenta() {
             Entra con tu cuenta
           </Link>
         </p>
+      </main>
+    </>
+  );
+}
+
+/**
+ * El final del alta cuando hay que confirmar el correo.
+ *
+ * Dice el correo exacto al que se mandó: la mitad de los "no me llegó" son
+ * un dedo que escribió `gmial`, y verlo escrito es más rápido que cualquier
+ * explicación. Y avisa de abrir el enlace en este mismo aparato, porque el
+ * enlace de confirmación se canjea donde se pidió.
+ */
+function RevisaTuCorreo({ email }: { email: string }) {
+  return (
+    <>
+      <CabeceraPublica />
+
+      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center gap-4 px-4 py-10">
+        <Card>
+          <CardContent className="space-y-4 p-6 text-center">
+            <MailCheck className="text-primary mx-auto size-12" />
+            <h1 className="font-display text-2xl font-bold text-balance">
+              Revisa tu correo
+            </h1>
+            <p className="text-muted-foreground text-pretty">
+              Le mandamos un enlace para confirmar que este correo es tuyo:
+            </p>
+            {/* En su propia línea: es el dato que la persona vino a
+                verificar, y dentro del párrafo se partía a la mitad del
+                dominio. La mitad de los "no me llegó" son un dedo que
+                escribió `gmial`. */}
+            <p className="bg-secondary rounded-xl px-3 py-2 font-semibold break-all">
+              {email}
+            </p>
+            <p className="text-muted-foreground text-pretty">
+              Ábrelo en este mismo teléfono o computador y seguimos con el día
+              de prueba.
+            </p>
+            <p className="text-muted-foreground text-sm text-pretty">
+              La ficha de tu perrito ya quedó guardada: no tienes que volver a
+              escribirla. Si no llega en unos minutos, mira en spam.
+            </p>
+            <Button asChild size="lg" variant="outline" className="w-full">
+              <Link href="/">Volver a la portada</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </main>
     </>
   );

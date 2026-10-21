@@ -78,15 +78,46 @@ export default function Hoy() {
       registrarSalidaJardin(repo, item.id),
     );
 
-    // El recargo fuera de horario recién se sabe acá, así que hay que decirlo
-    // en el momento: si no, aparece después en la cuenta sin explicación.
-    if (resultado.recargo > 0) {
+    // El atraso se avisa en el momento, porque es lo que hay que conversar
+    // con el dueño que está ahí parado. El monto NO: el recargo no se cobra
+    // solo y la decisión no es de quien está entregando al perro. Poner un
+    // precio en esta pantalla convertiría la entrega en una negociación.
+    if (resultado.horasFueraDeHorario > 0) {
       toast.warning(`Se fue ${item.perro.nombre}, fuera de horario`, {
-        description: `${resultado.horasFueraDeHorario} h después del cierre: se agregaron ${formatearCLP(resultado.recargo)}.`,
+        description: `${resultado.horasFueraDeHorario} h después del cierre. Queda anotado.`,
       });
     } else {
       toast.success(`Se fue ${item.perro.nombre}`);
     }
+  }
+
+  /**
+   * Corrige la hora real de una llegada o un retiro ya marcados.
+   *
+   * Vuelve a llamar al mismo servicio con la hora de verdad: el retiro del
+   * jardín tiene que VOLVER A COTIZAR, porque de la hora real sale el tramo
+   * del día y el recargo. Escribir el campo a mano habría dejado la hora
+   * corregida y el cobro con el número viejo.
+   */
+  async function ajustarHora(
+    item: ItemAsistencia,
+    que: "llegada" | "retiro",
+    nueva: string,
+  ) {
+    const ahora = new Date().toISOString();
+    await ejecutar(async (repo) => {
+      if (que === "llegada") {
+        return item.linea === "hotel"
+          ? registrarLlegadaHotel(repo, item.id, ahora, nueva)
+          : registrarLlegadaJardin(repo, item.id, ahora, nueva);
+      }
+      return item.linea === "hotel"
+        ? registrarSalidaHotel(repo, item.id, ahora, nueva)
+        : registrarSalidaJardin(repo, item.id, ahora, nueva);
+    });
+    toast.success(`Hora corregida`, {
+      description: `${item.perro.nombre}, ${que} a las ${nueva.slice(11, 16)}.`,
+    });
   }
 
   async function deshacer(item: ItemAsistencia) {
@@ -123,12 +154,23 @@ export default function Hoy() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle>Cómo se llena el día</CardTitle>
+          {/* Sin nadie en la casa no hay hora del peak que nombrar. La
+              versión anterior decía "0 a las 00:00", que es una hora
+              inventada: el minuto cero es lo que devuelve la cuenta cuando
+              no encontró nada, no un momento en que pasó algo. */}
           <p className="text-muted-foreground text-sm text-pretty">
             El cupo se mide por el momento más lleno, no por cuántos perros
-            pasaron. Hoy el peak son{" "}
-            <strong className="text-foreground">{ocupacion.pico}</strong> a las{" "}
-            {hhmmDesdeMinutos(ocupacion.picoMinutoDelDia)}, con{" "}
-            {ocupacion.perrosDistintos} perros distintos en el día.
+            pasaron.{" "}
+            {ocupacion.pico === 0 ? (
+              <>Hoy todavía no hay nadie en la casa.</>
+            ) : (
+              <>
+                Hoy el peak son{" "}
+                <strong className="text-foreground">{ocupacion.pico}</strong> a
+                las {hhmmDesdeMinutos(ocupacion.picoMinutoDelDia)}, con{" "}
+                {ocupacion.perrosDistintos} perros distintos en el día.
+              </>
+            )}
           </p>
         </CardHeader>
         <CardContent>
@@ -161,9 +203,21 @@ export default function Hoy() {
 
         <TabsContent value="por-llegar" className="mt-3 space-y-2">
           {porLlegar.length === 0 ? (
+            /* "Ya llegaron todos" solo es cierto si alguien estaba
+               esperado. En un día sin nadie agendado —una casa recién
+               abierta, un feriado— decirlo suena a que el equipo se perdió
+               algo. */
             <EstadoVacio
-              titulo="Ya llegaron todos"
-              descripcion="No queda nadie por marcar. Buen día."
+              titulo={
+                adentro.length + cerrados.length > 0
+                  ? "Ya llegaron todos"
+                  : "No hay nadie agendado para hoy"
+              }
+              descripcion={
+                adentro.length + cerrados.length > 0
+                  ? "No queda nadie por marcar. Buen día."
+                  : "Cuando haya reservas para hoy, van a aparecer acá para marcar la llegada."
+              }
             />
           ) : (
             porLlegar.map((item) => (
@@ -228,6 +282,7 @@ export default function Hoy() {
               item={ficha}
               hoy={hoy}
               ocupado={ocupado}
+              onAjustarHora={(que, nueva) => ajustarHora(ficha, que, nueva)}
               onAccion={(accion) => {
                 setFichaDe(null);
                 if (accion === "llego") void llego(ficha);

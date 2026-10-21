@@ -2,8 +2,12 @@
  * Cuando el dueño corrige la ficha de su perro.
  *
  * Puede hacerlo sin pedir permiso —son sus datos y nadie los conoce mejor—,
- * pero Administración tiene que enterarse: un peso que sube de 8 a 21 kg o una
- * esterilización que se desmarca cambian si el perro puede quedarse.
+ * pero Administración tiene que enterarse: un peso que sube de 8 a 21 kg
+ * cambia si el perro puede quedarse.
+ *
+ * Dos campos quedan fuera: el sexo y la castración. Son los que deciden si un
+ * macho entra, y desmarcarlos después de reservar le da la vuelta a la
+ * admisión. Si cambiaron de verdad, los corrige Administración.
  *
  * Por eso el aviso guarda el ANTES y el DESPUÉS de cada campo. "Cambió la
  * ficha" no le sirve a nadie.
@@ -134,7 +138,14 @@ export async function actualizarPerroComoDueno(
   const antes = await repo.perros.obtener(perroId);
   if (!antes) throw new Error(`No existe el perro ${perroId}`);
 
-  const perro = await repo.perros.actualizar(perroId, cambios);
+  // El sexo y la castración deciden si el perro puede quedarse, así que los
+  // cambia Administración y no el dueño. Se descartan acá y no solo en la
+  // pantalla: esta función es por donde pasa todo el que edita como dueño.
+  const permitidos = { ...cambios };
+  delete permitidos.sexo;
+  delete permitidos.esterilizado;
+
+  const perro = await repo.perros.actualizar(perroId, permitidos);
   const diferencias = compararFichas(antes, perro);
 
   if (diferencias.length === 0) {
@@ -157,4 +168,31 @@ export async function actualizarPerroComoDueno(
 
 function nombreDe(cliente: Cliente | null): string {
   return cliente ? `${cliente.nombre} ${cliente.apellido}` : "El dueño";
+}
+
+/**
+ * Administración recibe al perro aunque pase del peso.
+ *
+ * Queda habilitado hasta el peso que tiene hoy: si la ficha sube después, ya
+ * no es el perro que alguien miró y hay que volver a hacerlo.
+ */
+export async function habilitarPeso(
+  repo: RepositorioPatoteca,
+  perroId: ID,
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<Perro> {
+  const perro = await repo.perros.obtener(perroId);
+  if (!perro) throw new Error(`No existe el perro ${perroId}`);
+
+  return repo.perros.actualizar(perroId, {
+    excepcionPeso: { hastaKg: perro.pesoKg, habilitadaEn: ahora },
+  });
+}
+
+/** Deshace la excepción: el perro vuelve a quedar bloqueado por el peso. */
+export async function quitarHabilitacionDePeso(
+  repo: RepositorioPatoteca,
+  perroId: ID,
+): Promise<Perro> {
+  return repo.perros.actualizar(perroId, { excepcionPeso: undefined });
 }

@@ -10,7 +10,11 @@
 import { NEGOCIO } from "@/lib/config/negocio";
 import { PRECIOS } from "@/lib/config/precios";
 import { evaluarAdmision } from "@/lib/rules/admision";
-import { reparosDeAlta, revisarAltaDePerro } from "@/lib/rules/alta-perro";
+import {
+  pasaDelPeso,
+  reparosDeAlta,
+  revisarAltaDePerro,
+} from "@/lib/rules/alta-perro";
 import { vigenciaAntiparasitario, vigenciaVacuna } from "@/lib/rules/perro";
 import {
   bloquesDeEntrada,
@@ -37,6 +41,7 @@ import type {
   EstadiaJardin,
   FechaISO,
   ID,
+  Configuracion,
   InstanteISO,
   Medicamento,
   Pago,
@@ -113,12 +118,21 @@ export interface CuentaCreada {
   perro: Perro;
 }
 
-/** Crea el cliente y su primer perro, con el día de prueba pendiente. */
-export async function crearCuenta(
+/**
+ * Revisa que la ficha se pueda recibir, sin crear nada.
+ *
+ * Está separada porque con cuentas reales hay que poder revisar ANTES de
+ * crear la cuenta de acceso: si se hiciera al revés, un perro de 30 kg
+ * dejaría una cuenta huérfana en Supabase Auth que la app no puede borrar, y
+ * esa persona no podría volver a registrarse con su propio correo.
+ *
+ * Lanza `RegistroRechazado` con los motivos, o no hace nada.
+ */
+export async function validarAlta(
   repo: RepositorioPatoteca,
   datos: { cuenta: DatosDeCuenta; perro: DatosDePerro },
   ahora: InstanteISO = new Date().toISOString(),
-): Promise<CuentaCreada> {
+): Promise<Configuracion> {
   // La ficha se revisa acá y no solo en el formulario: la pantalla puede
   // adelantar el aviso, pero la que no deja pasar una ficha incompleta es
   // esta función, que es por donde entra todo el mundo.
@@ -142,6 +156,17 @@ export async function crearCuenta(
       faltan.map((f) => f.mensaje),
     );
   }
+
+  return configuracion;
+}
+
+/** Crea el cliente y su primer perro, con el día de prueba pendiente. */
+export async function crearCuenta(
+  repo: RepositorioPatoteca,
+  datos: { cuenta: DatosDeCuenta; perro: DatosDePerro },
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<CuentaCreada> {
+  const configuracion = await validarAlta(repo, datos, ahora);
 
   const cliente = await repo.clientes.crear({
     nombre: datos.cuenta.nombre.trim(),
@@ -188,6 +213,25 @@ export async function crearCuenta(
     notas: datos.perro.notas?.trim() || undefined,
     creadoEn: ahora,
   });
+
+  // El sobrepeso no impide crear la cuenta, pero sin que alguien lo habilite
+  // el perro no puede agendar nada. Si Administración no se entera, el dueño
+  // queda esperando una llamada que nadie sabe que tiene que hacer.
+  if (pasaDelPeso(datos.perro)) {
+    await repo.notificaciones.crear({
+      clienteId: cliente.id,
+      perroId: perro.id,
+      titulo: `${cliente.nombre} ${cliente.apellido} creó la cuenta de ${perro.nombre}, que pasa del peso: hay que conversarlo y habilitarlo para agendar`,
+      cambios: [
+        {
+          campo: "Peso",
+          despues: `${perro.pesoKg} kg (máximo ${NEGOCIO.admision.pesoMaximoKg} kg)`,
+        },
+      ],
+      leida: false,
+      creadaEn: ahora,
+    });
+  }
 
   return { cliente, perro };
 }

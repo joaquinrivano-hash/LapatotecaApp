@@ -308,6 +308,7 @@ export function FormularioPerro({
   configuracion,
   faltantes = [],
   hoy,
+  sexoYCastracionFijos = false,
 }: {
   estado: EstadoPerro;
   onCambio: (estado: EstadoPerro) => void;
@@ -315,6 +316,11 @@ export function FormularioPerro({
   /** Lo que falta, para marcarlo. Se muestra recién cuando intenta guardar. */
   faltantes?: FaltanteDeAlta[];
   hoy: string;
+  /**
+   * Cuando edita el dueño una ficha ya creada. Sexo y castración deciden si
+   * un macho entra, así que después del alta los cambia Administración.
+   */
+  sexoYCastracionFijos?: boolean;
 }) {
   const error = (campo: string) =>
     faltantes.find((f) => f.campo === campo)?.mensaje;
@@ -408,6 +414,7 @@ export function FormularioPerro({
           elegida={estado.sexo}
           onElegir={(sexo) => cambiar({ sexo })}
           error={error("sexo")}
+          fija={sexoYCastracionFijos}
         />
         <Opciones
           etiqueta="¿Está castrado?"
@@ -419,8 +426,15 @@ export function FormularioPerro({
           onElegir={(esterilizado) => cambiar({ esterilizado })}
           ayuda={`Obligatorio en los machos desde los ${NEGOCIO.admision.mesesParaExigirCastracion} meses.`}
           error={error("esterilizado")}
+          fija={sexoYCastracionFijos}
         />
       </div>
+      {sexoYCastracionFijos && (
+        <p className="text-muted-foreground -mt-1 text-xs text-pretty">
+          El sexo y la castración los actualizamos nosotros: si cambió algo,
+          escríbenos y lo corregimos.
+        </p>
+      )}
 
       <Seccion
         titulo="Vacunas"
@@ -871,6 +885,7 @@ function Opciones<T>({
   onElegir,
   ayuda,
   error,
+  fija = false,
 }: {
   etiqueta: string;
   opciones: { valor: T; texto: string }[];
@@ -878,6 +893,8 @@ function Opciones<T>({
   onElegir: (valor: T) => void;
   ayuda?: string;
   error?: string;
+  /** Se ve lo elegido, pero no se puede cambiar. */
+  fija?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
@@ -887,7 +904,10 @@ function Opciones<T>({
           <Chip
             key={String(opcion.valor)}
             activo={elegida === opcion.valor}
-            onClick={() => onElegir(opcion.valor)}
+            deshabilitado={fija && elegida !== opcion.valor}
+            onClick={() => {
+              if (!fija) onElegir(opcion.valor);
+            }}
           >
             {opcion.texto}
           </Chip>

@@ -40,6 +40,11 @@ const VARIANTE_GRAVEDAD: Record<
  * admin la ve antes de editar: si cada pantalla ordenara los datos a su
  * manera, quien usa las dos tendría que aprender dos fichas.
  */
+/**
+ * La foto mantiene su proporción y tiene un ancho tope: con alto fijo y
+ * ancho completo, en el computador la ficha mide 1.800 px de ancho y el
+ * recorte deja una franja con el ojo del perro.
+ */
 export function FotoPerro({ perro }: { perro: Perro }) {
   if (!perro.fotoUrl) return null;
 
@@ -50,7 +55,7 @@ export function FotoPerro({ perro }: { perro: Perro }) {
       width={640}
       height={480}
       unoptimized
-      className="h-44 w-full rounded-2xl object-cover"
+      className="aspect-[4/3] w-full max-w-md rounded-2xl object-cover"
     />
   );
 }

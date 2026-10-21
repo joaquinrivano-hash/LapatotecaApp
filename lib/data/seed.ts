@@ -38,7 +38,10 @@ import {
   type OcupanteRango,
 } from "@/lib/rules/capacidad";
 import { calcularPrecioHotel } from "@/lib/rules/precio-hotel";
-import { calcularPrecioJardin } from "@/lib/rules/precio-jardin";
+import {
+  calcularPrecioJardin,
+  calcularRecargoFueraDeHorario,
+} from "@/lib/rules/precio-jardin";
 import { cotizarPaseo, cotizarSpa, cotizarTraslado } from "@/lib/rules/servicios";
 import { crearPlanComprado, elegirPlanParaUsar } from "@/lib/rules/planes";
 import {
@@ -653,21 +656,61 @@ export function generarSeed(
       };
       estadiasJardin.push(estadia);
 
-      if (cotizacion.total > 0 && esPasado) {
-        const cobrado = azar.probabilidad(0.88);
-        nuevoPago({
-          clienteId: perro.clienteId,
-          concepto: "dia_suelto",
-          referenciaId: estadia.id,
-          monto: cotizacion.total,
-          estado: cobrado ? "pagado" : "pendiente",
-          metodo: cobrado
-            ? azar.elegir(["webpay", "transferencia", "efectivo"] as const)
-            : undefined,
-          emitidoEn: finReal ?? finProgramado,
-          venceEn: sumarDias(fecha, 10),
-          pagadoEn: cobrado ? (finReal ?? finProgramado) : undefined,
-        });
+      {
+        // La jornada y el retiro tarde son DOS cobros distintos, no uno
+        // sumado: el día se paga por adelantado y el recargo lo decide
+        // Administración después. Mezclarlos acá dejaría el historial
+        // contando una regla que ya no existe.
+        const recargo =
+          esPasado && finReal
+            ? calcularRecargoFueraDeHorario(
+                inicioReal ?? inicioProgramado,
+                finReal,
+              )
+            : { monto: 0 };
+        const jornada = cotizacion.total - recargo.monto;
+        const emitido = finReal ?? finProgramado;
+        const comoSePago = () =>
+          azar.elegir(["webpay", "transferencia", "efectivo"] as const);
+
+        // El día suelto se cobra al AGENDAR, así que los que todavía no
+        // llegan también traen su cobro: nace cuando se reservó, no cuando
+        // el perro entra. Sin esto el backoffice mostraría cada día futuro
+        // como una jornada que nadie cobró.
+        if (jornada > 0) {
+          const cobrado = esPasado && azar.probabilidad(0.88);
+          nuevoPago({
+            clienteId: perro.clienteId,
+            concepto: "dia_suelto",
+            referenciaId: estadia.id,
+            monto: jornada,
+            estado: cobrado ? "pagado" : "pendiente",
+            metodo: cobrado ? comoSePago() : undefined,
+            emitidoEn: esPasado ? emitido : estadia.creadaEn,
+            venceEn: sumarDias(fecha, 10),
+            pagadoEn: cobrado ? emitido : undefined,
+          });
+        }
+
+        // Los retiros tarde del pasado ya se decidieron en su momento: la
+        // cola del backoffice es para lo que pasó recién, no para 60 días de
+        // historia esperando a alguien. Uno de cada seis se perdonó, que es
+        // más o menos lo que pasa cuando el dueño avisa que viene atrasado.
+        if (recargo.monto > 0) {
+          const perdonado = azar.probabilidad(1 / 6);
+          const cobrado = !perdonado && azar.probabilidad(0.85);
+          nuevoPago({
+            clienteId: perro.clienteId,
+            concepto: "recargo_jardin",
+            referenciaId: estadia.id,
+            monto: perdonado ? 0 : recargo.monto,
+            estado: perdonado ? "reembolsado" : cobrado ? "pagado" : "pendiente",
+            metodo: cobrado ? comoSePago() : undefined,
+            emitidoEn: emitido,
+            venceEn: sumarDias(fecha, 10),
+            pagadoEn: cobrado ? emitido : undefined,
+          });
+        }
       }
     }
   }

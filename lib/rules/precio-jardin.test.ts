@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { instanteEnHora } from "@/lib/utils/fecha";
 import {
+  calcularDevolucionJardin,
   calcularPrecioJardin,
   calcularRecargoFueraDeHorario,
   clasificarJornada,
@@ -129,5 +130,57 @@ describe("recargo fuera de horario", () => {
       origen: "plan",
     });
     expect(c.total).toBe(2_000);
+  });
+});
+
+describe("cancelar un día de jardín", () => {
+  const llegada = instanteEnHora("2026-06-15", "08:00");
+
+  it("con 24 horas o más de aviso no se cobra", () => {
+    const r = calcularDevolucionJardin(
+      llegada,
+      instanteEnHora("2026-06-14", "08:00"),
+    );
+    expect(r.devuelve).toBe(true);
+    expect(r.horasDeAviso).toBe(24);
+  });
+
+  it("el corte es inclusivo: justo 24 horas devuelve", () => {
+    // Un umbral exclusivo haría que cancelar "con un día de aviso" fallara
+    // por segundos, que es la clase de regla que nadie entiende cuando le
+    // pasa.
+    const r = calcularDevolucionJardin(
+      llegada,
+      instanteEnHora("2026-06-14", "08:00"),
+    );
+    expect(r.devuelve).toBe(true);
+  });
+
+  it("con menos de 24 horas el día se pierde", () => {
+    const r = calcularDevolucionJardin(
+      llegada,
+      instanteEnHora("2026-06-14", "20:00"),
+    );
+    expect(r.devuelve).toBe(false);
+    expect(r.motivo).toContain("se cobra completo");
+  });
+
+  it("si el día ya empezó lo dice con esas palabras", () => {
+    const r = calcularDevolucionJardin(
+      llegada,
+      instanteEnHora("2026-06-15", "10:00"),
+    );
+    expect(r.devuelve).toBe(false);
+    expect(r.motivo).toBe("El día ya empezó: se cobra completo.");
+  });
+
+  it("el motivo dice cuántas horas de aviso hubo", () => {
+    // "No se devuelve" sin el número deja al dueño sin saber por cuánto no
+    // alcanzó, que es justo lo que quiere saber para la próxima vez.
+    const r = calcularDevolucionJardin(
+      llegada,
+      instanteEnHora("2026-06-14", "12:00"),
+    );
+    expect(r.motivo).toContain("20 h de aviso");
   });
 });

@@ -35,6 +35,37 @@ export const NEGOCIO = {
     horasJornadaMedia: 8,
     /** Margen antes de empezar a cobrar el recargo fuera de horario. */
     minutosGracia: 15,
+    /**
+     * Cancelando con al menos estas horas de aviso, el día se devuelve: el
+     * cobro se anula y, si venía de un plan, el día vuelve al pack.
+     *
+     * Son 24 y no las 48 del hotel porque es un solo día: pedir dos días de
+     * aviso para cancelar una jornada suelta deja sin salida a cualquiera
+     * que se enferme el día antes. Con menos aviso el cupo ya no se alcanza
+     * a revender, así que el día se pierde.
+     */
+    horasParaCancelarSinCosto: 24,
+  },
+
+  asistencia: {
+    /**
+     * Hasta cuántos minutos de desfase entre lo que pasó y cuándo se marcó
+     * se considera "al día".
+     *
+     * Marcar exactamente en el instante es imposible con un perro en brazos,
+     * así que un par de minutos no es un atraso: es la vida real. Avisar de
+     * eso sería enseñarle a la pantalla a quejarse de nada, y una pantalla
+     * que se queja de nada se deja de mirar.
+     */
+    minutosDeMarcaAlDia: 5,
+    /**
+     * Margen antes de llamar "temprano" o "tarde" a una llegada o un retiro.
+     *
+     * Un perro que llega diez minutos antes de lo agendado no llegó
+     * temprano: llegó. Sin este margen, el análisis diría que casi nadie es
+     * puntual, que es una manera elegante de no decir nada.
+     */
+    minutosDePuntualidad: 15,
   },
 
   diaDePrueba: {
@@ -65,7 +96,7 @@ export const NEGOCIO = {
     nochesParaDescuento10: 7,
     nochesParaDescuento15: 14,
     /** Fracción del total que se paga al reservar. */
-    fraccionAbono: 0.3,
+    fraccionAbono: 0.5,
     /** Cancelando con al menos estas horas de aviso, el abono se devuelve entero. */
     horasParaDevolucion: 48,
   },
@@ -167,9 +198,10 @@ export const NEGOCIO = {
   },
 
   /**
-   * Datos para transferir. Van vacíos a propósito: son de la cuenta real del
-   * negocio y hay que completarlos antes de cobrarle a alguien. Mientras
-   * estén vacíos, la app dice que los datos llegan por WhatsApp.
+   * Datos para transferir de fábrica. Van vacíos a propósito: son de la
+   * cuenta real del negocio y los completa Administración en
+   * /admin/configuracion (`Configuracion.transferencia`). Mientras estén
+   * vacíos, la app dice que los datos llegan por WhatsApp.
    */
   transferencia: {
     titular: "",

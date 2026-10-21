@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { NEGOCIO } from "@/lib/config/negocio";
 import { PRECIOS } from "@/lib/config/precios";
 import { instanteEnHora } from "@/lib/utils/fecha";
 import {
@@ -77,12 +78,14 @@ describe("calcularPrecioHotel", () => {
     expect(c.total).toBe(80_000);
   });
 
-  it("calcula el abono del 30%", () => {
+  it("calcula el abono al reservar", () => {
     const c = calcularPrecioHotel({
       inicio: en("15", "10:00"),
       fin: en("18", "10:00"),
     });
-    expect(c.abono).toBe(21_600);
+    // Derivado de la config a propósito: el día que cambie la fracción, este
+    // test tiene que seguir probando la regla y no el número de ayer.
+    expect(c.abono).toBe(c.total * NEGOCIO.hotel.fraccionAbono);
   });
 
   it("una estadía de pocas horas paga igual una noche completa", () => {
@@ -166,9 +169,12 @@ describe("descuentos por duración", () => {
 });
 
 describe("calcularAbono", () => {
-  it("es el 30% redondeado al peso", () => {
-    expect(calcularAbono(75_000)).toBe(22_500);
-    expect(calcularAbono(13_333)).toBe(4_000);
+  it("es la fracción configurada, redondeada al peso", () => {
+    const fraccion = NEGOCIO.hotel.fraccionAbono;
+    expect(calcularAbono(75_000)).toBe(75_000 * fraccion);
+    // El redondeo al peso es lo que se prueba acá: sin él quedarían
+    // decimales en un monto en pesos chilenos.
+    expect(calcularAbono(13_333)).toBe(Math.round(13_333 * fraccion));
   });
 });
 

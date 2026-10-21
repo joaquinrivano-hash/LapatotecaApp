@@ -112,6 +112,17 @@ export function vacunasPorVencer(
   return porVencer;
 }
 
+/**
+ * true si pasa del peso máximo y Administración no lo habilitó.
+ *
+ * La excepción cubre hasta el peso con que se habilitó: si la ficha sube
+ * después, ya no es el perro que alguien miró.
+ */
+export function excedePeso(perro: Perro): boolean {
+  if (perro.pesoKg <= NEGOCIO.admision.pesoMaximoKg) return false;
+  return !perro.excepcionPeso || perro.pesoKg > perro.excepcionPeso.hastaKg;
+}
+
 export interface OpcionesAdmision {
   fecha: FechaISO;
   /**
@@ -127,10 +138,10 @@ export function evaluarAdmision(
 ): ResultadoAdmision {
   const problemas: ProblemaAdmision[] = [];
 
-  if (perro.pesoKg > NEGOCIO.admision.pesoMaximoKg) {
+  if (excedePeso(perro)) {
     problemas.push({
       motivo: "peso",
-      mensaje: `${perro.nombre} pesa ${perro.pesoKg} kg y el máximo es ${NEGOCIO.admision.pesoMaximoKg} kg.`,
+      mensaje: `${perro.nombre} pesa ${perro.pesoKg} kg y recibimos perritos de hasta ${NEGOCIO.admision.pesoMaximoKg} kg. Escríbenos y lo conversamos antes de agendar.`,
       subsanable: false,
       bloquea: true,
     });
@@ -170,8 +181,8 @@ export function evaluarAdmision(
         motivo: "desparasitacion",
         mensaje: `La desparasitación de ${perro.nombre} está vencida.`,
         subsanable: true,
-      bloquea: true,
-    });
+        bloquea: true,
+      });
     }
   }
 

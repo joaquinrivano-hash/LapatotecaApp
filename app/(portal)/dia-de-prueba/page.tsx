@@ -14,24 +14,30 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
+  ArrowLeft,
   CalendarCheck,
   CalendarX,
   CircleCheck,
   Clock,
   Info,
   PawPrint,
+  Pencil,
   TriangleAlert,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MiPerro } from "@/components/portal/mi-perro";
+import { ContactoCasa } from "@/components/shared/contacto-casa";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import { PoliticasDelDiaDePrueba } from "@/components/shared/politicas-dia-de-prueba";
 import { PrecioCLP } from "@/components/shared/precio";
 import { NEGOCIO } from "@/lib/config/negocio";
 import { MOTIVO_EN_PALABRAS } from "@/lib/rules/dia-de-prueba";
+import { evaluarAdmision, type MotivoRechazo } from "@/lib/rules/admision";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { useCliente } from "@/lib/hooks/use-cliente";
 import { hoyDelStaff } from "@/lib/servicios/asistencia";
@@ -58,6 +64,12 @@ import { formatearCLP } from "@/lib/utils/moneda";
 /** Cuántos días adelante se muestran para elegir. */
 const DIAS_A_LA_VISTA = 14;
 
+/**
+ * Lo que el dueño puede resolver solo, poniendo una fecha al día en la ficha.
+ * El resto —peso, castración, sociabilidad— se conversa con la casa.
+ */
+const MOTIVOS_DEL_DUENO: MotivoRechazo[] = ["vacunas", "desparasitacion"];
+
 export default function DiaDePrueba() {
   const hoy = hoyDelStaff();
   const router = useRouter();
@@ -76,6 +88,7 @@ export default function DiaDePrueba() {
   const [perroId, setPerroId] = useState<string | null>(null);
   const [fecha, setFecha] = useState(() => sumarDias(hoy, 2));
   const [minuto, setMinuto] = useState<number | null>(null);
+  const [corrigiendo, setCorrigiendo] = useState(false);
 
   const elegido = pendientes.find((p) => p.id === perroId) ?? pendientes[0] ?? null;
 
@@ -181,6 +194,21 @@ export default function DiaDePrueba() {
   const avisos =
     previa.datos?.admision.problemas.filter((p) => !p.bloquea) ?? [];
 
+  // Lo que impide agendar se muestra antes de elegir hora, no después: dejar
+  // recorrer el calendario para enterarse al final es la pantalla sin salida
+  // que ya nos reportaron. Los requisitos no dependen de la hora, solo del
+  // día (una vacuna puede vencer entre hoy y la fecha elegida).
+  const pendientesDeFicha =
+    elegido && !yaAgendado
+      ? evaluarAdmision(elegido, { fecha, esDiaDePrueba: true }).bloqueos
+      : [];
+  const losArreglaElDueno = pendientesDeFicha.filter((p) =>
+    MOTIVOS_DEL_DUENO.includes(p.motivo),
+  );
+  const hayQueConversar = pendientesDeFicha.some(
+    (p) => !MOTIVOS_DEL_DUENO.includes(p.motivo),
+  );
+
   return (
     <div className="space-y-4">
       <div className="space-y-1">
@@ -222,6 +250,52 @@ export default function DiaDePrueba() {
             </button>
           ))}
         </div>
+      )}
+
+      {elegido && pendientesDeFicha.length > 0 && (
+        <Card className="border-warning/40">
+          <CardContent className="space-y-3 p-5">
+            <div className="space-y-1">
+              <h2 className="flex items-center gap-2 font-semibold">
+                <TriangleAlert className="text-warning size-5 shrink-0" />
+                Antes de agendar a {elegido.nombre}
+              </h2>
+              <ul className="space-y-1 text-sm">
+                {pendientesDeFicha.map((problema) => (
+                  <li key={problema.mensaje} className="text-pretty">
+                    {problema.mensaje}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {losArreglaElDueno.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-muted-foreground text-xs text-pretty">
+                  Si ya lo pusiste al día, actualiza la fecha en su ficha y
+                  vuelves acá a elegir la hora.
+                </p>
+                <Button className="w-full" onClick={() => setCorrigiendo(true)}>
+                  <Pencil />
+                  Actualizar la ficha de {elegido.nombre}
+                </Button>
+              </div>
+            )}
+
+            {hayQueConversar && (
+              <ContactoCasa
+                mensaje={`Hola, quiero agendar el día de prueba de ${elegido.nombre}.`}
+              />
+            )}
+
+            <Button asChild variant="ghost" className="w-full">
+              <Link href="/mi-cuenta">
+                <ArrowLeft />
+                Volver a mi cuenta
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {yaAgendado && politica && (
@@ -372,7 +446,8 @@ export default function DiaDePrueba() {
             </div>
           )}
 
-          {bloqueos.length > 0 && (
+          {/* Si ya se mostraron arriba, no se repiten acá abajo. */}
+          {bloqueos.length > 0 && pendientesDeFicha.length === 0 && (
             <div className="bg-warning/12 text-warning space-y-1 rounded-xl p-3 text-sm">
               {bloqueos.map((problema) => (
                 <p key={problema.mensaje} className="flex items-start gap-2">
@@ -397,6 +472,22 @@ export default function DiaDePrueba() {
       </Card>
 
       <PoliticasDelDiaDePrueba />
+
+      <Sheet open={corrigiendo} onOpenChange={setCorrigiendo}>
+        <SheetContent>
+          {elegido && corrigiendo && (
+            <MiPerro
+              perro={elegido}
+              hoy={hoy}
+              editarAlAbrir
+              onGuardado={() => {
+                setCorrigiendo(false);
+                base.recargar();
+              }}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
 
       <Button
         size="xl"

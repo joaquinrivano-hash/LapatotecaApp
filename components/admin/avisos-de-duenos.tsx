@@ -1,11 +1,16 @@
 "use client";
 
 /**
- * Lo que los dueños cambiaron en las fichas de sus perros.
+ * Lo que hicieron los dueños y Administración tiene que saber: correcciones a
+ * la ficha de su perro, y cancelaciones.
  *
  * Se muestra el antes y el después de cada campo porque el aviso existe para
  * decidir: un peso que sube de 8 a 21 kg o una castración que se desmarca
  * cambian si el perro puede seguir viniendo. "Cambió la ficha" no serviría.
+ *
+ * Algunos avisos traen datos que no son un cambio sino un hecho —qué día se
+ * canceló, con cuánta anticipación—, así que una línea sin `antes` se escribe
+ * sola, sin el tachado ni la flecha.
  */
 
 import { useState } from "react";
@@ -48,7 +53,7 @@ export function AvisosDeDuenos() {
         <div>
           <CardTitle className="flex items-center gap-2">
             <BellRing className="size-5" />
-            Cambios de los dueños
+            Avisos de los dueños
           </CardTitle>
           <p className="text-muted-foreground text-sm">
             {sinLeer.length} sin revisar.
@@ -83,10 +88,16 @@ export function AvisosDeDuenos() {
                 {aviso.cambios.map((cambio) => (
                   <li key={cambio.campo} className="text-pretty">
                     <span className="font-semibold">{cambio.campo}:</span>{" "}
-                    <span className="text-muted-foreground line-through">
-                      {cambio.antes ?? "sin dato"}
-                    </span>{" "}
-                    → <span>{cambio.despues ?? "sin dato"}</span>
+                    {cambio.antes === undefined ? (
+                      <span>{cambio.despues ?? "sin dato"}</span>
+                    ) : (
+                      <>
+                        <span className="text-muted-foreground line-through">
+                          {cambio.antes}
+                        </span>{" "}
+                        → <span>{cambio.despues ?? "sin dato"}</span>
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>

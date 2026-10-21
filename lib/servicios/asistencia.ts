@@ -36,7 +36,6 @@ import type {
   ID,
   InstanteISO,
   OcupacionDia,
-  Pago,
   Perro,
   PlanComprado,
   ReservaHotel,
@@ -98,13 +97,36 @@ export async function cargarDiaDeStaff(
 
 /* ── Jardín ────────────────────────────────────────────────────────── */
 
+/**
+ * Marca la llegada.
+ *
+ * `horaReal` existe porque el cuidador a veces marca después: el perro llegó
+ * a las 8:00 y él alcanzó a tocar el botón a las 8:40, con las manos
+ * ocupadas. Por omisión las dos son el mismo instante, que es el caso normal
+ * y el que mantiene el check-in de un toque.
+ *
+ * Volver a llamarla con otra `horaReal` corrige la llegada sin tocar cuándo
+ * se marcó por primera vez: lo que se corrige es el dato, no el registro de
+ * que alguien lo anotó tarde.
+ */
 export async function registrarLlegadaJardin(
   repo: RepositorioPatoteca,
   estadiaId: ID,
   ahora: InstanteISO = new Date().toISOString(),
+  horaReal: InstanteISO = ahora,
 ): Promise<EstadiaJardin> {
+  const estadia = await repo.estadiasJardin.obtener(estadiaId);
+
+  // La hora de marca se anota SOLO la primera vez. Si ya había una llegada,
+  // esto es una corrección y no una marca nueva: ponerle "ahora" le
+  // inventaría un atraso a quien solo arregló un dato. Y en una estadía
+  // vieja, que nunca tuvo marca, se queda sin ella — "no se sabe" es la
+  // respuesta correcta, no la hora en que alguien la editó.
+  const esPrimeraMarca = !estadia?.inicioReal;
+
   return repo.estadiasJardin.actualizar(estadiaId, {
-    inicioReal: ahora,
+    inicioReal: horaReal,
+    inicioMarcadoEn: esPrimeraMarca ? ahora : estadia?.inicioMarcadoEn,
     estado: "presente",
   });
 }
@@ -114,7 +136,6 @@ export interface ResultadoSalida {
   /** Recargo por retiro tarde, si lo hubo. */
   recargo: number;
   horasFueraDeHorario: number;
-  pago: Pago | null;
 }
 
 /**
@@ -125,74 +146,46 @@ export async function registrarSalidaJardin(
   repo: RepositorioPatoteca,
   estadiaId: ID,
   ahora: InstanteISO = new Date().toISOString(),
+  /** La hora a la que se fue de verdad, si no es el momento de marcarlo. */
+  horaReal: InstanteISO = ahora,
 ): Promise<ResultadoSalida> {
   const estadia = await repo.estadiasJardin.obtener(estadiaId);
   if (!estadia) throw new Error(`No existe la estadía ${estadiaId}`);
 
   const inicio = estadia.inicioReal ?? estadia.inicioProgramado;
+  // Todo lo que define plata mira la hora REAL: el tramo del día y el
+  // recargo. El momento en que se apretó el botón no cobra nada.
   const cotizacion = calcularPrecioJardin({
     inicio,
-    fin: ahora,
+    fin: horaReal,
     origen: estadia.origen,
   });
 
-  const recargo = calcularRecargoFueraDeHorario(inicio, ahora);
+  const recargo = calcularRecargoFueraDeHorario(inicio, horaReal);
 
   const actualizada = await repo.estadiasJardin.actualizar(estadiaId, {
-    finReal: ahora,
+    finReal: horaReal,
+    finMarcadoEn: estadia.finReal ? estadia.finMarcadoEn : ahora,
     estado: "finalizada",
     cotizacion,
   });
 
-  const pago = await registrarCobroDeEstadia(repo, actualizada, ahora);
-
+  // Acá NO se emite ningún cobro, y es el punto del cambio.
+  //
+  // La jornada ya se pagó por adelantado —el plan al comprarlo, el día
+  // suelto al agendarlo—, así que cerrar no deja nada que cobrar por el día.
+  // Lo único que puede aparecer es el recargo por retiro tarde, y ese no
+  // nace solo: lo decide Administración, que es la que ve el total y la que
+  // sabe si al dueño se le perdona el atraso de hoy.
+  //
+  // Lo que sí tiene que quedar guardado es la hora real de salida, porque de
+  // ahí sale el cálculo cuando alguien lo decida. El cuidador registra lo que
+  // pasó; cobrarlo es otra decisión y de otra persona.
   return {
     estadia: actualizada,
     recargo: recargo.monto,
     horasFueraDeHorario: recargo.horas,
-    pago,
   };
-}
-
-/**
- * Deja el cobro de la jornada al día. Si ya había uno emitido, lo corrige en
- * vez de duplicarlo: un perro no puede aparecer cobrado dos veces por el
- * mismo día.
- */
-async function registrarCobroDeEstadia(
-  repo: RepositorioPatoteca,
-  estadia: EstadiaJardin,
-  ahora: InstanteISO,
-): Promise<Pago | null> {
-  const total = estadia.cotizacion?.total ?? 0;
-  const existentes = await repo.pagos.listar();
-  const previo = existentes.find(
-    (p) => p.referenciaId === estadia.id && p.estado !== "reembolsado",
-  );
-
-  if (total <= 0) {
-    // Jornada cubierta por el plan y sin recargo: no hay nada que cobrar.
-    if (previo && previo.estado === "pendiente") {
-      await repo.pagos.eliminar(previo.id);
-    }
-    return null;
-  }
-
-  const concepto =
-    estadia.origen === "dia_de_prueba" ? "dia_de_prueba" : "dia_suelto";
-
-  if (previo) {
-    return repo.pagos.actualizar(previo.id, { monto: total, concepto });
-  }
-
-  return repo.pagos.crear({
-    clienteId: estadia.clienteId,
-    concepto,
-    referenciaId: estadia.id,
-    monto: total,
-    estado: "pendiente",
-    emitidoEn: ahora,
-  });
 }
 
 /* ── Hotel ─────────────────────────────────────────────────────────── */
@@ -201,9 +194,13 @@ export async function registrarLlegadaHotel(
   repo: RepositorioPatoteca,
   reservaId: ID,
   ahora: InstanteISO = new Date().toISOString(),
+  horaReal: InstanteISO = ahora,
 ): Promise<ReservaHotel> {
+  const reserva = await repo.reservasHotel.obtener(reservaId);
+
   return repo.reservasHotel.actualizar(reservaId, {
-    inicioReal: ahora,
+    inicioReal: horaReal,
+    inicioMarcadoEn: reserva?.inicioReal ? reserva.inicioMarcadoEn : ahora,
     estado: "en_curso",
   });
 }
@@ -212,14 +209,19 @@ export interface ResultadoSalidaHotel {
   reserva: ReservaHotel;
   /** Diferencia contra lo cotizado al reservar. Positiva = se pasó. */
   diferencia: number;
+  /**
+   * Lo que queda por cobrar contra el abono. Está CALCULADO, no emitido: el
+   * cobro lo crea Administración desde el backoffice.
+   */
   saldoPorCobrar: number;
-  pago: Pago | null;
 }
 
 export async function registrarSalidaHotel(
   repo: RepositorioPatoteca,
   reservaId: ID,
   ahora: InstanteISO = new Date().toISOString(),
+  /** La hora a la que se lo llevaron de verdad. */
+  horaReal: InstanteISO = ahora,
 ): Promise<ResultadoSalidaHotel> {
   const reserva = await repo.reservasHotel.obtener(reservaId);
   if (!reserva) throw new Error(`No existe la reserva ${reservaId}`);
@@ -229,12 +231,13 @@ export async function registrarSalidaHotel(
 
   const cotizacion = calcularPrecioHotel({
     inicio,
-    fin: ahora,
+    fin: horaReal,
     paseosContratados: reserva.paseosContratados,
   });
 
   const actualizada = await repo.reservasHotel.actualizar(reservaId, {
-    finReal: ahora,
+    finReal: horaReal,
+    finMarcadoEn: reserva.finReal ? reserva.finMarcadoEn : ahora,
     estado: "finalizada",
     cotizacion,
   });
@@ -244,30 +247,13 @@ export async function registrarSalidaHotel(
   const abono = cotizacionOriginal.abono ?? 0;
   const saldoPorCobrar = Math.max(0, cotizacion.total - abono);
 
-  const existentes = await repo.pagos.porCliente(reserva.clienteId);
-  const previo = existentes.find(
-    (p) => p.referenciaId === reserva.id && p.concepto === "saldo_hotel",
-  );
-
-  let pago: Pago | null = null;
-  if (saldoPorCobrar > 0) {
-    pago = previo
-      ? await repo.pagos.actualizar(previo.id, { monto: saldoPorCobrar })
-      : await repo.pagos.crear({
-          clienteId: reserva.clienteId,
-          concepto: "saldo_hotel",
-          referenciaId: reserva.id,
-          monto: saldoPorCobrar,
-          estado: "pendiente",
-          emitidoEn: ahora,
-        });
-  }
-
+  // Igual que en el jardín: el cuidador registra la salida y el saldo queda
+  // calculado, pero el cobro lo emite Administración desde el backoffice. El
+  // que recibe al perro en la puerta no emite documentos.
   return {
     reserva: actualizada,
     diferencia: cotizacion.total - cotizacionOriginal.total,
     saldoPorCobrar,
-    pago,
   };
 }
 
@@ -444,6 +430,15 @@ export async function registrarIngreso(
     creadaEn: inicio,
   });
 
+  // Tampoco se cobra acá, y por la misma razón que el cierre: el cuidador no
+  // emite documentos.
+  //
+  // "Por adelantado" tiene sentido cuando alguien reserva con anticipación y
+  // elige pagar antes. Un perro que aparece en la puerta no puede pagar por
+  // adelantado un día que ya empezó, así que su jornada queda registrada y
+  // Administración la emite después, junto con lo demás. Si se olvidara, no
+  // se pierde: aparece en la cola de días por cobrar hasta que alguien la
+  // emita.
   return { estadia, planUsado, revision };
 }
 

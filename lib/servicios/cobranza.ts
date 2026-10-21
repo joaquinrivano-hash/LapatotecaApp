@@ -100,11 +100,25 @@ export async function marcarPagado(
   metodo: MetodoPago,
   ahora: InstanteISO = new Date().toISOString(),
 ): Promise<Pago> {
-  return repo.pagos.actualizar(pagoId, {
+  const pago = await repo.pagos.actualizar(pagoId, {
     estado: "pagado",
     metodo,
     pagadoEn: ahora,
   });
+
+  // El abono es lo que confirma la reserva de hotel: hasta que llega, la
+  // reserva ocupa su cupo pero queda "por confirmar".
+  if (pago.concepto === "abono_hotel" && pago.referenciaId) {
+    const reserva = await repo.reservasHotel.obtener(pago.referenciaId);
+    if (reserva) {
+      await repo.reservasHotel.actualizar(reserva.id, {
+        abonoPagado: true,
+        ...(reserva.estado === "pendiente" ? { estado: "confirmada" } : {}),
+      });
+    }
+  }
+
+  return pago;
 }
 
 export interface ResultadoEmision {

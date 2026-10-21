@@ -15,6 +15,7 @@ import { NEGOCIO } from "@/lib/config/negocio";
 import { nombreVacuna } from "@/lib/rules/admision";
 import {
   leCorrespondeEstarCastrado,
+  vigenciaAntiparasitario,
   vigenciaVacuna,
 } from "@/lib/rules/perro";
 import {
@@ -76,6 +77,8 @@ export function configuracionPorDefecto(
       marcasComida: [...MARCAS_COMIDA],
       marcasAntiparasitario: [...MARCAS_ANTIPARASITARIO],
     },
+    whatsappDeContacto: "",
+    transferencia: { ...NEGOCIO.transferencia },
     actualizadoEn: ahora,
   };
 }
@@ -200,12 +203,28 @@ export interface ReparoDeAlta {
   /**
    * `true` cuando no tiene vuelta y por eso impide crear la cuenta.
    *
-   * El peso no se negocia y la castración tampoco. Una vacuna vencida sí
-   * tiene vuelta —se renueva antes de venir—, así que avisa y deja seguir:
+   * Hoy solo la castración. Una vacuna o un antiparasitario vencidos tienen
+   * vuelta —se renuevan antes de venir—, así que avisan y dejan seguir:
    * rechazar ahí sería perder a un cliente por algo que se arregla en una
    * visita al veterinario.
+   *
+   * El peso tampoco bloquea: a veces hay vuelta, y eso lo decide
+   * Administración mirando al perro, no el formulario. La cuenta se crea y el
+   * día de prueba espera a que lo habiliten (ver `excedePeso`).
    */
   bloquea: boolean;
+  /**
+   * `true` cuando lo resuelve una conversación con la casa y no el dueño
+   * solo. La pantalla pone el WhatsApp al lado.
+   */
+  conversar?: boolean;
+}
+
+/** true si el peso declarado pasa del máximo de la casa. */
+export function pasaDelPeso(borrador: BorradorDePerro): boolean {
+  return Boolean(
+    borrador.pesoKg && borrador.pesoKg > NEGOCIO.admision.pesoMaximoKg,
+  );
 }
 
 export function reparosDeAlta(
@@ -215,10 +234,11 @@ export function reparosDeAlta(
 ): ReparoDeAlta[] {
   const reparos: ReparoDeAlta[] = [];
 
-  if (borrador.pesoKg && borrador.pesoKg > NEGOCIO.admision.pesoMaximoKg) {
+  if (pasaDelPeso(borrador)) {
     reparos.push({
-      mensaje: `Recibimos perritos de hasta ${NEGOCIO.admision.pesoMaximoKg} kg.`,
-      bloquea: true,
+      mensaje: `Recibimos perritos de hasta ${NEGOCIO.admision.pesoMaximoKg} kg. Puedes crear la cuenta igual: lo conversamos y, si hay vuelta, te habilitamos el día de prueba.`,
+      bloquea: false,
+      conversar: true,
     });
   }
 
@@ -242,6 +262,18 @@ export function reparosDeAlta(
   if (vencidas.length > 0) {
     reparos.push({
       mensaje: `Según esa fecha, la ${vencidas.map(nombreVacuna).join(" y la ")} ${vencidas.length === 1 ? "está vencida" : "están vencidas"}. Puedes crear la cuenta igual, pero sin ponerla al día no podemos recibirlo el día de prueba.`,
+      bloquea: false,
+    });
+  }
+
+  if (
+    NEGOCIO.admision.exigeDesparasitacion &&
+    borrador.antiparasitario?.ultimaAplicacion &&
+    diasEntre(hoy, vigenciaAntiparasitario(borrador.antiparasitario)) < 0
+  ) {
+    reparos.push({
+      mensaje:
+        "Según esa fecha, el antiparasitario está vencido. Puedes crear la cuenta igual, pero sin ponerlo al día no podemos recibirlo el día de prueba.",
       bloquea: false,
     });
   }

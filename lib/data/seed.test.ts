@@ -175,7 +175,7 @@ describe("plata", () => {
     expect(datos.pagos.every((p) => ids.has(p.clienteId))).toBe(true);
   });
 
-  it("los abonos de hotel son el 30% de su reserva", () => {
+  it("los abonos de hotel son la fracción configurada de su reserva", () => {
     for (const pago of datos.pagos.filter((p) => p.concepto === "abono_hotel")) {
       const reserva = datos.reservasHotel.find((r) => r.id === pago.referenciaId)!;
       expect(pago.monto).toBe(reserva.cotizacion.abono);

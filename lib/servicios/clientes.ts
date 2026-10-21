@@ -8,6 +8,7 @@
 
 import { NEGOCIO } from "@/lib/config/negocio";
 import {
+  excedePeso,
   nombreVacuna,
   vacunasFaltantes,
   vacunasPorVencer,
@@ -86,11 +87,14 @@ export function alertasDePerro(perro: Perro, hoy: FechaISO): AlertaPerro[] {
   }
 
   if (perro.pesoKg > NEGOCIO.admision.pesoMaximoKg) {
+    const habilitado = !excedePeso(perro);
     alertas.push({
       tipo: "sobre_peso",
       perroId: perro.id,
-      mensaje: `Pesa ${perro.pesoKg} kg y el máximo es ${NEGOCIO.admision.pesoMaximoKg} kg.`,
-      bloquea: true,
+      mensaje: habilitado
+        ? `Pesa ${perro.pesoKg} kg: está habilitado aunque pase de los ${NEGOCIO.admision.pesoMaximoKg} kg.`
+        : `Pesa ${perro.pesoKg} kg y el máximo es ${NEGOCIO.admision.pesoMaximoKg} kg. No puede agendar hasta que Administración lo habilite.`,
+      bloquea: !habilitado,
     });
   }
 

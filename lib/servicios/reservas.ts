@@ -23,13 +23,25 @@ import {
 } from "@/lib/rules/capacidad";
 import { esClienteActivo } from "@/lib/rules/cliente";
 import { calcularAbono, calcularPrecioHotel } from "@/lib/rules/precio-hotel";
-import { calcularPrecioJardin } from "@/lib/rules/precio-jardin";
+import {
+  calcularDevolucionJardin,
+  calcularPrecioJardin,
+  type DevolucionJardin,
+} from "@/lib/rules/precio-jardin";
 import { comprarPlan, elegirPlanParaUsar, planesVigentes } from "@/lib/rules/planes";
 import { cotizarPaseo, cotizarSpa, cotizarTraslado } from "@/lib/rules/servicios";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
-import { fechaISO, instanteEn, rangoFechas } from "@/lib/utils/fecha";
+import { formatearCLP } from "@/lib/utils/moneda";
+import {
+  fechaISO,
+  formatearFechaCorta,
+  instanteEn,
+  rangoFechas,
+} from "@/lib/utils/fecha";
 import type {
+  CambioDeCampo,
   Cotizacion,
+  DatosBancarios,
   DuracionPaseo,
   EstadiaJardin,
   FechaISO,
@@ -160,7 +172,15 @@ export interface ResultadoReservaHotel {
   abono: Pago;
 }
 
-/** Confirma la reserva y deja pagado el abono del 30% (mock). */
+/**
+ * Toma la reserva y emite el cobro del abono.
+ *
+ * Queda **por confirmar** hasta que llegue el abono: no hay pasarela, el
+ * dueño transfiere y Administración lo marca pagado (`marcarPagado`), que es
+ * lo que la confirma. El cupo sí queda tomado desde ya —una reserva
+ * pendiente ocupa, ver `ESTADOS_RESERVA_OCUPAN`—, porque si no dos dueños
+ * podrían transferir por el mismo lugar.
+ */
 export async function crearReservaHotel(
   repo: RepositorioPatoteca,
   entrada: EntradaReservaHotel,
@@ -182,21 +202,22 @@ export async function crearReservaHotel(
     inicioProgramado: entrada.inicio,
     finProgramado: entrada.fin,
     paseosContratados: entrada.paseosContratados ?? 0,
-    estado: "confirmada",
+    estado: "pendiente",
     cotizacion: previa.cotizacion,
-    abonoPagado: true,
+    abonoPagado: false,
     creadaEn: ahora,
   });
 
+  // Pendiente y sin fecha de pago, igual que exige la base (_permisos): nadie
+  // se da por pagado solo.
   const abono = await repo.pagos.crear({
     clienteId: perro.clienteId,
     concepto: "abono_hotel",
     referenciaId: reserva.id,
     monto: previa.abono,
-    estado: "pagado",
-    metodo: "webpay",
+    estado: "pendiente",
     emitidoEn: ahora,
-    pagadoEn: ahora,
+    venceEn: fechaISO(entrada.inicio),
   });
 
   return { reserva, abono };
@@ -325,9 +346,237 @@ export async function reservarDiaJardin(
     creadaEn: ahora,
   });
 
-  // El día suelto se cobra al cerrar la jornada, con la hora real: acá solo
-  // queda agendado.
-  return { estadia, planUsado, pago: null };
+  // El día suelto se paga POR ADELANTADO, igual que el plan: la jornada se
+  // cobra al agendarla, no al cerrarla. Lo que puede aparecer después es el
+  // recargo por retiro tarde, y ese no nace solo — lo decide Administración.
+  //
+  // Con plan el total es cero: el pack ya cubrió el día y lo único que pasó
+  // al agendar fue descontarlo del saldo.
+  const total = previa.cotizacion.total;
+  const pago =
+    total > 0
+      ? await repo.pagos.crear({
+          clienteId: perro.clienteId,
+          concepto: "dia_suelto",
+          referenciaId: estadia.id,
+          monto: total,
+          estado: "pendiente",
+          emitidoEn: ahora,
+        })
+      : null;
+
+  return { estadia, planUsado, pago };
+}
+
+/**
+ * Cancelar un día de jardín ya agendado.
+ *
+ * Existe porque el día ahora se paga por adelantado: antes cancelar no
+ * costaba nada porque no había nada cobrado, y dejarlo así después del
+ * cambio habría significado que el dueño paga un día que no usó sin ninguna
+ * manera de echarse atrás.
+ *
+ * Sigue la misma política que el hotel y el día de prueba: con aviso
+ * suficiente no se cobra, y pasado el corte el día se pierde. El cupo quedó
+ * tomado y a esa altura ya no se alcanza a revender.
+ */
+export interface ResultadoCancelacionJardin {
+  estadia: EstadiaJardin;
+  devolucion: DevolucionJardin;
+  /** El plan al que se le devolvió el día, si correspondía. */
+  planDevuelto: PlanComprado | null;
+  /**
+   * Lo que hay que transferirle de vuelta al cliente.
+   *
+   * Cero cuando el cobro estaba pendiente: anularlo YA fue la devolución, no
+   * hay plata que mover. Prometerle una transferencia a alguien que nunca
+   * pagó es prometerle algo que no va a llegar nunca.
+   */
+  aDevolver: number;
+}
+
+/**
+ * Lo que el cliente ya pagó por este día.
+ *
+ * No depende de la hora, así que la pantalla lo puede pedir una vez y seguir
+ * recalculando la política en cada render: lo que cambia con el reloj es si
+ * corresponde devolver, no cuánto se pagó.
+ */
+export async function loPagadoPorElDia(
+  repo: RepositorioPatoteca,
+  estadiaId: ID,
+): Promise<number> {
+  const pagos = await repo.pagos.listar();
+  return pagos
+    .filter((p) => p.referenciaId === estadiaId && p.estado === "pagado")
+    .reduce((suma, p) => suma + p.monto, 0);
+}
+
+/**
+ * Qué pasaría si cancelara ahora, sin cancelar nada.
+ *
+ * La pantalla lo necesita para decidir si pedirle los datos de transferencia:
+ * solo tiene sentido cuando de verdad hay plata que devolver.
+ */
+export async function simularCancelacionDeJardin(
+  repo: RepositorioPatoteca,
+  estadiaId: ID,
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<{ devolucion: DevolucionJardin; aDevolver: number }> {
+  const estadia = await repo.estadiasJardin.obtener(estadiaId);
+  if (!estadia) throw new ReservaRechazada("No existe ese día.", []);
+
+  const devolucion = calcularDevolucionJardin(estadia.inicioProgramado, ahora);
+  const pagos = await repo.pagos.listar();
+  const pagado = pagos
+    .filter((p) => p.referenciaId === estadiaId && p.estado === "pagado")
+    .reduce((suma, p) => suma + p.monto, 0);
+
+  return { devolucion, aDevolver: devolucion.devuelve ? pagado : 0 };
+}
+
+export async function cancelarDiaDeJardin(
+  repo: RepositorioPatoteca,
+  estadiaId: ID,
+  ahora: InstanteISO = new Date().toISOString(),
+  /** Dónde devolverle la plata, si alcanzó a pagar. Se guardan en su ficha. */
+  datosBancarios?: DatosBancarios,
+): Promise<ResultadoCancelacionJardin> {
+  const estadia = await repo.estadiasJardin.obtener(estadiaId);
+  if (!estadia) throw new ReservaRechazada("No existe ese día.", []);
+
+  // Un perro que ya llegó no se cancela: eso es un retiro, no una
+  // cancelación, y lo registra el equipo.
+  if (estadia.estado !== "esperada") {
+    throw new ReservaRechazada("Ese día ya no se puede cancelar.", [
+      estadia.estado === "cancelada"
+        ? "Ya estaba cancelado."
+        : "El perro ya está en la casa: pídele al equipo que registre el retiro.",
+    ]);
+  }
+
+  const devolucion = calcularDevolucionJardin(estadia.inicioProgramado, ahora);
+
+  const cancelada = await repo.estadiasJardin.actualizar(estadiaId, {
+    estado: "cancelada",
+  });
+
+  if (!devolucion.devuelve) {
+    // El día se pierde: el cobro queda como estaba y el día del pack queda
+    // consumido. Devolverlo sería no tener política.
+    //
+    // Pero el aviso sale igual, y es el que MÁS importa: una cancelación
+    // sobre la hora libera un cupo que ya no se alcanza a ofrecer, y es
+    // justamente la que la dueña quiere ver.
+    await avisarDeLaCancelacion(repo, cancelada, devolucion, 0, ahora);
+    return { estadia: cancelada, devolucion, planDevuelto: null, aDevolver: 0 };
+  }
+
+  // Los dos casos no son el mismo, y confundirlos sería prometer una
+  // transferencia que nunca va a llegar:
+  //
+  //   · Si el cobro estaba PENDIENTE, anularlo ya es la devolución. No hay
+  //     plata que mover: se marca reembolsado en cero.
+  //   · Si el cliente ALCANZÓ a pagar, la plata está en la casa y hay que
+  //     devolverla. Se marca reembolsado conservando el monto, que es
+  //     justamente lo que se le debe, y queda esperando la transferencia.
+  //
+  // En ninguno de los dos se borra: un cobro que desaparece no deja rastro de
+  // que existió, y la cobranza del mes tiene que poder explicarse.
+  const pagos = await repo.pagos.listar();
+  let aDevolver = 0;
+  for (const pago of pagos) {
+    if (pago.referenciaId !== estadiaId) continue;
+
+    if (pago.estado === "pendiente") {
+      await repo.pagos.actualizar(pago.id, {
+        monto: 0,
+        estado: "reembolsado",
+        pagadoEn: undefined,
+        venceEn: undefined,
+      });
+    } else if (pago.estado === "pagado") {
+      aDevolver += pago.monto;
+      await repo.pagos.actualizar(pago.id, {
+        estado: "reembolsado",
+        venceEn: undefined,
+      });
+    }
+  }
+
+  // Se guardan en la ficha y no en el cobro: nadie se sabe su número de
+  // cuenta de memoria, y pedírselo de nuevo la próxima vez es la manera de
+  // que la devolución quede a medias.
+  if (aDevolver > 0 && datosBancarios) {
+    await repo.clientes.actualizar(estadia.clienteId, { datosBancarios });
+  }
+
+  // Si el día venía de un pack, vuelve al saldo: se descontó al agendar.
+  let planDevuelto: PlanComprado | null = null;
+  if (estadia.planId) {
+    const plan = await repo.planes.obtener(estadia.planId);
+    if (plan) {
+      planDevuelto = await repo.planes.actualizar(plan.id, {
+        diasUsados: Math.max(0, plan.diasUsados - 1),
+      });
+    }
+  }
+
+  await avisarDeLaCancelacion(repo, cancelada, devolucion, aDevolver, ahora);
+
+  return { estadia: cancelada, devolucion, planDevuelto, aDevolver };
+}
+
+/**
+ * Deja constancia en la bandeja de Administración.
+ *
+ * Sin esto una cancelación es invisible: el día desaparece del calendario y
+ * nadie se entera de quién avisó ni cuándo. Para la dueña eso importa —un
+ * cupo que se libera con dos días es otra cosa que uno que se libera a las
+ * nueve de la noche—, y el aviso es el único lugar donde queda escrito.
+ *
+ * Va por el mismo canal que las correcciones de ficha, que es donde ella ya
+ * mira lo que hicieron los dueños. Una bandeja aparte sería una bandeja que
+ * se deja de abrir.
+ */
+async function avisarDeLaCancelacion(
+  repo: RepositorioPatoteca,
+  estadia: EstadiaJardin,
+  devolucion: DevolucionJardin,
+  aDevolver: number,
+  ahora: InstanteISO,
+): Promise<void> {
+  const [cliente, perro] = await Promise.all([
+    repo.clientes.obtener(estadia.clienteId),
+    repo.perros.obtener(estadia.perroId),
+  ]);
+
+  const horas = Math.floor(devolucion.horasDeAviso);
+  const cambios: CambioDeCampo[] = [
+    { campo: "Día", despues: formatearFechaCorta(estadia.fecha) },
+    {
+      campo: "Aviso",
+      despues:
+        horas < 0 ? "después de la hora de llegada" : `${horas} h antes`,
+    },
+    {
+      campo: "Cobro",
+      despues: !devolucion.devuelve
+        ? "se mantiene, canceló fuera de plazo"
+        : aDevolver > 0
+          ? `hay que devolverle ${formatearCLP(aDevolver)}`
+          : "anulado, no alcanzó a pagarlo",
+    },
+  ];
+
+  await repo.notificaciones.crear({
+    clienteId: estadia.clienteId,
+    perroId: estadia.perroId,
+    titulo: `${cliente ? `${cliente.nombre} ${cliente.apellido}` : "Un dueño"} canceló el día de ${perro?.nombre ?? "su perro"}`,
+    cambios,
+    leida: false,
+    creadaEn: ahora,
+  });
 }
 
 /* ── Jardín: plan ──────────────────────────────────────────────────── */

@@ -6,11 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CumpleanosDelMes } from "@/components/shared/cumpleanos";
 import { AvisosDeDuenos } from "@/components/admin/avisos-de-duenos";
+import { HorariosDelDia } from "@/components/admin/horarios-del-dia";
 import { PrecioCLP } from "@/components/shared/precio";
 import { Tile } from "@/components/shared/tile";
 import { BarraParticipacion } from "@/components/admin/barra-participacion";
 import { OcupacionDiaria } from "@/components/admin/ocupacion-diaria";
 import { useConsulta } from "@/lib/hooks/use-consulta";
+import { analizarHorarios } from "@/lib/servicios/horarios";
 import { cargarPanel, ETIQUETA_LINEA } from "@/lib/servicios/panel";
 import { hoyDelStaff } from "@/lib/servicios/asistencia";
 import { cn } from "@/lib/utils";
@@ -29,6 +31,11 @@ export default function Numeros() {
 
   const panel = useConsulta(
     (repo) => cargarPanel(repo, desde, hoy),
+    [desde, hoy],
+  );
+
+  const horarios = useConsulta(
+    (repo) => analizarHorarios(repo, desde, hoy),
     [desde, hoy],
   );
 
@@ -117,6 +124,22 @@ export default function Numeros() {
           <OcupacionDiaria dias={datos.dias} capacidad={datos.capacidad} />
         </CardContent>
       </Card>
+
+      {horarios.datos && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle>A qué hora llegan y a qué hora los buscan</CardTitle>
+            <p className="text-muted-foreground text-sm text-pretty">
+              El movimiento del día, hora por hora. Dice a qué hora se necesita
+              más gente en la puerta, y si el jardín se vacía a las tres o a
+              las seis.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <HorariosDelDia analisis={horarios.datos} />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>

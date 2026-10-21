@@ -3,6 +3,8 @@ import { crearAlmacenMemoria } from "@/lib/repo/almacen";
 import { CLAVE_ALMACEN, crearRepositorioLocal } from "@/lib/repo/local";
 import {
   actualizarPerroComoDueno,
+  habilitarPeso,
+  quitarHabilitacionDePeso,
   compararFichas,
 } from "@/lib/servicios/perros";
 import type { DatosPatoteca } from "@/lib/data/seed";
@@ -160,11 +162,50 @@ describe("actualizarPerroComoDueno", () => {
   it("varios cambios a la vez van en un solo aviso", async () => {
     const { notificacion } = await actualizarPerroComoDueno(repo, "p1", {
       pesoKg: 12,
-      esterilizado: false,
+      raza: "Poodle",
       notas: "Le da miedo la aspiradora.",
     });
 
     expect(notificacion?.cambios).toHaveLength(3);
     expect(await repo.notificaciones.listar()).toHaveLength(1);
+  });
+
+  it("el dueño no puede cambiar el sexo ni la castración", async () => {
+    const { perro, cambios } = await actualizarPerroComoDueno(repo, "p1", {
+      sexo: "hembra",
+      esterilizado: !PELUSA.esterilizado,
+    });
+
+    expect(perro.sexo).toBe(PELUSA.sexo);
+    expect(perro.esterilizado).toBe(PELUSA.esterilizado);
+    expect(cambios).toEqual([]);
+  });
+
+  it("y el resto de lo que mandó se guarda igual", async () => {
+    const { perro } = await actualizarPerroComoDueno(repo, "p1", {
+      pesoKg: 12,
+      esterilizado: !PELUSA.esterilizado,
+    });
+
+    expect(perro.pesoKg).toBe(12);
+    expect(perro.esterilizado).toBe(PELUSA.esterilizado);
+  });
+});
+
+describe("habilitarPeso", () => {
+  it("habilita hasta el peso que tiene hoy", async () => {
+    await repo.perros.actualizar("p1", { pesoKg: 24 });
+    const perro = await habilitarPeso(repo, "p1", "2026-09-28T12:00:00.000Z");
+
+    expect(perro.excepcionPeso).toEqual({
+      hastaKg: 24,
+      habilitadaEn: "2026-09-28T12:00:00.000Z",
+    });
+  });
+
+  it("y se puede deshacer", async () => {
+    await habilitarPeso(repo, "p1");
+    const perro = await quitarHabilitacionDePeso(repo, "p1");
+    expect(perro.excepcionPeso).toBeUndefined();
   });
 });

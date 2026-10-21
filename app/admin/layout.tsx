@@ -10,6 +10,7 @@ import {
   Package,
   SlidersHorizontal,
   Ticket,
+  UserCog,
   Users,
   Wallet,
 } from "lucide-react";
@@ -17,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { LogoPatoteca } from "@/components/shared/logo";
 import { useMontado } from "@/lib/hooks/use-montado";
+import { useSalir } from "@/lib/hooks/use-salir";
 import { useSesion } from "@/lib/store/sesion";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +29,7 @@ const SECCIONES = [
   { href: "/admin/pagos", etiqueta: "Pagos", icono: Wallet },
   { href: "/admin/planes", etiqueta: "Planes", icono: Ticket },
   { href: "/admin/inventario", etiqueta: "Tienda", icono: Package },
+  { href: "/admin/equipo", etiqueta: "Equipo", icono: UserCog },
   { href: "/admin/configuracion", etiqueta: "Reglas", icono: SlidersHorizontal },
   { href: "/admin/datos", etiqueta: "Datos", icono: Database },
 ];
@@ -38,9 +41,10 @@ export default function AdminLayout({
 }) {
   const ruta = usePathname();
   const montado = useMontado();
-  const { rol, salir } = useSesion();
+  const { rol, resuelta } = useSesion();
+  const { salir, saliendo } = useSalir();
 
-  if (montado && rol !== "admin") {
+  if (montado && resuelta && rol !== "admin") {
     return (
       <main className="mx-auto flex w-full max-w-md flex-1 items-center px-4">
         <EstadoVacio
@@ -67,10 +71,14 @@ export default function AdminLayout({
                 Backoffice
               </p>
             </div>
-            <Button variant="ghost" size="icon" aria-label="Salir" asChild>
-              <Link href="/ingresar" onClick={salir}>
-                <LogOut />
-              </Link>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={salir}
+              disabled={saliendo}
+              aria-label="Salir"
+            >
+              <LogOut />
             </Button>
           </div>
 

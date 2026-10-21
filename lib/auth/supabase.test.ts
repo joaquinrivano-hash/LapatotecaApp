@@ -1,0 +1,292 @@
+/**
+ * La identidad que se arma desde una sesión de Supabase.
+ *
+ * Sin red: el cliente es un doble. Lo que se verifica es lo que decide qué
+ * se dibuja y lo que podría dibujar de más.
+ */
+
+import { describe, expect, it, vi } from "vitest";
+
+import { crearAutenticacionSupabase, explicarAuth } from "@/lib/auth/supabase";
+import { clienteFalso, type Responder } from "@/lib/repo/supabase/falso";
+import type { ClienteSupabase } from "@/lib/repo/supabase/cliente";
+
+type Auth = Partial<ClienteSupabase["auth"]>;
+
+/** Un cliente con tablas falsas y una sesión falsa. */
+function doble(auth: Auth, responder?: Responder) {
+  const falso = clienteFalso(responder);
+  const cliente = {
+    from: (falso.cliente as ClienteSupabase).from,
+    rpc: (falso.cliente as ClienteSupabase).rpc,
+    auth,
+  } as unknown as ClienteSupabase;
+  return { ...falso, auth: crearAutenticacionSupabase(cliente) };
+}
+
+const usuario = { id: "uuid-u", email: "javiera@ejemplo.cl" };
+
+/** Responde la fila de `perfiles` y la de `clientes`. */
+const tablas =
+  (perfil: unknown, ficha: unknown): Responder =>
+  ({ tabla }) =>
+    tabla === "perfiles" ? { data: perfil } : { data: ficha };
+
+describe("explicarAuth", () => {
+  it("traduce lo que la persona puede arreglar", () => {
+    expect(explicarAuth({ message: "Invalid login credentials" })).toMatch(
+      /no calzan/,
+    );
+    expect(explicarAuth({ message: "Email not confirmed" })).toMatch(
+      /confirmaste tu correo/,
+    );
+    expect(explicarAuth({ message: "User already registered" })).toMatch(
+      /Ya hay una cuenta/,
+    );
+    expect(
+      explicarAuth({ message: "Password should be at least 6 characters" }),
+    ).toMatch(/6 caracteres/);
+  });
+
+  it("deja pasar lo que no sabe traducir, en vez de inventar", () => {
+    expect(explicarAuth({ message: "algo rarísimo del servidor" })).toBe(
+      "algo rarísimo del servidor",
+    );
+  });
+});
+
+describe("actual", () => {
+  // getSession lee la cookie sin verificarla contra el servidor, así que un
+  // token vencido o manipulado pasaría como válido para decidir qué dibujar.
+  it("verifica contra el servidor y no solo la cookie", async () => {
+    const getUser = vi.fn().mockResolvedValue({ data: { user: usuario } });
+    const getSession = vi.fn();
+    const { auth } = doble({ getUser, getSession } as Auth, tablas(null, null));
+
+    await auth.actual();
+
+    expect(getUser).toHaveBeenCalled();
+    expect(getSession).not.toHaveBeenCalled();
+  });
+
+  it("responde null cuando no hay nadie", async () => {
+    const { auth } = doble({
+      getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
+    } as Auth);
+
+    await expect(auth.actual()).resolves.toBeNull();
+  });
+
+  it("junta el rol del perfil con la ficha del cliente", async () => {
+    const { auth } = doble(
+      { getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }) } as Auth,
+      tablas({ rol: "cliente", nombre: "Javiera" }, { id: "uuid-c" }),
+    );
+
+    const identidad = await auth.actual();
+
+    expect(identidad).toMatchObject({
+      usuarioId: "uuid-u",
+      email: "javiera@ejemplo.cl",
+      rol: "cliente",
+      clienteId: "uuid-c",
+    });
+    // Un dueño no firma reportes.
+    expect(identidad?.staff).toBeUndefined();
+  });
+
+  it("al que trabaja acá le da con qué firmar", async () => {
+    const { auth } = doble(
+      { getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }) } as Auth,
+      tablas({ rol: "staff", nombre: "María" }, null),
+    );
+
+    const identidad = await auth.actual();
+    expect(identidad?.rol).toBe("staff");
+    expect(identidad?.staff).toBe("María");
+  });
+
+  // Una firma vacía en un reporte es peor que un correo feo.
+  it("si el perfil no trae nombre, firma con el correo", async () => {
+    const { auth } = doble(
+      { getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }) } as Auth,
+      tablas({ rol: "staff", nombre: "   " }, null),
+    );
+
+    const identidad = await auth.actual();
+    expect(identidad?.staff).toBe("javiera@ejemplo.cl");
+  });
+
+  // Equivocarse hacia abajo esconde un botón; hacia arriba dibuja un
+  // backoffice completo a alguien que no le corresponde.
+  it("un rol que no reconocemos cae a cliente, nunca a admin", async () => {
+    for (const rol of ["superadmin", "", null, undefined, "ADMIN"]) {
+      const { auth } = doble(
+        {
+          getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }),
+        } as Auth,
+        tablas({ rol }, null),
+      );
+      await expect(auth.actual().then((i) => i?.rol)).resolves.toBe("cliente");
+    }
+  });
+
+  it("sin fila en perfiles tampoco asume nada", async () => {
+    const { auth } = doble(
+      { getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }) } as Auth,
+      tablas(null, null),
+    );
+    await expect(auth.actual().then((i) => i?.rol)).resolves.toBe("cliente");
+  });
+});
+
+describe("entrar", () => {
+  it("normaliza el correo antes de mandarlo", async () => {
+    const signInWithPassword = vi
+      .fn()
+      .mockResolvedValue({ data: { user: usuario } });
+    const { auth } = doble({ signInWithPassword } as Auth, tablas(null, null));
+
+    await auth.entrar("  Javiera@Ejemplo.CL ", "secreta");
+
+    expect(signInWithPassword).toHaveBeenCalledWith({
+      email: "javiera@ejemplo.cl",
+      password: "secreta",
+    });
+  });
+
+  it("falla con el mensaje traducido", async () => {
+    const { auth } = doble({
+      signInWithPassword: vi
+        .fn()
+        .mockResolvedValue({ error: { message: "Invalid login credentials" } }),
+    } as Auth);
+
+    await expect(auth.entrar("a@b.cl", "mala")).rejects.toThrow(/no calzan/);
+  });
+});
+
+describe("registrar", () => {
+  // Sin sesión, cualquier insert sería con auth.uid() nulo y las políticas
+  // lo rechazarían: el alta tiene que esperar a que la persona confirme.
+  it("avisa que falta confirmar y no consulta la base de más", async () => {
+    const { auth, llamadas } = doble({
+      signUp: vi
+        .fn()
+        .mockResolvedValue({ data: { user: usuario, session: null } }),
+    } as Auth);
+
+    const registro = await auth.registrar({
+      email: "nueva@ejemplo.cl",
+      password: "secreta",
+      nombre: "Nueva",
+    });
+
+    expect(registro).toEqual({ identidad: null, faltaConfirmar: true });
+    expect(llamadas).toEqual([]);
+  });
+
+  it("con sesión activa devuelve la identidad ya armada", async () => {
+    const { auth } = doble(
+      {
+        signUp: vi.fn().mockResolvedValue({
+          data: { user: usuario, session: { user: usuario } },
+        }),
+      } as Auth,
+      tablas({ rol: "cliente" }, { id: "uuid-c" }),
+    );
+
+    const registro = await auth.registrar({
+      email: "nueva@ejemplo.cl",
+      password: "secreta",
+      nombre: "Nueva",
+    });
+
+    expect(registro.faltaConfirmar).toBe(false);
+    expect(registro.identidad).toMatchObject({ clienteId: "uuid-c" });
+  });
+
+  it("manda el nombre como metadato de la cuenta", async () => {
+    const signUp = vi
+      .fn()
+      .mockResolvedValue({ data: { user: usuario, session: null } });
+    const { auth } = doble({ signUp } as Auth);
+
+    await auth.registrar({
+      email: " Nueva@Ejemplo.cl ",
+      password: "secreta",
+      nombre: "  Nueva  ",
+    });
+
+    expect(signUp).toHaveBeenCalledWith({
+      email: "nueva@ejemplo.cl",
+      password: "secreta",
+      options: { data: { nombre: "Nueva" } },
+    });
+  });
+});
+
+describe("alCambiar", () => {
+  /**
+   * Supabase corre este callback con su propio candado tomado: cualquier
+   * llamada a la librería desde dentro se queda esperando para siempre.
+   * Costaría un cuelgue silencioso al entrar, que es el peor momento.
+   */
+  it("no toca la librería desde dentro del callback", async () => {
+    let avisar: (evento: string, sesion: unknown) => void = () => {};
+    const { auth, llamadas } = doble(
+      {
+        onAuthStateChange: (fn: typeof avisar) => {
+          avisar = fn;
+          return { data: { subscription: { unsubscribe: vi.fn() } } };
+        },
+      } as unknown as Auth,
+      tablas({ rol: "admin", nombre: "Jefa" }, null),
+    );
+
+    const vistas: unknown[] = [];
+    auth.alCambiar((i) => vistas.push(i));
+
+    avisar("SIGNED_IN", { user: usuario });
+
+    // Se vacían los microtasks antes de mirar, y eso es el test.
+    // Preguntar justo al volver del callback pasaba en falso: `Promise.all`
+    // sobre un thenable difiere la llamada a un microtask, así que no se
+    // había registrado nada ni en la versión rota. Con los microtasks ya
+    // corridos, lo único que todavía no consultó es la versión que de
+    // verdad salió del callback antes de hablar con la librería.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(llamadas).toEqual([]);
+
+    await vi.waitFor(() => expect(vistas).toHaveLength(1));
+    expect(vistas[0]).toMatchObject({ rol: "admin", staff: "Jefa" });
+  });
+
+  it("al cerrarse la sesión avisa que no hay nadie", async () => {
+    let avisar: (evento: string, sesion: unknown) => void = () => {};
+    const { auth } = doble({
+      onAuthStateChange: (fn: typeof avisar) => {
+        avisar = fn;
+        return { data: { subscription: { unsubscribe: vi.fn() } } };
+      },
+    } as unknown as Auth);
+
+    const vistas: unknown[] = [];
+    auth.alCambiar((i) => vistas.push(i));
+    avisar("SIGNED_OUT", null);
+
+    await vi.waitFor(() => expect(vistas).toEqual([null]));
+  });
+
+  it("devuelve cómo desuscribirse", () => {
+    const unsubscribe = vi.fn();
+    const { auth } = doble({
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe } } }),
+    } as unknown as Auth);
+
+    auth.alCambiar(() => {})();
+    expect(unsubscribe).toHaveBeenCalled();
+  });
+});

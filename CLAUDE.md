@@ -76,6 +76,8 @@ Se validan antes de permitir cualquier reserva:
   inclusive $16.000**, **más de 8 h $18.000**.
 - **Fuera de horario**: $1.000 por hora iniciada después de las 19:00, con 15
   minutos de gracia, calculado desde el **check-out real** registrado por staff.
+  **No se cobra solo**: queda calculado esperando que Administración decida si
+  lo cobra o lo perdona. Ver "Quién cobra, y cuándo".
 
 ### Planes de jardín
 
@@ -105,7 +107,7 @@ consumo y los avisos de vencimiento funcionan igual que en cualquier plan.
   **desde 7 noches -10%**, **desde 14 noches -15%**. Son excluyentes entre sí.
 - **10% adicional** si el cliente tiene un **plan de jardín vigente**.
 - Paseo opcional: **$4.000 cada uno**, de 30 min.
-- Reserva con **abono del 30%**.
+- Reserva con **abono del 50%**.
 - **Devolución solo si se cancela con ≥48h de aviso**: devuelve el abono
   completo. Con menos de 48h, no se devuelve nada.
 
@@ -300,6 +302,203 @@ estadía, no cuando el perro llega. El check-in no toca el saldo. En un ingreso
 no planificado agendar y llegar son el mismo momento, así que ahí sí se
 descuenta al registrar.
 
+### Quién cobra, y cuándo
+
+**El cuidador no toca plata.** Marca llegada y salida y nada más: ni emite
+cobros ni perdona atrasos. Lo que su turno produce es información —la hora
+real de salida—, y de ahí sale el dinero después, decidido por otra persona.
+
+El motivo es el mismo por el que no ve la cobranza: quien está entregando un
+perro en la puerta, con el dueño enfrente, no debería tener que decidir si le
+cobra los $2.000 del atraso. Esa conversación no es suya.
+
+Entonces, cuándo nace cada cobro:
+
+| | Cuándo se paga |
+|---|---|
+| Plan de jardín | Al comprarlo, por adelantado |
+| Día suelto reservado | Al agendarlo, por adelantado |
+| Día de prueba | Al agendarlo |
+| Hotel | **50% al reservar**, saldo al retiro según la salida real |
+| Recargo fuera de horario | **Nunca solo**: lo decide Administración |
+| Ingreso no planificado | Lo emite Administración después |
+
+Y como el día de jardín ahora está pagado antes de usarse, **cancelarlo tiene
+consecuencia**: `cancelarDiaDeJardin` aplica la política y, cuando devuelve,
+anula el cobro marcándolo reembolsado en cero y le devuelve el día al pack. Un
+perro que ya llegó no se cancela —eso es un retiro, y lo registra el equipo—.
+
+La condición se muestra **antes de confirmar**, con las horas que quedan, y se
+recalcula en el render y no al montar: si alguien deja la pestaña abierta toda
+la tarde, lo que ve tiene que ser la condición de ahora y no la de cuando
+abrió.
+
+#### Devolver la plata no es lo mismo que anular el cobro
+
+Cancelar dentro de plazo tiene **dos caminos distintos**, y confundirlos sería
+prometer una transferencia que nunca llega:
+
+- **El cobro estaba pendiente** → anularlo YA es la devolución. No hay plata
+  que mover: queda reembolsado en cero y no se le pide ninguna cuenta.
+- **El dueño alcanzó a pagar** → la plata está en la casa y hay que
+  devolverla. El cobro queda reembolsado **conservando el monto**, que es
+  justamente lo que se le debe, y ahí sí se le piden los datos de
+  transferencia.
+
+Por eso el formulario de cuenta aparece **solo cuando hay algo que devolver**,
+y nunca cuando se cancela fuera de plazo. Ofrecerle una transferencia a alguien
+que nunca pagó, o a alguien que canceló tarde, es ofrecerle algo que no llega.
+
+Los datos se guardan en la **ficha del cliente**, no en el cobro: nadie se sabe
+su número de cuenta de memoria y pedírselo de nuevo en cada devolución es la
+manera de que la devolución quede a medias. El RUT es **del titular**, que
+puede no ser el cliente —hay cuentas a nombre de la pareja— y el banco rechaza
+la transferencia si el nombre no calza.
+
+#### Y la cancelación en sí llega a la bandeja
+
+Una cancelación sin aviso es **invisible**: el día desaparece del calendario y
+nadie se entera de quién avisó ni cuándo. Para la dueña eso importa — un cupo
+que se libera con dos días es otra cosa que uno que se libera a las nueve de
+la noche.
+
+Por eso cada cancelación deja una `Notificacion` por el mismo canal que las
+correcciones de ficha, en `/admin`. Una bandeja aparte sería una bandeja que
+se deja de abrir.
+
+El aviso dice el día, **con cuánta anticipación avisó** y en qué terminó el
+cobro, que son los tres finales posibles: anulado porque no alcanzó a pagarlo,
+pendiente de devolución porque sí pagó, o en pie porque canceló fuera de plazo.
+
+**El aviso sale siempre, también fuera de plazo** — y ese es el que más
+importa. La primera versión no lo mandaba en ese caso, porque esa rama volvía
+antes; justamente la cancelación sobre la hora, que es la que deja un cupo que
+ya no se alcanza a ofrecer.
+
+Y como el día y la anticipación son **hechos y no cambios**, van sin `antes`:
+la bandeja escribe la línea sola, sin el tachado ni la flecha que sí
+corresponden a "9 kg → 12 kg".
+
+Y la otra mitad: `/admin/pagos` tiene su propia tarjeta **"Por devolver"**, con
+la cuenta completa a la vista para copiarla. Va aparte de los cobros pendientes
+porque es al revés —ahí entra plata, acá sale— y juntarlas haría fácil
+confundir cobrarle a alguien con devolverle. Una promesa que no aparece en
+ninguna pantalla es una promesa que no se cumple.
+
+`lib/servicios/cobros-pendientes.ts` junta las tres colas que quedan
+esperando en el backoffice, y **no son la misma cosa**:
+
+- El **recargo fuera de horario** es una DECISIÓN. El pack cubre el día, no
+  que lo pasen a buscar a las ocho y media; pero si el dueño se quedó pegado
+  en el Costanera una vez, la dueña puede perdonarlo. Dos acciones: cobrarlo
+  o perdonarlo.
+- El **saldo de hotel** es una EMISIÓN, no una decisión: el hotel se paga
+  según la salida real y lo que falta contra el abono se debe. Lo único que
+  cambió es quién lo emite.
+- Los **días sin cobrar** son la red de seguridad: en la práctica son los
+  ingresos no planificados, porque un día reservado desde el portal ya trae
+  su cobro desde que se agendó. Si una jornada se registró y nunca se cobró,
+  aparece acá hasta que alguien la emita.
+
+**Perdonar deja rastro.** Un recargo perdonado nace como cobro en cero y
+marcado reembolsado, igual que la anulación del día de prueba. Borrarlo sería
+más limpio de mirar y dejaría la cobranza del mes sin poder explicarse: un
+cobro que desaparece no deja constancia de que existió ni de que alguien
+decidió perdonarlo.
+
+Y por eso **"¿ya se decidió?" se contesta con "¿existe un cobro de este
+concepto para esta estadía?"**: perdonar deja un cobro en cero, no deja un
+vacío, así que la cola no lo vuelve a ofrecer.
+
+La tarjeta vive en `/admin/pagos` y **se esconde sola cuando no hay nada**: un
+negocio al día no necesita mirar una tarjeta vacía todos los días. Muestra
+cinco dueños y resume el resto, porque un fin de semana largo puede dejar
+quince y quince bloques con botones no se leen, se barren.
+
+**Se agrupa por dueño, no por perro.** No es una preferencia de diseño: el
+cobro se le hace a una persona. Dos perros de la misma casa que salieron tarde
+el mismo día son UNA conversación y una transferencia; con las filas sueltas
+por perro, quien cobra tiene que ir juntando mentalmente cuáles son del mismo
+dueño antes de poder escribirle. Por eso cada dueño trae su total y un "Cobrar
+todo" cuando tiene más de uno.
+
+Los dueños salen ordenados por **lo que lleva más tiempo esperando**, no por
+monto: lo que se añeja es lo que se termina no cobrando.
+
+Y "Perdonar" aparece **solo en el recargo**. Un saldo de hotel o un día ya
+usado no son una decisión, son una deuda.
+
+En `/staff` el cierre avisa el atraso **en horas, sin el monto**: hay que
+conversarlo con el dueño que está ahí parado, pero poner un precio en esa
+pantalla convertiría la entrega del perro en una negociación con alguien que
+no tiene nada que decidir.
+
+El seed emite los dos cobros por separado y **deja los retiros tarde del
+pasado ya decididos** —uno de cada seis perdonado—, porque la cola es para lo
+que pasó recién y no para 60 días de historia esperando a alguien. Un día
+suelto futuro también nace cobrado: se paga al agendarlo, no al llegar.
+
+#### Emitir un cobro es avisarlo
+
+Un cobro que aparece sin explicación es la manera segura de que el dueño
+escriba preguntando qué es. Por eso `cobrarPendiente` emite **y avisa**, en la
+misma llamada: si fueran dos, el día que alguien agregue otra pantalla que
+cobre se le va a olvidar la segunda.
+
+Lo que el dueño **agenda desde el portal no avisa**: ya vio el precio cotizado
+antes de confirmar, y mandarle un mensaje sería contarle algo que acaba de
+hacer. El aviso es para lo otro — el recargo que decidió Administración, el
+saldo que salió de la hora real de salida, el día que se registró en la puerta.
+
+Va por la capa de mensajería, así que con el canal `simulado` no toca la red y
+el mensaje **queda igual en la bandeja**: el día que se enchufe WhatsApp, eso
+mismo sale de verdad sin tocar una línea. Y **sin canal el cobro se emite
+igual**: un mensaje que no sale no puede ser motivo para no cobrar.
+
+En la app el dueño lo ve en la pestaña **Cobros** de Mi cuenta, con el total
+por pagar arriba y cada cobro con su estado. Un cobro **reembolsado en cero no
+se muestra**: es la constancia de algo que se anuló, y al dueño le diría "te
+cobramos $0". Uno reembolsado **con monto** sí, pero dice "te lo devolvemos",
+porque es plata que la casa le debe y no un cobro suyo.
+
+### La hora que pasó y la hora en que se marcó
+
+`lib/rules/marca-de-asistencia.ts`. El cuidador marca de un toque, y a veces
+marca después: el perro llegó a las 8:00 y él alcanzó a tocar el botón a las
+8:40, con las manos ocupadas. Las dos horas son verdad y sirven para cosas
+distintas.
+
+- **`inicioReal` / `finReal` es lo que pasó**, y es lo único que cobra. De ahí
+  salen el tramo del día y el recargo.
+- **`inicioMarcadoEn` / `finMarcadoEn` es cuándo se apretó el botón.** No toca
+  un peso: dice qué tan al día se está marcando, que es información sobre la
+  operación y no sobre el perro.
+
+Confundirlas sería cobrarle a un dueño por lo ocupado que estuvo el equipo.
+
+**El check-in sigue siendo de un toque**: por omisión las dos horas son el
+mismo instante, que es el caso normal. Corregir es volver a llamar al mismo
+servicio con la hora de verdad — y eso importa porque el retiro del jardín
+**vuelve a cotizar**: escribir el campo a mano habría dejado la hora corregida
+y el cobro con el número viejo.
+
+**La hora de marca se anota solo la primera vez.** Si ya había una llegada,
+corregirla es arreglar un dato, no marcar de nuevo: ponerle "ahora" le
+inventaría un atraso a quien solo ordenó el registro. Y una estadía vieja, que
+nunca tuvo marca, se queda sin ella — "no se sabe" es la respuesta correcta, no
+la hora en que alguien la editó.
+
+`describirDesfase` devuelve `null` bajo los
+`NEGOCIO.asistencia.minutosDeMarcaAlDia`: marcar en el instante exacto es
+imposible con un perro en brazos, así que un par de minutos no es un atraso, es
+la vida real. Una pantalla que se queja de nada se deja de mirar.
+
+**Dónde se corrige: en la ficha, no en la tarjeta.** La tarjeta tiene dos
+blancos —el cuerpo abre la ficha, el botón grande marca— y un tercero los pone
+a pelear. Probándolo se vio literal: tocar la hora abría la hoja de ajuste *y*
+la ficha encima. Además el cuerpo de la tarjeta **es un `<button>`**, así que
+otro botón adentro era HTML inválido.
+
 ### La ficha del perro
 
 `components/shared/detalle-perro.tsx` es **una sola ficha para las tres
@@ -414,11 +613,31 @@ que ya tiene la edad: es lo prudente, y el dueño siempre puede agregarla.
 
 `reparosDeAlta` separa las dos cosas, igual que `evaluarAdmision`:
 
-- **Bloquea** lo que no tiene vuelta: el peso y la castración.
-- **Avisa** una vacuna vencida. Se renueva antes de venir, así que rechazar
-  ahí sería perder un cliente por algo que se arregla en una visita al
-  veterinario. El mensaje dice claro que sin ponerla al día no lo podemos
-  recibir el día de prueba.
+- **Bloquea** lo que no tiene vuelta: la castración.
+- **Avisa** una vacuna o un antiparasitario vencidos. Se renuevan antes de
+  venir, así que rechazar ahí sería perder un cliente por algo que se arregla
+  en una visita al veterinario. El mensaje dice claro que sin ponerlos al día
+  no lo podemos recibir el día de prueba.
+- **Se conversa** el peso. A veces hay vuelta y eso lo decide Administración
+  mirando al perro, no el formulario: la cuenta se crea, Administración recibe
+  una `Notificacion`, y el día de prueba queda bloqueado hasta que lo habilite
+  desde la ficha del cliente (`habilitarPeso`). La excepción guarda **hasta
+  cuántos kilos** se dio: si la ficha sube después, ya no es el perro que
+  alguien miró. La regla es `excedePeso`, en `admision.ts`.
+
+"Escríbenos" sin un número es una puerta pintada. `<ContactoCasa />` pone el
+WhatsApp de la casa, que es `Configuracion.whatsappDeContacto` y se edita en
+`/admin/configuracion`. Vacío, promete lo único que se puede cumplir: que le
+escribimos nosotros.
+
+### Lo que impide agendar se ve antes de elegir hora
+
+`/dia-de-prueba` revisa la admisión apenas se elige el perro y el día, no
+después de tocar una hora. Si falta algo que el dueño arregla solo (vacuna,
+antiparasitario) le abre su ficha ahí mismo para corregir la fecha; si es algo
+que se conversa (peso, castración), le pone el WhatsApp. Y siempre hay un
+"Volver a mi cuenta": una pantalla que dice "no puedes" sin decir qué hacer es
+la que ya nos reportaron.
 
 ### Los datos guardados se migran, no se botan
 
@@ -457,10 +676,26 @@ Así la pantalla muestra el precio en vivo y los reparos sin haber creado nada.
 A diferencia del ingreso no planificado del staff, acá **sí se bloquea**: el
 cliente reserva a futuro y no hay ningún perro en la puerta que registrar.
 
-- El día suelto de jardín **no se cobra al agendar**: se cobra al cerrar la
-  jornada, con la hora real. Lo que se descuenta al agendar es el día del plan.
-- La reserva de hotel deja el **abono del 30% pagado** y el saldo se cobra al
-  retiro.
+- El día suelto de jardín **se paga por adelantado**, al agendarlo. Lo que se
+  descuenta al agendar, si el perro tiene plan, es el día del pack.
+- **Cancelarlo sigue la misma forma que el hotel**: con 24 horas o más de
+  aviso no se cobra —y el día del pack vuelve al saldo—; con menos, el día se
+  pierde. Son 24 y no las 48 del hotel porque es un solo día: pedir dos días
+  de aviso para cancelar una jornada dejaría sin salida a cualquiera que se
+  enferme la noche antes. Pasado el corte el cupo ya no se alcanza a
+  revender, así que el día se cobra igual.
+- La reserva de hotel queda **por confirmar** con el cobro del abono del 50%
+  **pendiente**: no hay pasarela, el dueño transfiere y la reserva se
+  confirma cuando Administración marca el abono pagado (`marcarPagado`). El
+  cupo queda tomado desde que reserva —una reserva pendiente ocupa—, porque
+  si no dos dueños podrían transferir por el mismo lugar. El saldo se cobra
+  al retiro.
+- **Cómo se paga se dice donde se paga.** `<ComoPagar />` va junto al abono,
+  al día suelto y al total "Por pagar" de Mi cuenta: "transferencia" abre
+  los datos ahí mismo y "escríbenos" / "avísanos" abren el WhatsApp de la
+  casa con el mensaje escrito. Los datos de la cuenta son
+  `Configuracion.transferencia`, se editan en `/admin/configuracion`, y
+  vacíos dicen que llegan por WhatsApp.
 - La tienda, si un producto no alcanza, **compra lo que hay y lo avisa**, en
   vez de fallar la orden entera: en una tienda de mostrador eso es lo que pasa.
 - El desglose que ve el cliente muestra **cada descuento por separado**.
@@ -482,7 +717,10 @@ portada, con letra chica—.
 El alta pide los datos del dueño y del perro, incluidos los **vencimientos de
 las vacunas**: el día de prueba ya es una jornada completa en la casa con otros
 perros, así que la admisión se aplica igual. Lo único que impide crear la
-cuenta es lo que no tiene vuelta: el peso y la esterilización de los machos.
+cuenta es lo que no tiene vuelta: la esterilización de los machos. Con
+sobrepeso la cuenta se crea igual, el botón dice "Crear cuenta" y no "Crear
+cuenta y agendar", y en vez del calendario va a su cuenta, que explica que lo
+conversamos.
 
 ### El día de prueba
 
@@ -529,6 +767,14 @@ pedir permiso —son suyos y nadie los conoce mejor—, pero cada cambio deja un
 castración que se desmarca cambian si el perro puede quedarse. Por eso la
 comparación es en palabras (`"9 kg"` → `"12 kg"`, `"sí"` → `"no"`) y no entre
 propiedades: lo que importa es lo que cambió a la vista.
+
+**Menos el sexo y la castración.** Son los que deciden si un macho entra, y
+desmarcarlos después de reservar le da la vuelta a la admisión. En la ficha
+del dueño se ven pero no se tocan (`sexoYCastracionFijos`), y
+`actualizarPerroComoDueno` los descarta aunque lleguen: la regla vive en la
+capa de servicios, no en la pantalla. En Supabase la cuida además un trigger
+(`proteger_ficha_de_la_casa`), porque ahí el dueño tiene la API a mano. Si
+cambiaron de verdad, los corrige Administración.
 
 Dos detalles que costaron un bug cada uno:
 
@@ -598,6 +844,52 @@ Siempre `grid-cols-1` junto al variante del breakpoint:
 El chequeo es de una línea en el navegador:
 `document.documentElement.scrollWidth > clientWidth`.
 
+### A qué hora llegan y a qué hora los buscan
+
+`lib/rules/horarios.ts` y `lib/servicios/horarios.ts`. El calendario dice qué
+tan lleno estuvo cada día; esto dice **a qué hora pasa el movimiento** dentro
+del día, y cuánto se parece a lo agendado.
+
+**Son dos paneles, no dos series en un mismo gráfico.** El tablero ya tiene
+arriba un gráfico donde el ámbar es jardín y el marino es hotel; meter dos
+colores para llegadas y retiros haría que alguien leyera "ámbar = jardín" sin
+querer. Con un panel por pregunta cada uno tiene **una sola serie**, el título
+dice cuál es, y no hay identidad de color que malinterpretar.
+
+Los dos **comparten la escala vertical**: si cada uno se escalara solo, un
+panel con 3 retiros se vería igual de alto que otro con 30 y la forma del día
+—llegadas amontonadas en la mañana, retiros en la tarde— se perdería, que es
+justo lo que se quiere ver.
+
+La distribución devuelve **solo las horas entre la primera y la última con
+movimiento**. Las 24 completas dejan quince barras vacías a los lados y el
+movimiento real apretado en el medio.
+
+El número va **solo en el pico**: uno en cada barra es ruido y no cabe en un
+teléfono. Y el contenedor lleva `pt-4` para reservarle el espacio — sin eso la
+barra más alta llega al techo y el número queda ENCIMA de ella. Se vio así al
+abrirlo; el panel con el pico más bajo no lo notaba, que es exactamente por lo
+que un gráfico hay que mirarlo y no solo escribirlo.
+
+#### El detalle: cuánto se parece a lo agendado
+
+Detrás de un toque, porque es la segunda pregunta y no la primera. Son
+**porcentajes, no una serie en el tiempo**, así que van como números: un
+gráfico de tres barras para tres cifras es decorar.
+
+`clasificarPuntualidad` usa el margen de
+`NEGOCIO.asistencia.minutosDePuntualidad`. Un perro que llega diez minutos
+antes de lo agendado no llegó temprano: llegó. Sin margen el análisis diría que
+casi nadie es puntual, que es una manera elegante de no decir nada.
+
+Y hay una cifra que no es sobre los perros sino **sobre cuánto creerle a todo
+lo demás**: cuántos registros se marcaron a destiempo. Si la mitad se marcó
+horas después, las horas que se están analizando son las que el equipo alcanzó
+a anotar, no las que pasaron. Se muestra solo cuando hay algo que advertir.
+
+Solo entran jornadas y estadías **cerradas**. Una en curso no tiene hora de
+retiro, y contarla como "retiro a las 00:00" sería inventar un dato.
+
 ### El calendario y su semáforo
 
 En la tira de días el color va al revés de un semáforo de alerta: **verde desde
@@ -608,6 +900,188 @@ la tira lleva leyenda; el color solo nunca explica esa inversión.
 Las tarjetas de los días tienen todas las filas de alto fijo. "28 sep" en una
 línea se corta en los teléfonos angostos y desalinea la tira completa, así que
 la fecha va en dos líneas ("lun" sobre "28") y el mes vive en el encabezado.
+
+### La nube: las reglas viven pegadas a los datos
+
+`supabase/migrations/`. Dos archivos que se pegan en el editor SQL de
+Supabase, en orden, y que se pueden correr de nuevo sin hacer daño: el de
+`_esquema` crea las tablas y el de `_permisos` define quién ve qué.
+
+La carpeta se llama `migrations` y los archivos llevan **marca de tiempo**
+(`20261014120000_esquema.sql`) aunque el resto del repo esté en español: es
+la ruta y el formato que la integración de Supabase con GitHub espera, y se
+aplican **en orden alfabético**, que con marca de tiempo es el orden
+cronológico. Una migración que depende de otra anterior siempre lleva marca
+posterior. Pelear con la convención de una herramienta para ganar
+consistencia de nombres sale caro el día que se quiera encender la
+integración.
+
+Esto es lo que reemplaza al selector de rol. En el prototipo el rol vive en
+el navegador: cualquiera abre las herramientas de desarrollo, lo cambia a
+`admin` y ve la cobranza completa. Con **RLS** las reglas quedan pegadas a
+los datos, así que no hay pantalla que saltarse: si un dueño pide los pagos
+de otro, la base devuelve cero filas. Una pantalla que esconde un dato lo
+está escondiendo; la base que no lo entrega lo está protegiendo.
+
+Tres alcances:
+
+| | Ve |
+|---|---|
+| Dueño | Lo suyo. Sus perros, sus reservas, sus cobros. |
+| Equipo | La agenda, las fichas, los reportes y los cobros **de su turno**. |
+| Admin | Todo. |
+
+**El dueño no solo mira: agenda y compra.** Puede crear sus reservas, sus
+estadías, sus planes, sus servicios y sus órdenes, y cancelarlos o
+reprogramarlos — siempre con su propio `cliente_id`, que es lo que verifica
+el `with check`. Agendar además le crea el cobro, y ahí hay dos condiciones
+que no son decorativas: nace **pendiente** y **sin fecha de pago**. Nadie se
+da por pagado solo; eso sigue siendo de Administración, que es quien mira la
+transferencia.
+
+La frontera del equipo se corrigió una vez. "El equipo no ve la plata" era
+una buena idea en abstracto y choca con la operación real: el check-out del
+jardín vuelve a cotizar con la hora real —de ahí sale el recargo fuera de
+horario— y tiene que crear, corregir o borrar ese cobro. En vez de abrirle
+los pagos enteros, se le abren los **tres conceptos que nacen de su turno**
+(`dia_suelto`, `dia_de_prueba`, `saldo_hotel`). La deuda del cliente, los
+planes, los abonos y la cuenta del mes siguen siendo de Administración: el
+equipo ve lo que acaba de pasar en la casa, no lo que el dueño debe.
+
+#### Qué puede el cuidador, exactamente
+
+Verificado una por una en la prueba de aislamiento, no supuesto:
+
+| Puede | No puede |
+|---|---|
+| Ver la agenda de hoy y la de los días que vienen | Marcar un cobro como pagado |
+| Marcar llegada y salida | Tocar un cobro ya conciliado |
+| Mandar reportes y anotar incidentes | Ver la cuenta del mes de un cliente |
+| Abrir la ficha de cualquier perro | Sumar las ganancias |
+| Cobrar el día que acaba de cerrar | Emitir una cuenta mensual |
+| | Cambiar el precio de la vitrina |
+
+La línea que separa las dos columnas: **generar el cobro es consecuencia de
+cerrar la jornada; darlo por pagado es conciliar una transferencia.** Lo
+primero sale del turno, lo segundo lo mira Administración. Por eso un cobro
+ya pagado queda **fuera de su alcance**: no lo puede modificar ni borrar, y
+el intento de marcarlo pagado no falla en silencio sino con error.
+
+Y por eso "sumar las ganancias" da cero: los conceptos que no nacen del
+turno —planes, abonos, servicios, tienda, cuenta mensual— no los ve, así que
+no hay nada que sumar.
+
+#### Lo que RLS no puede cuidar: el monto
+
+Una política verifica **quién** cobra y **en qué estado** nace el cobro. No
+puede verificar **cuánto**. El monto lo calcula el navegador, así que alguien
+con la consola abierta puede crearse un cobro de $0, y ninguna política lo
+va a detener — no es un agujero en las reglas, es el límite de dónde están
+escritas.
+
+Hoy eso está acotado y a la vista: el cobro nace pendiente y lo marca pagado
+una persona mirando la transferencia, así que un cobro falso aparece raro en
+la pantalla de pagos. **Antes de que exista una pasarela de pago, la
+cotización tiene que moverse al servidor** — una ruta que cotice con las
+mismas reglas puras y escriba el cobro ella. Mientras el único camino a la
+plata sea una transferencia que un humano concilia, se puede vivir con esto;
+con cobro automático, no.
+
+#### Descontar stock sin poder tocar el precio
+
+La tentación era darle `update` sobre `productos` al dueño para que la
+compra descontara stock. Sería un error: con `update` podría cambiarle el
+**precio** a un producto, y ese precio lo leen todos los demás. Un permiso
+que se pide para restar uno al stock no puede venir con la capacidad de
+reescribir la vitrina.
+
+Por eso `descontar_stock()`, una función `security definer` que se salta RLS
+sobre `productos` y lo único que sabe hacer es **restar**, nunca bajo cero.
+Es la misma regla que `ajustarStock` ya tenía en el repositorio local,
+puesta donde no se puede evitar.
+
+Dos decisiones que se explican solas una vez escritas:
+
+- **`configuracion` se lee sin sesión.** La pantalla de crear cuenta
+  necesita las razas y los campos obligatorios para dibujarse, y todavía no
+  hay nadie identificado. No hay nada reservado ahí —son las mismas listas
+  que el folleto— y cerrarla dejaría el formulario sin desplegables.
+- **El rol lo asciende Administración, nunca el interesado.** Si un dueño
+  pudiera editar su fila de `perfiles`, se haría admin en una línea de
+  consola. Una cuenta nueva nace `cliente` por disparador.
+
+#### Cómo entra alguien del equipo
+
+El alta del portal **exige un perro**, porque es el alta de un dueño. La
+cuidadora no tiene perro que inscribir, así que por ahí no entra. Y el rol no
+se puede pedir al registrarse, porque entonces cualquiera se haría admin en el
+primer formulario.
+
+Por eso la invitación va **al revés**: Administración deja anotado el correo en
+`invitaciones` ANTES, y cuando esa persona se registra, el disparador le pone
+el rol que le corresponde. Quien llega por su cuenta, sin invitación anotada,
+nace `cliente`.
+
+Tres detalles que son la diferencia entre que funcione y que sea un agujero:
+
+- **El correo se compara en minúscula.** "Maria@" y "maria@" son la misma
+  persona para todo el mundo menos para una comparación de texto.
+- **La invitación se gasta al usarse.** Una que sirve para siempre es una que
+  alguien reutiliza.
+- **Nada de esto necesita la `service_role` key.** La decisión la toma el
+  disparador dentro de la base, no una llave viviendo en un servidor. Invitar
+  por la API de administración de Supabase habría exigido esa llave; esto no.
+
+El **primer admin** sí se asciende a mano, una vez, desde el editor SQL: no hay
+ningún admin todavía que pueda invitarlo. De ahí en adelante invita él.
+
+#### Grants y políticas son dos cosas
+
+Se confunden fácil y hacen falta las dos: el **grant** dice si un rol puede
+tocar la tabla, la **política** dice qué filas se lleva. Una tabla con
+políticas perfectas y sin grant devuelve "permission denied"; una con grant y
+sin políticas la entrega entera.
+
+El proyecto está creado con **"Automatically expose new tables" apagado** y
+**"Enable automatic RLS" encendido**. Por eso `0002_permisos.sql` nombra cada
+tabla a propósito en su bucle de grants: una tabla nueva nace sin alcance y
+hay que darle permiso explícito. Es más trabajo y es el lado correcto para
+equivocarse — lo que se olvide queda invisible en vez de quedar expuesto.
+
+El visitante sin cuenta alcanza exactamente dos tablas, y solo para leer:
+`productos` (la vitrina) y `configuracion` (las listas que el formulario de
+alta necesita para dibujarse).
+
+`unique (cliente_id, periodo)` en `cuentas_mensuales` baja a la base la
+idempotencia de la cuenta del día 1. Antes la cuidaba el servicio; ahora la
+cuida el lugar donde no se puede olvidar.
+
+#### Las políticas se prueban, no se leen
+
+```
+./supabase/pruebas/aislamiento.sh
+```
+
+Levanta un Postgres desechable, corre las migraciones dos veces, siembra
+cuatro cuentas y le pregunta a la base qué ve cada una; después recorre lo
+que cada rol tiene que poder hacer y lo que no. El andamio de la prueba arranca tan cerrado
+como el proyecto real —sin privilegios por defecto— así que caza las dos
+fallas: un RLS olvidado y un grant olvidado. Correrlo después de tocar cualquier
+`create policy` es obligatorio: una política que aísla hoy puede dejar de
+aislar con el próximo cambio y **la base no avisa**, solo devuelve una fila
+que no correspondía. Con RLS apagado en una sola tabla, la prueba muestra a
+un visitante anónimo leyendo todos los cobros.
+
+#### Cada archivo se repite por su cuenta
+
+Cada política se borra justo antes de crearse, con su nombre. La tentación
+era borrarlas todas de una al principio del archivo de permisos, que es
+menos código; el problema es que ese archivo dejaría de ser repetible solo:
+alguien va a volver a correr uno suelto en el editor SQL —para releerlo,
+para arreglar un typo— y se llevaría por delante las políticas de las
+migraciones posteriores **sin devolverlas**. La prueba lo cubre: corre la
+tanda entera, vuelve a correr solo el archivo de permisos y verifica que las
+políticas de los que vinieron después sigan ahí.
 
 ### Datos que persisten
 
