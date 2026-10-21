@@ -194,9 +194,19 @@ export function FormularioDeIngreso() {
         </Button>
       </Card>
 
-      <p className="text-muted-foreground flex items-center justify-center gap-2 text-center text-xs">
-        <Mail className="size-3.5 shrink-0" />
-        ¿Trabajas acá y no puedes entrar? Pídele a Administración que te invite.
+      {/* La gente del equipo no entra por el alta del portal: esa exige un
+          perro. Esta es su puerta, y conviene que esté a la vista — si no,
+          la cuidadora recién invitada no tiene cómo llegar. */}
+      <p className="text-muted-foreground text-center text-xs text-pretty">
+        <Mail className="mr-1.5 inline size-3.5 shrink-0 align-text-bottom" />
+        ¿Trabajas acá y todavía no tienes cuenta?{" "}
+        <Link
+          href="/crear-cuenta/equipo"
+          className="text-primary font-semibold underline underline-offset-2"
+        >
+          Créala con el correo con que te invitaron
+        </Link>
+        .
       </p>
     </main>
   );

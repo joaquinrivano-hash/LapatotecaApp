@@ -128,7 +128,9 @@ export default function Equipo() {
                 placeholder="maria@lapatoteca.cl"
               />
               <p className="text-muted-foreground text-xs text-pretty">
-                Tiene que ser el mismo con el que se va a registrar.
+                Tiene que ser el mismo con el que se va a registrar, en{" "}
+                <span className="font-semibold">/crear-cuenta/equipo</span>.
+                Pásale ese enlace: el alta normal del portal pide un perro.
               </p>
             </div>
 
