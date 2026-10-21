@@ -140,13 +140,21 @@ describe("registrarDueno", () => {
   // borrar, y esa persona no podría registrarse nunca más con su correo.
   it("valida la ficha ANTES de crear la cuenta de acceso", async () => {
     const a = auth(false);
-    const pesado = { ...PERRO, pesoKg: 30 };
+    // Un macho sin castrar, que es de lo poco que no tiene vuelta. El peso
+    // ya no sirve de ejemplo: desde que existe `excepcionPeso` avisa pero
+    // deja crear la cuenta, porque eso lo decide Administración mirando al
+    // perro y no el formulario.
+    const sinCastrar = {
+      ...PERRO,
+      sexo: "macho" as const,
+      esterilizado: false,
+    };
 
     await expect(
       registrarDueno(
         repo,
         a,
-        { cuenta: CUENTA, perro: pesado, password: "secreta" },
+        { cuenta: CUENTA, perro: sinCastrar, password: "secreta" },
         AHORA,
       ),
     ).rejects.toThrow(RegistroRechazado);
