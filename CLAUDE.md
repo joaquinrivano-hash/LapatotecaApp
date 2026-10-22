@@ -947,11 +947,26 @@ y *"activo desde 13:40"* en itálica para el rastro. Decirlos igual
 convertiría una deducción en un hecho, y eso después se usa para conversar
 sobre puntualidad. Sin ninguno de los dos, la respuesta es "no se sabe".
 
-Ojo con un hueco que queda: **marcar una llegada no guarda quién apretó el
-botón**, y marcar llegadas es lo que más se hace en un turno. Así que un
-turno tranquilo se parece a uno ausente, y la pantalla no lo presenta como
-ausencia. Se arregla con una columna `marcado_por` en `estadias_jardin` y
-`reservas_hotel`.
+Los rastros son **las marcas de asistencia** —cada llegada y cada salida que
+esa persona apretó— más los reportes e incidentes. Las marcas son el grueso:
+marcar llegadas es lo que más se hace en un turno.
+
+Se juntan por dos llaves distintas, y no es por gusto. Las marcas llevan el
+id de la cuenta (`inicioMarcadoPor` / `finMarcadoPor`), así que calzan
+exacto. Los reportes y los incidentes solo llevan `autorStaff`, que es el
+NOMBRE con el que se firmó: frágil —dos personas que se llamen igual se
+mezclan— y es lo que hay hasta que esos registros guarden el id.
+
+**La firma la pone la base, no el navegador.** El equipo ya puede actualizar
+esas filas, así que sin el disparador `firmar_la_marca` podría atribuirle una
+marca a otra persona escribiendo otro id desde la consola, y la planilla diría
+que alguien estuvo trabajando cuando no vino — peor que no tener el dato. El
+valor que manda la app es una conveniencia. Administración sí puede escribir
+cualquiera: corrige registros viejos.
+
+Y la firma va con la hora de marca, por el mismo motivo: corregir un dato no
+es marcar de nuevo, así que se queda con la de la primera vez. Si no, quien
+ordena un registro viejo aparecería trabajando ese día.
 
 **El turno planificado no lo puede tocar quien lo cubre.** RLS sabe acotar
 filas, no columnas, así que la política que deja fichar dejaría también

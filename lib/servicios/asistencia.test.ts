@@ -594,3 +594,35 @@ describe("corregir no inventa una hora de marca", () => {
     expect(corregida.inicioMarcadoEn).toBeUndefined();
   });
 });
+
+describe("quién marcó", () => {
+  beforeEach(() => montar({ estadiasJardin: [estadia()] }));
+
+  // Va con la hora de marca y por el mismo motivo: corregir un dato no es
+  // marcar de nuevo, así que la firma se queda con la de la primera vez.
+  // Si no, quien ordena un registro viejo aparecería trabajando ese día.
+  it("corregir la llegada no cambia quién la marcó", async () => {
+    await registrarLlegadaJardin(repo, "est-001", en("08:12"), en("08:12"), "p-maria");
+    const corregida = await registrarLlegadaJardin(
+      repo, "est-001", en("09:00"), en("08:00"), "p-otra",
+    );
+    expect(corregida.inicioMarcadoPor).toBe("p-maria");
+    expect(corregida.inicioReal).toBe(en("08:00"));
+  });
+
+  it("la llegada y la salida las puede firmar gente distinta", async () => {
+    await registrarLlegadaJardin(repo, "est-001", en("08:00"), en("08:00"), "p-manana");
+    const { estadia } = await registrarSalidaJardin(
+      repo, "est-001", en("18:00"), en("18:00"), "p-tarde",
+    );
+    expect(estadia.inicioMarcadoPor).toBe("p-manana");
+    expect(estadia.finMarcadoPor).toBe("p-tarde");
+  });
+
+  // En el prototipo no hay cuentas: la marca queda sin firma y la planilla
+  // lo muestra como "no se sabe", que es la verdad.
+  it("sin quién, la marca queda sin firma", async () => {
+    const e = await registrarLlegadaJardin(repo, "est-001", en("08:12"));
+    expect(e.inicioMarcadoPor).toBeUndefined();
+  });
+});

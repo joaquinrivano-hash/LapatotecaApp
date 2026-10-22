@@ -325,6 +325,32 @@ intento_como "$ADMIN" "y sí corrige el horario" "09:00" \
   "update turnos set desde = '09:00' where perfil_id = '$STAFF';
    select desde from turnos where perfil_id = '$STAFF' limit 1;"
 
+# ── Quién firma la marca ─────────────────────────────────────────────
+#
+# El equipo ya puede actualizar estas filas —marcar llegadas es su
+# trabajo—, así que sin el disparador podría atribuirle una marca a otra
+# persona escribiendo otro id. La planilla diría que alguien estuvo
+# trabajando cuando no vino, que es peor que no tener el dato.
+echo "▸ la firma de la marca"
+
+intento_como "$STAFF" "al marcar, la firma es suya" "es_suya" \
+  "update estadias_jardin set inicio_marcado_en = now(), inicio_marcado_por = '$STAFF'
+     where fecha = current_date;
+   select 'es_suya' from estadias_jardin
+     where fecha = current_date and inicio_marcado_por = '$STAFF';"
+
+intento_como "$STAFF" "no se la puede colgar a otro" "0" \
+  "update estadias_jardin set inicio_marcado_en = now(), inicio_marcado_por = '$ADMIN'
+     where fecha = current_date;
+   select count(*) from estadias_jardin
+     where fecha = current_date and inicio_marcado_por = '$ADMIN';"
+
+intento_como "$ADMIN" "Administración sí corrige una firma vieja" "1" \
+  "update estadias_jardin set inicio_marcado_en = now(), inicio_marcado_por = '$STAFF'
+     where fecha = current_date;
+   select count(*) from estadias_jardin
+     where fecha = current_date and inicio_marcado_por = '$STAFF';"
+
 echo "▸ repetir un archivo suelto no rompe los demás"
 psql -h "$D" -U postgres -v ON_ERROR_STOP=1 -q \
   -f "$raiz/supabase/migrations/20261014120100_permisos.sql" >/dev/null 2>&1
