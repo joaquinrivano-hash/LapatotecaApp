@@ -225,3 +225,15 @@ export const PRODUCTOS = [
 ] as const;
 
 export const STAFF = ["Cata", "Nico", "Jorge", "Pili"] as const;
+
+/**
+ * El id con que entra cada persona del equipo en el prototipo.
+ *
+ * Derivado del nombre y no sorteado: tiene que ser el MISMO en el selector
+ * de ingreso y en la planilla de turnos, y sobrevivir a regenerar el seed.
+ * Con un id al azar, el turno de Cata del lunes dejaría de ser de Cata en
+ * cuanto alguien reiniciara los datos.
+ */
+export function idDeStaff(nombre: string): string {
+  return `staff:${nombre.trim().toLowerCase()}`;
+}

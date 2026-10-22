@@ -9,6 +9,7 @@
  * resto de la app no se entera.
  */
 
+import { STAFF, idDeStaff } from "@/lib/data/catalogos";
 import { generarSeed, type DatosPatoteca } from "@/lib/data/seed";
 import { crearAgendaLocal } from "@/lib/repo/agenda-local";
 import { crearAlmacenLocal, type Almacen } from "@/lib/repo/almacen";
@@ -647,8 +648,22 @@ export function crearRepositorioLocal(
    * haría creer que la cuidadora puede entrar, y no habría cómo.
    */
   const equipo: EquipoRepo = {
+    /**
+     * Los cuatro del selector de ingreso, que son el equipo del prototipo.
+     *
+     * Antes devolvía una lista vacía, y con eso la planilla de turnos no se
+     * podía usar en modo demo: no había a quién asignarle un turno. Listar a
+     * los que YA entran por el selector no promete nada que no exista —es
+     * `invitar` lo que no se puede simular, porque haría creer que alguien
+     * tiene una cuenta con la que no podría entrar—.
+     */
     async miembros() {
-      return [];
+      return STAFF.map((nombre) => ({
+        id: idDeStaff(nombre),
+        nombre,
+        rol: "staff" as const,
+        creadoEn: `${ctx.datos().hoy}T12:00:00.000Z`,
+      }));
     },
     async invitaciones() {
       return [];

@@ -1068,8 +1068,51 @@ retiro, y contarla como "retiro a las 00:00" sería inventar un dato.
 con la misma gente: quién **puede** entrar (accesos) y quién **está** cuando
 hay perros (turnos).
 
-Va día por día y no en una grilla de siete columnas: en el celular la grilla
-obliga a desplazarse de lado para leer un turno.
+**Dos vistas de lo mismo, porque son dos preguntas distintas.** La primera
+versión era solo la segunda, con el argumento de que una grilla obliga a
+desplazarse de lado en el celular. El argumento sigue siendo cierto y no
+alcanza: armar la semana es comparar días entre sí, y eso pide verlos lado
+a lado.
+
+- **Grilla** (`components/admin/grilla-turnos.tsx`): una columna por turno
+  —"Turno 1", "Turno 2"— y una fila por media hora, con el bloque de cada
+  persona pintado a lo largo de las filas que cubre. Para ARMAR la semana y
+  ver dónde queda un hueco.
+- **Por día**: cómo le fue a cada turno —el fichaje, los rastros, el
+  atraso—, que es una lectura de a uno y no entra en una celda. Tocar un
+  bloque de la grilla abre ese mismo detalle debajo.
+
+**"Turno 1" y "Turno 2" son el ORDEN en que empiezan, no un campo.**
+Guardarlo obligaría a elegir la etiqueta al asignar y a corregirla cuando
+alguien entra antes. `ordenarTurnosDelDia` lo decide; a igual hora de
+entrada manda el que se va antes, para que dos turnos que empiezan juntos
+no bailen de columna entre una carga y otra.
+
+Las columnas son **siempre al menos dos**, aunque la semana esté vacía: una
+grilla sin columnas no se entiende, y las columnas vacías son justo las que
+muestran el día que nadie cubre. Y las filas **se estiran** más allá de las
+horas de atención si hay un turno fuera de ellas: una planilla que recorta
+al que entra a las 6 lo deja sin existir en la pantalla donde se revisa la
+planilla.
+
+Dos cosas que solo se vieron abriéndola en el navegador:
+
+- **Un ítem de grilla con `position: sticky` no se queda.** La columna de
+  las horas estaba dentro de la grilla con `sticky left-0` y se desplazaba
+  igual que todo lo demás —medido: se iba a `x = -78`—, porque el bloque
+  contenedor de un ítem de grilla es su propia celda. Ahora vive FUERA del
+  contenedor que se desplaza, y por eso las alturas de las filas son fijas
+  y no automáticas: las dos columnas tienen que calzar fila por fila.
+- **Un `<button>` centra su contenido vertical por omisión.** El nombre
+  quedaba flotando en la mitad del bloque en vez de arriba, donde empieza
+  el turno.
+
+El color es una AYUDA y no el dato: el nombre va escrito en el bloque. Si
+el color fuera lo único, la planilla no se podría leer en blanco y negro ni
+con daltonismo, y acá se mira para decidir quién viene mañana. Se reparte
+por **orden de aparición** y no por un hash del id: con un hash, dos
+personas de la misma semana pueden caer en el mismo color, y entonces la
+grilla dice que cubre la misma persona cuando son dos.
 
 **Lo real llega por dos caminos y nunca se mezclan.** El fichaje
 (`entradaReal` / `salidaReal`) es la hora que la persona declaró. Los
@@ -1126,6 +1169,17 @@ planificó es pedirle que invente el dato.
 
 El seed no inventa turnos. Sesenta días de planilla que nadie escribió es
 llenar la pantalla de datos falsos.
+
+**En el prototipo el equipo son los cuatro del selector de ingreso.** Antes
+`equipo.miembros()` devolvía una lista vacía y con eso la planilla no se
+podía usar en modo demo: no había a quién asignarle un turno, así que la
+pantalla existía y no se podía probar. Listar a los que YA entran por el
+selector no promete nada que no exista —es `invitar` lo que no se puede
+simular, porque haría creer que alguien tiene una cuenta con la que no
+podría entrar, y eso sigue dando error—. El id sale del nombre
+(`idDeStaff`) y el selector lo guarda como `usuarioId`, así que la llegada
+que marque en `/staff` cae en SU turno; con el id sorteado, regenerar el
+seed habría dejado el turno del lunes sin dueño.
 
 ### El calendario y su semáforo
 

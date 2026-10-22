@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LogoPatoteca } from "@/components/shared/logo";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
-import { STAFF } from "@/lib/data/catalogos";
+import { STAFF, idDeStaff } from "@/lib/data/catalogos";
 import { useConsulta } from "@/lib/hooks/use-consulta";
 import { useMontado } from "@/lib/hooks/use-montado";
 import { useSesion } from "@/lib/store/sesion";
@@ -45,7 +45,10 @@ export function SelectorDeRol() {
   const clientes = useConsulta((repo) => repo.clientes.listar());
   const perros = useConsulta((repo) => repo.perros.listar());
 
-  function ir(seleccion: Rol, extra: { clienteId?: string; staff?: string } = {}) {
+  function ir(
+    seleccion: Rol,
+    extra: { clienteId?: string; staff?: string; usuarioId?: string } = {},
+  ) {
     entrar({ rol: seleccion, ...extra });
     router.push(DESTINO[seleccion]);
   }
@@ -150,7 +153,13 @@ export function SelectorDeRol() {
                   key={nombre}
                   variant="outline"
                   size="lg"
-                  onClick={() => ir("staff", { staff: nombre })}
+                  onClick={() =>
+                    // El id va junto al nombre para que la marca que deje en
+                    // /staff caiga en SU turno de la planilla. Sin él, cada
+                    // llegada quedaba sin firma y la planilla decía "no se
+                    // sabe" para todo el mundo.
+                    ir("staff", { staff: nombre, usuarioId: idDeStaff(nombre) })
+                  }
                 >
                   {nombre}
                 </Button>

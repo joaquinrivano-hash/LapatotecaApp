@@ -1,16 +1,26 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  bloquesDeLaPlanilla,
   coberturaDelDia,
+  coloresPorPersona,
+  columnasPorDia,
   compararTurno,
   cubre,
+  filasDelTurno,
   huecosDeCobertura,
   minutosDelTurno,
+  ordenarTurnosDelDia,
+  rangoDeLaPlanilla,
   type FranjaDeCobertura,
 } from "@/lib/rules/turnos";
 import type { Turno } from "@/lib/types";
 
-const turno = (desde: string, hasta: string, extra: Partial<Turno> = {}): Turno => ({
+const turno = (
+  desde: string,
+  hasta: string,
+  extra: Partial<Turno> = {},
+): Turno => ({
   id: extra.id ?? "t-1",
   perfilId: extra.perfilId ?? "p-1",
   fecha: "2026-10-22",
@@ -81,7 +91,11 @@ describe("coberturaDelDia", () => {
 });
 
 describe("huecosDeCobertura", () => {
-  const franja = (hora: string, gente: number, perros: number): FranjaDeCobertura => ({
+  const franja = (
+    hora: string,
+    gente: number,
+    perros: number,
+  ): FranjaDeCobertura => ({
     minutoDelDia: Number(hora.slice(0, 2)) * 60 + Number(hora.slice(3)),
     hora,
     gente,
@@ -205,8 +219,151 @@ describe("compararTurno", () => {
 
   it("no depende de que los rastros lleguen ordenados", () => {
     const alReves = [...RASTROS].reverse();
-    expect(compararTurno(turno("07:00", "15:00"), alReves).entrada.instante).toBe(
-      "2026-10-22T11:00:00.000Z",
-    );
+    expect(
+      compararTurno(turno("07:00", "15:00"), alReves).entrada.instante,
+    ).toBe("2026-10-22T11:00:00.000Z");
+  });
+});
+
+describe("la planilla como grilla", () => {
+  const t = (desde: string, hasta: string) => ({ desde, hasta });
+
+  describe("ordenarTurnosDelDia", () => {
+    it("el que entra primero es el Turno 1", () => {
+      const orden = ordenarTurnosDelDia([
+        t("14:00", "21:00"),
+        t("07:00", "14:00"),
+      ]);
+      expect(orden[0].desde).toBe("07:00");
+      expect(orden[1].desde).toBe("14:00");
+    });
+
+    it("a igual entrada, primero el que se va antes", () => {
+      const orden = ordenarTurnosDelDia([
+        t("07:00", "21:00"),
+        t("07:00", "13:00"),
+      ]);
+      expect(orden[0].hasta).toBe("13:00");
+    });
+
+    it("el que cruza la medianoche va al final, no al principio", () => {
+      // "22:00 a 06:00" cierra a las 24:00, así que entra a las 22.
+      const orden = ordenarTurnosDelDia([
+        t("22:00", "06:00"),
+        t("07:00", "14:00"),
+      ]);
+      expect(orden[0].desde).toBe("07:00");
+    });
+
+    it("no muta la lista que recibe", () => {
+      const lista = [t("14:00", "21:00"), t("07:00", "14:00")];
+      ordenarTurnosDelDia(lista);
+      expect(lista[0].desde).toBe("14:00");
+    });
+  });
+
+  describe("columnasPorDia", () => {
+    it("con la semana vacía igual dibuja Turno 1 y Turno 2", () => {
+      expect(columnasPorDia([0, 0, 0])).toBe(2);
+    });
+
+    it("sin ningún día, tampoco se queda en cero", () => {
+      expect(columnasPorDia([])).toBe(2);
+    });
+
+    it("un día con tres turnos agrega la tercera columna para todos", () => {
+      expect(columnasPorDia([1, 3, 2])).toBe(3);
+    });
+  });
+
+  describe("rangoDeLaPlanilla", () => {
+    const ATENCION = { desde: 7 * 60, hasta: 21 * 60 };
+
+    it("sin turnos, son las horas de atención", () => {
+      expect(rangoDeLaPlanilla([], ATENCION.desde, ATENCION.hasta)).toEqual({
+        desde: 7 * 60,
+        hasta: 21 * 60,
+      });
+    });
+
+    it("se estira hacia arriba por el que entra antes", () => {
+      const r = rangoDeLaPlanilla(
+        [t("06:00", "14:00")],
+        ATENCION.desde,
+        ATENCION.hasta,
+      );
+      expect(r.desde).toBe(6 * 60);
+    });
+
+    it("y hacia abajo por el que cruza la medianoche", () => {
+      const r = rangoDeLaPlanilla(
+        [t("22:00", "06:00")],
+        ATENCION.desde,
+        ATENCION.hasta,
+      );
+      expect(r.hasta).toBe(24 * 60);
+    });
+
+    it("una entrada a media franja no deja la fila cortada", () => {
+      const r = rangoDeLaPlanilla(
+        [t("06:50", "14:00")],
+        ATENCION.desde,
+        ATENCION.hasta,
+      );
+      expect(r.desde).toBe(6 * 60 + 30);
+    });
+  });
+
+  describe("bloquesDeLaPlanilla", () => {
+    it("un bloque por paso, y el último no llega al final", () => {
+      const bloques = bloquesDeLaPlanilla({ desde: 7 * 60, hasta: 9 * 60 });
+      expect(bloques.map((b) => b.hora)).toEqual([
+        "07:00",
+        "07:30",
+        "08:00",
+        "08:30",
+      ]);
+    });
+  });
+
+  describe("filasDelTurno", () => {
+    const RANGO = { desde: 7 * 60, hasta: 21 * 60 };
+
+    it("de las 7 a las 14 son las primeras catorce filas", () => {
+      expect(filasDelTurno(t("07:00", "14:00"), RANGO)).toEqual({
+        desde: 0,
+        hasta: 14,
+      });
+    });
+
+    it("el que entra antes del rango empieza en la fila cero", () => {
+      expect(filasDelTurno(t("05:00", "09:00"), RANGO)?.desde).toBe(0);
+    });
+
+    it("el que cruza la medianoche se corta en el final del rango", () => {
+      expect(filasDelTurno(t("20:00", "02:00"), RANGO)?.hasta).toBe(28);
+    });
+
+    it("uno entero fuera del rango no tiene filas", () => {
+      expect(filasDelTurno(t("22:00", "23:00"), RANGO)).toBeNull();
+    });
+  });
+
+  describe("coloresPorPersona", () => {
+    it("cada persona distinta, un color distinto", () => {
+      const c = coloresPorPersona(["a", "b", "c"], 6);
+      expect(new Set(c.values()).size).toBe(3);
+    });
+
+    it("la misma persona siempre el mismo color, aparezca donde aparezca", () => {
+      const c = coloresPorPersona(["a", "b", "a", "a"], 6);
+      expect(c.get("a")).toBe(0);
+      expect(c.get("b")).toBe(1);
+    });
+
+    it("pasados los colores vuelve a empezar, no se cae", () => {
+      const c = coloresPorPersona(["a", "b", "c"], 2);
+      expect(c.get("c")).toBe(0);
+    });
   });
 });

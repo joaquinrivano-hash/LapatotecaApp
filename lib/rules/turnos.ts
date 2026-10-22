@@ -39,17 +39,20 @@ export interface FranjaDeCobertura {
  * día. Tratarlo como un rango vacío haría desaparecer de la planilla
  * justo al que se queda cuidando mientras todos duermen.
  */
-export function minutosDelTurno(turno: {
-  desde: string;
-  hasta: string;
-}): { desde: number; hasta: number } {
+export function minutosDelTurno(turno: { desde: string; hasta: string }): {
+  desde: number;
+  hasta: number;
+} {
   const desde = minutosDesdeHHMM(turno.desde);
   const hasta = minutosDesdeHHMM(turno.hasta);
   return { desde, hasta: hasta > desde ? hasta : 24 * 60 };
 }
 
 /** ¿El turno cubre ese minuto del día? */
-export function cubre(turno: { desde: string; hasta: string }, minuto: number): boolean {
+export function cubre(
+  turno: { desde: string; hasta: string },
+  minuto: number,
+): boolean {
   const r = minutosDelTurno(turno);
   return minuto >= r.desde && minuto < r.hasta;
 }
@@ -121,7 +124,11 @@ export function huecosDeCobertura(
   return huecos;
 }
 
-function cerrar(h: { desde: number; hasta: number; perros: number }): HuecoDeCobertura {
+function cerrar(h: {
+  desde: number;
+  hasta: number;
+  perros: number;
+}): HuecoDeCobertura {
   return {
     desde: hhmmDesdeMinutos(h.desde),
     // El final del día es "24:00" y no "00:00". `hhmmDesdeMinutos(1440)`
@@ -167,7 +174,10 @@ export interface ComparacionDeTurno {
  * mismo criterio con el que una estadía en curso no cuenta como "retiro a
  * las 00:00".
  */
-export function compararTurno(turno: Turno, rastros: Rastro[]): ComparacionDeTurno {
+export function compararTurno(
+  turno: Turno,
+  rastros: Rastro[],
+): ComparacionDeTurno {
   const ordenados = [...rastros].sort((a, b) =>
     a.instante < b.instante ? -1 : a.instante > b.instante ? 1 : 0,
   );
@@ -185,4 +195,122 @@ function lado(fichaje?: InstanteISO, rastro?: InstanteISO): LadoObservado {
   if (fichaje) return { instante: fichaje, fuente: "fichaje" };
   if (rastro) return { instante: rastro, fuente: "rastro" };
   return { instante: null, fuente: "nada" };
+}
+
+/* ── La planilla como grilla ──────────────────────────────────────────
+ *
+ * La otra manera de mirar lo mismo: una columna por turno —"Turno 1",
+ * "Turno 2"— y una fila por bloque horario, con el bloque de cada persona
+ * pintado a lo largo de las filas que cubre. Es la forma en que la dueña
+ * ya llevaba la planilla en una planilla de cálculo, y sirve para una
+ * pregunta que la vista por día contesta mal: **mirar la semana completa
+ * y ver dónde queda un hueco**. La vista por día contesta la otra —cómo le
+ * fue a cada turno— y por eso las dos siguen existiendo.
+ *
+ * "Turno 1" y "Turno 2" no son un campo del modelo: son el ORDEN en que
+ * empiezan los turnos de ese día. Guardarlo como dato obligaría a elegir
+ * la etiqueta al asignar, y a corregirla cuando alguien entra antes.
+ */
+
+/** Los turnos de un día en el orden en que empiezan: el primero es "Turno 1". */
+export function ordenarTurnosDelDia<T extends { desde: string; hasta: string }>(
+  turnos: T[],
+): T[] {
+  return [...turnos].sort((a, b) => {
+    const ra = minutosDelTurno(a);
+    const rb = minutosDelTurno(b);
+    // A igual hora de entrada, primero el que se va antes: así dos turnos
+    // que empiezan juntos no bailan de columna entre una carga y otra.
+    return ra.desde - rb.desde || ra.hasta - rb.hasta;
+  });
+}
+
+/**
+ * Cuántas columnas de turno lleva cada día.
+ *
+ * Siempre al menos `minimo`, aunque la semana esté vacía: una grilla sin
+ * columnas no se entiende, y las columnas vacías son justo las que
+ * muestran el día que nadie cubre.
+ */
+export function columnasPorDia(turnosPorDia: number[], minimo = 2): number {
+  return Math.max(minimo, ...turnosPorDia, 0);
+}
+
+export interface RangoDeLaPlanilla {
+  desde: number;
+  hasta: number;
+}
+
+/**
+ * Las horas que la grilla dibuja.
+ *
+ * Parte de las horas de atención y **se estira** para que entre cualquier
+ * turno asignado fuera de ellas. Una planilla que recorta al que entra a
+ * las 6 lo deja sin existir en la pantalla donde se revisa la planilla.
+ */
+export function rangoDeLaPlanilla(
+  turnos: { desde: string; hasta: string }[],
+  desdeMinuto: number,
+  hastaMinuto: number,
+): RangoDeLaPlanilla {
+  let desde = desdeMinuto;
+  let hasta = hastaMinuto;
+  for (const turno of turnos) {
+    const r = minutosDelTurno(turno);
+    if (r.desde < desde) desde = r.desde;
+    if (r.hasta > hasta) hasta = r.hasta;
+  }
+  // A la baja se redondea al bloque, a la alza se completa: si no, un turno
+  // que entra a las 6:50 dejaría su primera fila cortada por la mitad.
+  desde = Math.floor(desde / PASO_MINUTOS) * PASO_MINUTOS;
+  hasta = Math.ceil(hasta / PASO_MINUTOS) * PASO_MINUTOS;
+  return { desde, hasta };
+}
+
+/** Las filas de la grilla, de arriba abajo. */
+export function bloquesDeLaPlanilla(
+  rango: RangoDeLaPlanilla,
+): { minutoDelDia: number; hora: string }[] {
+  const bloques: { minutoDelDia: number; hora: string }[] = [];
+  for (let m = rango.desde; m < rango.hasta; m += PASO_MINUTOS) {
+    bloques.push({ minutoDelDia: m, hora: hhmmDesdeMinutos(m) });
+  }
+  return bloques;
+}
+
+/**
+ * Qué filas ocupa un turno dentro del rango, contadas desde 0.
+ *
+ * `hasta` es exclusivo, como un `slice`. Null si el turno queda entero
+ * fuera del rango, que no debería pasar —`rangoDeLaPlanilla` lo estira—
+ * pero pasa si alguien dibuja un rango a mano.
+ */
+export function filasDelTurno(
+  turno: { desde: string; hasta: string },
+  rango: RangoDeLaPlanilla,
+): { desde: number; hasta: number } | null {
+  const r = minutosDelTurno(turno);
+  const desde = Math.max(r.desde, rango.desde);
+  const hasta = Math.min(r.hasta, rango.hasta);
+  if (hasta <= desde) return null;
+  return {
+    desde: Math.floor((desde - rango.desde) / PASO_MINUTOS),
+    hasta: Math.ceil((hasta - rango.desde) / PASO_MINUTOS),
+  };
+}
+
+/**
+ * A cada persona su color, por orden de aparición.
+ *
+ * Por orden y no por un hash del id: con un hash, dos personas de la misma
+ * semana pueden caer en el mismo color, y entonces la grilla —que se lee
+ * por color— dice que cubre la misma persona cuando son dos. Repetir recién
+ * se vuelve posible pasados los colores que haya.
+ */
+export function coloresPorPersona(ids: ID[], cuantos: number): Map<ID, number> {
+  const mapa = new Map<ID, number>();
+  for (const id of ids) {
+    if (!mapa.has(id)) mapa.set(id, mapa.size % cuantos);
+  }
+  return mapa;
 }
