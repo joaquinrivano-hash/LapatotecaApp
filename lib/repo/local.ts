@@ -34,6 +34,7 @@ import type {
   SinId,
   SistemaRepo,
   SuscripcionRepo,
+  TurnoRepo,
 } from "@/lib/repo/tipos";
 import { fechaISO, hoyISO } from "@/lib/utils/fecha";
 import type {
@@ -54,6 +55,7 @@ import type {
   ReservaHotel,
   ServicioAgendado,
   Suscripcion,
+  Turno,
 } from "@/lib/types";
 
 export const CLAVE_ALMACEN = "patoteca:datos:v1";
@@ -417,6 +419,16 @@ class NotificacionesLocal
   }
 }
 
+class TurnosLocal extends ColeccionLocal<Turno> implements TurnoRepo {
+  enRango(desde: FechaISO, hasta: FechaISO) {
+    return this.filtrar((t) => t.fecha >= desde && t.fecha <= hasta);
+  }
+
+  porPersona(perfilId: ID) {
+    return this.filtrar((t) => t.perfilId === perfilId);
+  }
+}
+
 function normalizarDatos(datos: DatosPatoteca): DatosPatoteca {
   const vacias: (keyof DatosPatoteca)[] = [
     "clientes",
@@ -434,6 +446,7 @@ function normalizarDatos(datos: DatosPatoteca): DatosPatoteca {
     "incidentes",
     "mensajes",
     "notificaciones",
+    "turnos",
   ];
 
   for (const clave of vacias) {
@@ -678,6 +691,7 @@ export function crearRepositorioLocal(
     reportes: new ReportesLocal(ctx, "rep", (d) => d.reportes),
     incidentes: new IncidentesLocal(ctx, "inc", (d) => d.incidentes),
     mensajes: new MensajesLocal(ctx, "msg", (d) => d.mensajes),
+    turnos: new TurnosLocal(ctx, "turno", (d) => d.turnos ?? []),
     notificaciones: new NotificacionesLocal(ctx, "avi", (d) => d.notificaciones),
     configuracion,
     equipo,

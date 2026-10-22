@@ -53,6 +53,7 @@ import type {
   SinId,
   SistemaRepo,
   SuscripcionRepo,
+  TurnoRepo,
 } from "@/lib/repo/tipos";
 import { configuracionPorDefecto } from "@/lib/rules/alta-perro";
 import type {
@@ -74,6 +75,7 @@ import type {
   ReservaHotel,
   ServicioAgendado,
   Suscripcion,
+  Turno,
 } from "@/lib/types";
 import { fechaISO, hoyISO } from "@/lib/utils/fecha";
 
@@ -572,6 +574,17 @@ class MensajesSupabase
   }
 }
 
+class TurnosSupabase extends ColeccionSupabase<Turno> implements TurnoRepo {
+  /** `fecha` es una columna `date`: el filtro es exacto, sin recorte. */
+  enRango(desde: FechaISO, hasta: FechaISO) {
+    return this.traer((c) => c.gte("fecha", desde).lte("fecha", hasta));
+  }
+
+  porPersona(perfilId: ID) {
+    return this.porColumna("perfil_id", perfilId);
+  }
+}
+
 class NotificacionesSupabase
   extends ColeccionSupabase<Notificacion>
   implements NotificacionRepo
@@ -737,6 +750,7 @@ const TABLAS_DEL_DOMINIO = [
   ["incidentes", "incidentes"],
   ["mensajes", "mensajes"],
   ["notificaciones", "notificaciones"],
+  ["turnos", "turnos"],
 ] as const;
 
 function sistemaDe(
@@ -832,6 +846,7 @@ export function crearRepositorioSupabase(
     reportes: new ReportesSupabase(cliente, "reportes", "fecha"),
     incidentes: new IncidentesSupabase(cliente, "incidentes", "fecha"),
     mensajes: new MensajesSupabase(cliente, "mensajes", "creado_en"),
+    turnos: new TurnosSupabase(cliente, "turnos", "fecha"),
     notificaciones: new NotificacionesSupabase(
       cliente,
       "notificaciones",

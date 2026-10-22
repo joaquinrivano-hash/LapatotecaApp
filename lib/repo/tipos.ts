@@ -32,6 +32,7 @@ import type {
   ReservaHotel,
   ServicioAgendado,
   Suscripcion,
+  Turno,
   InstanteISO,
   Rol,
 } from "@/lib/types";
@@ -131,6 +132,12 @@ export interface MensajeRepo extends ColeccionRepo<MensajeSaliente> {
   enRango(desde: FechaISO, hasta: FechaISO): Promise<MensajeSaliente[]>;
 }
 
+/** Quién cubre qué horas, qué día. */
+export interface TurnoRepo extends ColeccionRepo<Turno> {
+  enRango(desde: FechaISO, hasta: FechaISO): Promise<Turno[]>;
+  porPersona(perfilId: ID): Promise<Turno[]>;
+}
+
 /** Utilidades que solo existen porque esto es un prototipo con datos mock. */
 export interface NotificacionRepo extends ColeccionRepo<Notificacion> {
   sinLeer(): Promise<Notificacion[]>;
@@ -220,6 +227,7 @@ export interface RepositorioPatoteca {
   reportes: ReporteRepo;
   incidentes: IncidenteRepo;
   mensajes: MensajeRepo;
+  turnos: TurnoRepo;
   notificaciones: NotificacionRepo;
   configuracion: ConfiguracionRepo;
   equipo: EquipoRepo;

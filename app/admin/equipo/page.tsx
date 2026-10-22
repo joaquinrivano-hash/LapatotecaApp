@@ -23,6 +23,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { hayAuthReal } from "@/lib/auth";
+import { PlanillaDeTurnos } from "@/components/admin/planilla-turnos";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import {
   estadoDeCorreos,
@@ -114,15 +116,6 @@ export default function Equipo() {
     [vuelta],
   );
 
-  if (!hayAuthReal()) {
-    return (
-      <EstadoVacio
-        titulo="Esto funciona con cuentas de verdad"
-        descripcion="En el prototipo el rol se elige al ingresar, así que no hay a quién invitar: cualquiera entra como cuidador o como administración desde el selector. Con la base en la nube, acá se anota el correo de quien va a trabajar contigo y la cuenta le nace con el rol puesto."
-      />
-    );
-  }
-
   /** Manda (o reenvía) el correo y dice cómo le fue. */
   async function mandarCorreo(email: string, suNombre?: string) {
     setMandando(email);
@@ -195,265 +188,306 @@ export default function Equipo() {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-1">
-        <h1 className="font-display text-2xl font-bold">Equipo</h1>
-        <p className="text-muted-foreground text-sm text-pretty">
-          Invita a quien va a trabajar contigo: le llega un correo para elegir
-          su contraseña, y su cuenta nace con el rol que le pusiste.
-        </p>
-      </div>
+      <h1 className="font-display text-2xl font-bold">Equipo</h1>
 
-      <Card>
-        <CardContent className="space-y-4 p-5">
-          <h2 className="font-display flex items-center gap-2 text-lg font-bold">
-            <UserPlus className="size-5" />
-            Invitar
-          </h2>
+      {/* Dos trabajos distintos con la misma gente: quién PUEDE entrar, y
+          quién ESTÁ cuando hay perros. Separarlos en pestañas evita que la
+          pantalla de invitaciones crezca hasta no poder mirarse. */}
+      <Tabs defaultValue="turnos">
+        <TabsList>
+          <TabsTrigger value="turnos">Turnos</TabsTrigger>
+          <TabsTrigger value="accesos">Accesos</TabsTrigger>
+        </TabsList>
 
-          {correos.datos && !correos.datos.activos && (
-            <p className="bg-warning/12 text-warning flex items-start gap-2 rounded-xl p-3 text-sm text-pretty">
-              <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-              <span>
-                {correos.datos.motivo} Mientras tanto la invitación queda
-                anotada y le puedes mandar el enlace por WhatsApp.
-              </span>
-            </p>
-          )}
+        <TabsContent value="turnos" className="mt-4">
+          <PlanillaDeTurnos />
+        </TabsContent>
 
-          <form onSubmit={invitar} className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor={`${idCorreo}-nombre`}>Su nombre</Label>
-              <Input
-                id={`${idCorreo}-nombre`}
-                autoComplete="off"
-                required
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                placeholder="María"
-              />
-              <p className="text-muted-foreground text-xs text-pretty">
-                Con este nombre firma los reportes que les llegan a los dueños.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor={idCorreo}>Su correo</Label>
-              <Input
-                id={idCorreo}
-                type="email"
-                inputMode="email"
-                autoComplete="off"
-                autoCapitalize="none"
-                required
-                value={correo}
-                onChange={(e) => setCorreo(e.target.value)}
-                placeholder="maria@lapatoteca.cl"
-              />
-              <p className="text-muted-foreground text-xs text-pretty">
-                Ahí le llega la invitación. Es también el correo con el que va a
-                entrar.
-              </p>
-            </div>
-
-            {/* `select` nativo: en el celular abre la rueda del sistema. */}
-            <div className="space-y-1.5">
-              <Label htmlFor={`${idCorreo}-rol`}>Qué va a poder hacer</Label>
-              <select
-                id={`${idCorreo}-rol`}
-                value={rol}
-                onChange={(e) => setRol(e.target.value as Rol)}
-                className="border-input bg-card h-11 w-full rounded-xl border px-3 text-base"
-              >
-                <option value="staff">
-                  Cuidador — marcar llegadas y salidas, reportes, fichas
-                </option>
-                <option value="admin">
-                  Administración — todo, incluida la plata
-                </option>
-              </select>
-            </div>
-
-            <Button
-              type="submit"
-              size="lg"
-              className="w-full"
-              disabled={ocupado || mandando !== null}
-            >
-              <Send />
-              {mandando ? "Mandando…" : "Invitar y mandar el correo"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="space-y-3 p-5">
-          <h2 className="font-display flex items-center gap-2 text-lg font-bold">
-            <Mail className="size-5" />
-            Invitaciones
-          </h2>
-
-          {invitaciones.cargando ? (
-            <Skeleton className="h-16 w-full" />
-          ) : sinUsar.length === 0 && esperando.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              No hay ninguna esperando.
-            </p>
+        <TabsContent value="accesos" className="mt-4 space-y-4">
+          {!hayAuthReal() ? (
+            <EstadoVacio
+              titulo="Esto funciona con cuentas de verdad"
+              descripcion="En el prototipo el rol se elige al ingresar, así que no hay a quién invitar: cualquiera entra como cuidador o como administración desde el selector. Con la base en la nube, acá se invita a quien va a trabajar contigo y la cuenta le nace con el rol puesto."
+            />
           ) : (
-            <ul className="space-y-2">
-              {/* Correo mandado: la cuenta ya existe con su rol y falta que
-                  la persona abra el enlace. No se cancela desde acá, porque
-                  la cuenta ya nació: se le quita el rol en la lista de abajo. */}
-              {esperando.map((invitacion) => (
-                <li
-                  key={invitacion.email}
-                  className="bg-secondary/40 flex flex-wrap items-center gap-3 rounded-xl p-3"
-                >
-                  <span className="min-w-40 flex-1">
-                    <span className="block truncate font-semibold">
-                      {invitacion.email}
-                    </span>
-                    <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
-                      <MailCheck className="size-3.5 shrink-0" />
-                      {NOMBRE_DEL_ROL[invitacion.rol]} · le llegó el correo,
-                      todavía no lo abre
-                    </span>
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={mandando !== null}
-                    onClick={() => mandarCorreo(invitacion.email)}
-                  >
-                    <RotateCw />
-                    {mandando === invitacion.email ? "Mandando…" : "Reenviar"}
-                  </Button>
-                </li>
-              ))}
+            <>
+              <p className="text-muted-foreground text-sm text-pretty">
+                Invita a quien va a trabajar contigo: le llega un correo para
+                elegir su contraseña, y su cuenta nace con el rol que le
+                pusiste.
+              </p>
 
-              {/* Anotada pero sin correo: o se anotó antes de que existiera
-                  el envío, o el correo no salió. */}
-              {sinUsar.map((invitacion) => (
-                <li
-                  key={invitacion.email}
-                  className="bg-secondary/40 space-y-3 rounded-xl p-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-semibold">
-                        {invitacion.email}
+              <Card>
+                <CardContent className="space-y-4 p-5">
+                  <h2 className="font-display flex items-center gap-2 text-lg font-bold">
+                    <UserPlus className="size-5" />
+                    Invitar
+                  </h2>
+
+                  {correos.datos && !correos.datos.activos && (
+                    <p className="bg-warning/12 text-warning flex items-start gap-2 rounded-xl p-3 text-sm text-pretty">
+                      <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+                      <span>
+                        {correos.datos.motivo} Mientras tanto la invitación
+                        queda anotada y le puedes mandar el enlace por WhatsApp.
                       </span>
-                      <span className="text-muted-foreground block text-sm">
-                        {NOMBRE_DEL_ROL[invitacion.rol]} · anotada el{" "}
-                        {formatearFechaCorta(invitacion.creadaEn)}, todavía no le
-                        llega nada
-                      </span>
-                    </span>
+                    </p>
+                  )}
+
+                  <form onSubmit={invitar} className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`${idCorreo}-nombre`}>Su nombre</Label>
+                      <Input
+                        id={`${idCorreo}-nombre`}
+                        autoComplete="off"
+                        required
+                        value={nombre}
+                        onChange={(e) => setNombre(e.target.value)}
+                        placeholder="María"
+                      />
+                      <p className="text-muted-foreground text-xs text-pretty">
+                        Con este nombre firma los reportes que les llegan a los
+                        dueños.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor={idCorreo}>Su correo</Label>
+                      <Input
+                        id={idCorreo}
+                        type="email"
+                        inputMode="email"
+                        autoComplete="off"
+                        autoCapitalize="none"
+                        required
+                        value={correo}
+                        onChange={(e) => setCorreo(e.target.value)}
+                        placeholder="maria@lapatoteca.cl"
+                      />
+                      <p className="text-muted-foreground text-xs text-pretty">
+                        Ahí le llega la invitación. Es también el correo con el
+                        que va a entrar.
+                      </p>
+                    </div>
+
+                    {/* `select` nativo: en el celular abre la rueda del sistema. */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`${idCorreo}-rol`}>
+                        Qué va a poder hacer
+                      </Label>
+                      <select
+                        id={`${idCorreo}-rol`}
+                        value={rol}
+                        onChange={(e) => setRol(e.target.value as Rol)}
+                        className="border-input bg-card h-11 w-full rounded-xl border px-3 text-base"
+                      >
+                        <option value="staff">
+                          Cuidador — marcar llegadas y salidas, reportes, fichas
+                        </option>
+                        <option value="admin">
+                          Administración — todo, incluida la plata
+                        </option>
+                      </select>
+                    </div>
+
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Cancelar la invitación de ${invitacion.email}`}
-                      disabled={ocupado}
-                      onClick={() => cancelar(invitacion.email)}
-                    >
-                      <Trash2 />
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      disabled={mandando !== null}
-                      onClick={() => mandarCorreo(invitacion.email)}
+                      type="submit"
+                      size="lg"
+                      className="w-full"
+                      disabled={ocupado || mandando !== null}
                     >
                       <Send />
-                      {mandando === invitacion.email
-                        ? "Mandando…"
-                        : "Mandar el correo"}
+                      {mandando ? "Mandando…" : "Invitar y mandar el correo"}
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        mandarPorWhatsapp(invitacion.rol, invitacion.email)
-                      }
-                    >
-                      <MessageCircle />
-                      Por WhatsApp
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={copiarEnlace}>
-                      <Copy />
-                      Copiar enlace
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+                  </form>
+                </CardContent>
+              </Card>
 
-      <Card>
-        <CardContent className="space-y-3 p-5">
-          <h2 className="font-display flex items-center gap-2 text-lg font-bold">
-            <Users className="size-5" />
-            Quién trabaja acá
-          </h2>
+              <Card>
+                <CardContent className="space-y-3 p-5">
+                  <h2 className="font-display flex items-center gap-2 text-lg font-bold">
+                    <Mail className="size-5" />
+                    Invitaciones
+                  </h2>
 
-          {miembros.cargando ? (
-            <Skeleton className="h-20 w-full" />
-          ) : delEquipo.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              Todavía nadie más que tú.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {delEquipo.map((miembro) => (
-                <li
-                  key={miembro.id}
-                  className="bg-secondary/40 flex flex-wrap items-center gap-3 rounded-xl p-3"
-                >
-                  <span className="min-w-40 flex-1">
-                    <span className="block truncate font-semibold">
-                      {miembro.nombre || "Sin nombre"}
-                      {miembro.id === yo && (
-                        <span className="text-muted-foreground font-normal">
-                          {" "}
-                          · eres tú
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-muted-foreground block text-sm">
-                      Desde el {formatearFechaCorta(miembro.creadoEn)}
-                    </span>
-                  </span>
+                  {invitaciones.cargando ? (
+                    <Skeleton className="h-16 w-full" />
+                  ) : sinUsar.length === 0 && esperando.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">
+                      No hay ninguna esperando.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {/* Correo mandado: la cuenta ya existe con su rol y falta que
+                  la persona abra el enlace. No se cancela desde acá, porque
+                  la cuenta ya nació: se le quita el rol en la lista de abajo. */}
+                      {esperando.map((invitacion) => (
+                        <li
+                          key={invitacion.email}
+                          className="bg-secondary/40 flex flex-wrap items-center gap-3 rounded-xl p-3"
+                        >
+                          <span className="min-w-40 flex-1">
+                            <span className="block truncate font-semibold">
+                              {invitacion.email}
+                            </span>
+                            <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
+                              <MailCheck className="size-3.5 shrink-0" />
+                              {NOMBRE_DEL_ROL[invitacion.rol]} · le llegó el
+                              correo, todavía no lo abre
+                            </span>
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={mandando !== null}
+                            onClick={() => mandarCorreo(invitacion.email)}
+                          >
+                            <RotateCw />
+                            {mandando === invitacion.email
+                              ? "Mandando…"
+                              : "Reenviar"}
+                          </Button>
+                        </li>
+                      ))}
 
-                  {/* Nadie se puede bajar a sí mismo el rol: quedarías sin
+                      {/* Anotada pero sin correo: o se anotó antes de que existiera
+                  el envío, o el correo no salió. */}
+                      {sinUsar.map((invitacion) => (
+                        <li
+                          key={invitacion.email}
+                          className="bg-secondary/40 space-y-3 rounded-xl p-3"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-semibold">
+                                {invitacion.email}
+                              </span>
+                              <span className="text-muted-foreground block text-sm">
+                                {NOMBRE_DEL_ROL[invitacion.rol]} · anotada el{" "}
+                                {formatearFechaCorta(invitacion.creadaEn)},
+                                todavía no le llega nada
+                              </span>
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Cancelar la invitación de ${invitacion.email}`}
+                              disabled={ocupado}
+                              onClick={() => cancelar(invitacion.email)}
+                            >
+                              <Trash2 />
+                            </Button>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              disabled={mandando !== null}
+                              onClick={() => mandarCorreo(invitacion.email)}
+                            >
+                              <Send />
+                              {mandando === invitacion.email
+                                ? "Mandando…"
+                                : "Mandar el correo"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                mandarPorWhatsapp(
+                                  invitacion.rol,
+                                  invitacion.email,
+                                )
+                              }
+                            >
+                              <MessageCircle />
+                              Por WhatsApp
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={copiarEnlace}
+                            >
+                              <Copy />
+                              Copiar enlace
+                            </Button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="space-y-3 p-5">
+                  <h2 className="font-display flex items-center gap-2 text-lg font-bold">
+                    <Users className="size-5" />
+                    Quién trabaja acá
+                  </h2>
+
+                  {miembros.cargando ? (
+                    <Skeleton className="h-20 w-full" />
+                  ) : delEquipo.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">
+                      Todavía nadie más que tú.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {delEquipo.map((miembro) => (
+                        <li
+                          key={miembro.id}
+                          className="bg-secondary/40 flex flex-wrap items-center gap-3 rounded-xl p-3"
+                        >
+                          <span className="min-w-40 flex-1">
+                            <span className="block truncate font-semibold">
+                              {miembro.nombre || "Sin nombre"}
+                              {miembro.id === yo && (
+                                <span className="text-muted-foreground font-normal">
+                                  {" "}
+                                  · eres tú
+                                </span>
+                              )}
+                            </span>
+                            <span className="text-muted-foreground block text-sm">
+                              Desde el {formatearFechaCorta(miembro.creadoEn)}
+                            </span>
+                          </span>
+
+                          {/* Nadie se puede bajar a sí mismo el rol: quedarías sin
                       ninguna administración y no habría cómo volver a
                       subirse, porque para eso hace falta ser admin. */}
-                  {miembro.id === yo ? (
-                    <span className="flex items-center gap-1.5 text-sm font-semibold">
-                      <ShieldCheck className="size-4" />
-                      {NOMBRE_DEL_ROL[miembro.rol]}
-                    </span>
-                  ) : (
-                    <select
-                      aria-label={`Rol de ${miembro.nombre || miembro.id}`}
-                      value={miembro.rol}
-                      disabled={ocupado}
-                      onChange={(e) => cambiar(miembro.id, e.target.value as Rol)}
-                      className="border-input bg-card h-10 rounded-xl border px-2 text-sm"
-                    >
-                      <option value="staff">Cuidador</option>
-                      <option value="admin">Administración</option>
-                      <option value="cliente">Dueño (sacar del equipo)</option>
-                    </select>
+                          {miembro.id === yo ? (
+                            <span className="flex items-center gap-1.5 text-sm font-semibold">
+                              <ShieldCheck className="size-4" />
+                              {NOMBRE_DEL_ROL[miembro.rol]}
+                            </span>
+                          ) : (
+                            <select
+                              aria-label={`Rol de ${miembro.nombre || miembro.id}`}
+                              value={miembro.rol}
+                              disabled={ocupado}
+                              onChange={(e) =>
+                                cambiar(miembro.id, e.target.value as Rol)
+                              }
+                              className="border-input bg-card h-10 rounded-xl border px-2 text-sm"
+                            >
+                              <option value="staff">Cuidador</option>
+                              <option value="admin">Administración</option>
+                              <option value="cliente">
+                                Dueño (sacar del equipo)
+                              </option>
+                            </select>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
                   )}
-                </li>
-              ))}
-            </ul>
+                </CardContent>
+              </Card>
+            </>
           )}
-        </CardContent>
-      </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

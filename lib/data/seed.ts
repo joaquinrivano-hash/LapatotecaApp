@@ -54,7 +54,7 @@ import {
   sumarDias,
 } from "@/lib/utils/fecha";
 import type {
-  Cliente,
+Cliente,
   Configuracion,
   CuentaMensual,
   EstadiaJardin,
@@ -72,6 +72,7 @@ import type {
   ServicioAgendado,
   Suscripcion,
   TipoIncidente,
+  Turno,
   Vacuna,
 } from "@/lib/types";
 
@@ -93,6 +94,8 @@ export interface DatosPatoteca {
   incidentes: Incidente[];
   mensajes: MensajeSaliente[];
   notificaciones: Notificacion[];
+  /** La planilla de turnos. El seed no la llena: se arma a mano. */
+  turnos: Turno[];
   /** Lo que Administración exige en una ficha nueva. */
   configuracion: Configuracion;
 }
@@ -970,6 +973,9 @@ export function generarSeed(
     hoy,
     clientes,
     perros,
+    // La planilla se arma a mano: inventar turnos de 60 días atrás sería
+    // llenar la pantalla de datos que nadie escribió.
+    turnos: [],
     reservasHotel,
     estadiasJardin,
     planes,

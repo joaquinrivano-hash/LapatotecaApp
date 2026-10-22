@@ -50,6 +50,7 @@ const PARES: Record<string, string> = {
   Incidente: "incidentes",
   MensajeSaliente: "mensajes",
   Notificacion: "notificaciones",
+  Turno: "turnos",
 };
 
 /**

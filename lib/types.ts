@@ -17,6 +17,37 @@ import type { TipoVacuna } from "@/lib/config/negocio";
 
 export type { TipoPlan, NivelSpa, DuracionPaseo, TipoVacuna };
 
+/* ── Turnos ────────────────────────────────────────────────────────── */
+
+/**
+ * Quién cubre qué horas, qué día.
+ *
+ * El turno es una promesa de Administración. Al lado se guarda lo que pasó
+ * de verdad, y viene de dos fuentes que NO son lo mismo:
+ *
+ * - `entradaReal` / `salidaReal`: la persona fichó. Es la hora exacta.
+ * - Los **rastros** (reportes e incidentes con su nombre y su hora) son un
+ *   PISO, no la presencia: si llegó a las 7 y el primer perro a las 8, su
+ *   primer rastro es a las 8. No se guardan acá, se deducen al mirar.
+ *
+ * Se muestran por separado a propósito: juntarlas en "hora de entrada"
+ * sería presentar una deducción como un hecho.
+ */
+export interface Turno {
+  id: ID;
+  /** La cuenta de quien lo cubre. */
+  perfilId: ID;
+  fecha: FechaISO;
+  /** "07:00" */
+  desde: string;
+  /** "15:00" */
+  hasta: string;
+  entradaReal?: InstanteISO;
+  salidaReal?: InstanteISO;
+  nota?: string;
+  creadoEn: InstanteISO;
+}
+
 export type Rol = "cliente" | "staff" | "admin";
 export type Linea = "hotel" | "jardin";
 
