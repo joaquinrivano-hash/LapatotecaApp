@@ -50,6 +50,22 @@ export function explicarAuth(error: AuthError | { message: string }): string {
   if (m.includes("rate limit") || m.includes("too many requests")) {
     return "Demasiados intentos seguidos. Espera un momento y vuelve a probar.";
   }
+  /*
+   * El correo de confirmación no salió.
+   *
+   * Es el error que más aparece al abrir un proyecto: el remitente que
+   * Supabase trae incluido manda muy pocos por hora, y cuando se pasa del
+   * tope devuelve esto. La cuenta puede haber quedado creada sin que la
+   * persona reciba nada, así que el mensaje tiene que decir qué hacer y no
+   * invitarla a reintentar —reintentar gasta otro envío—.
+   */
+  if (m.includes("sending confirmation") || m.includes("error sending")) {
+    return (
+      "Creamos tu cuenta pero no pudimos mandarte el correo de " +
+      "confirmación. Escríbenos y lo resolvemos — no vuelvas a crear la " +
+      "cuenta, ya existe."
+    );
+  }
   if (m.includes("failed to fetch") || m.includes("network")) {
     return "No pudimos conectarnos. Revisa tu conexión.";
   }
