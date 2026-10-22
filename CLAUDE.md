@@ -1186,11 +1186,17 @@ para operar: solo escribe a los miembros del equipo del proyecto y con un tope
 de pocos envíos por hora.
 
 Ese tope costó una tarde entera de diagnóstico, así que vale escribir cómo se
-ve desde adentro: la cuenta **queda creada** aunque el correo no salga, y
-Supabase responde `Error sending confirmation email`. Por eso el mensaje que
-ve la persona no la invita a reintentar —reintentar gasta otro envío, no
-arregla nada y la deja convencida de que no tiene cuenta cuando sí la tiene—
-sino que le pide que escriba.
+ve desde adentro: Supabase responde `Error sending confirmation email` y
+**deshace el registro** — la cuenta NO queda creada. Se comprobó mirando
+`auth.users` después de varios intentos fallidos: no quedó ninguna cuenta
+huérfana. Por eso el mensaje invita a reintentar, que es lo único que
+funciona.
+
+La primera versión del mensaje decía lo contrario —que la cuenta ya existía y
+que no la volviera a crear— porque se dio por supuesto que el registro
+sobrevivía al fallo del correo. Habría dejado a la persona esperando un correo
+de una cuenta que no existe. Lo que lo corrigió fue mirar la tabla, no
+razonarlo.
 
 Y una trampa del cambio a Resend: **conectar un SMTP propio NO sube el tope
 de envíos**. Sigue en el número bajo del remitente incluido hasta que se suba

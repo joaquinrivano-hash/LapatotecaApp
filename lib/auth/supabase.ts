@@ -53,17 +53,22 @@ export function explicarAuth(error: AuthError | { message: string }): string {
   /*
    * El correo de confirmación no salió.
    *
-   * Es el error que más aparece al abrir un proyecto: el remitente que
-   * Supabase trae incluido manda muy pocos por hora, y cuando se pasa del
-   * tope devuelve esto. La cuenta puede haber quedado creada sin que la
-   * persona reciba nada, así que el mensaje tiene que decir qué hacer y no
-   * invitarla a reintentar —reintentar gasta otro envío—.
+   * Es el error que más aparece al abrir un proyecto: el remitente incluido
+   * de Supabase manda muy pocos por hora y al pasarse devuelve esto.
+   *
+   * La versión anterior de este mensaje decía que la cuenta quedaba creada
+   * y le pedía a la persona que NO reintentara. Era al revés: Supabase
+   * deshace el registro cuando el correo falla —comprobado mirando la tabla
+   * de usuarios después de varios intentos fallidos, donde no quedó ninguna
+   * cuenta huérfana—. Así que reintentar es exactamente lo que corresponde,
+   * y decirle que ya tiene cuenta la dejaba esperando un correo que nunca
+   * iba a llegar por una cuenta que no existía.
    */
   if (m.includes("sending confirmation") || m.includes("error sending")) {
     return (
-      "Creamos tu cuenta pero no pudimos mandarte el correo de " +
-      "confirmación. Escríbenos y lo resolvemos — no vuelvas a crear la " +
-      "cuenta, ya existe."
+      "No pudimos mandarte el correo de confirmación, así que la cuenta no " +
+      "alcanzó a crearse. Vuelve a intentarlo en un rato; si sigue igual, " +
+      "escríbenos."
     );
   }
   if (m.includes("failed to fetch") || m.includes("network")) {

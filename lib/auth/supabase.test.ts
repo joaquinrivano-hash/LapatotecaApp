@@ -48,15 +48,18 @@ describe("explicarAuth", () => {
     ).toMatch(/6 caracteres/);
   });
 
-  // El que más aparece al abrir un proyecto: el remitente incluido de
-  // Supabase manda muy pocos por hora. La cuenta queda creada sin que la
-  // persona reciba nada, así que el mensaje no la puede invitar a
-  // reintentar: reintentar gasta otro envío y no arregla nada.
-  it("explica el correo que no salió sin pedir que lo reintente", () => {
+  /*
+   * Supabase DESHACE el registro cuando el correo falla: después de varios
+   * intentos fallidos no quedó ninguna cuenta huérfana en la tabla de
+   * usuarios. Por eso el mensaje tiene que invitar a reintentar, que es lo
+   * único que funciona, y NO puede decir que la cuenta ya existe: dejaría a
+   * la persona esperando un correo de una cuenta que no se creó.
+   */
+  it("el correo que no salió invita a reintentar y no promete una cuenta", () => {
     const m = explicarAuth({ message: "Error sending confirmation email" });
     expect(m).toMatch(/no pudimos mandarte el correo/i);
-    expect(m).toMatch(/ya existe/i);
-    expect(m).not.toMatch(/vuelve a probar/i);
+    expect(m).toMatch(/vuelve a intentarlo/i);
+    expect(m).not.toMatch(/ya existe/i);
   });
 
   it("deja pasar lo que no sabe traducir, en vez de inventar", () => {
