@@ -1267,6 +1267,28 @@ alta necesita para dibujarse).
 idempotencia de la cuenta del día 1. Antes la cuidaba el servicio; ahora la
 cuida el lugar donde no se puede olvidar.
 
+#### Saber si una migración ya corrió, desde afuera
+
+Sin sesión no se puede leer ninguna tabla del dominio, pero **sí se puede
+preguntar si una columna existe**, y eso alcanza para verificar una
+migración sin pedirle a nadie que abra el editor SQL:
+
+```
+GET /rest/v1/<tabla>?select=<columna>&limit=1
+```
+
+- `400` con `column ... does not exist` → la migración NO corrió.
+- `401` con `permission denied` → la columna existe; Postgres la resolvió y
+  recién después chocó con el grant.
+
+La diferencia está en el orden en que Postgres falla, y es confiable. Lo
+mismo sirve para una tabla entera: `404` con `Could not find the table` es
+que no existe, y `401` es que existe y está cerrada.
+
+**Siempre con un control al lado** —una columna inventada, o una tabla que
+se sabe que existe— porque un `401` aislado no distingue "existe" de
+"cualquier otro problema de permisos".
+
 #### Las políticas se prueban, no se leen
 
 ```
@@ -1437,6 +1459,8 @@ afuera, y se actualiza cuando cambia:
 | Hosting | Proyecto de Vercel **`lapatoteca`**: tiene el dominio y publica `main` como Production. |
 | Proyecto viejo | **`lapatoteca-app`** en Vercel quedó sin el dominio y está por borrarse. Ahí vive `lapatoteca-apppruebas.vercel.app`, que apuntaba a `prueba/vista-dueno`. **No se cargan variables ahí.** |
 | Base y login | Supabase, proyecto `kcxzoesspkggpchvqlnw`, plan Pro (US$25 + IVA al mes, el servidor Micro lo cubre el crédito). |
+| Migraciones corridas | **Las 13**, al 22 de octubre de 2026 — hasta `20261022140000_marcado_por`. Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
+| Confirmación de correo | **Encendida.** Quien se registra recibe un enlace y hasta que no lo abre no tiene sesión. Se apaga en Authentication → Sign In → Email si alguna vez estorba. |
 | Correo saliente | **Resend**, dominio `lapatoteca.cl` verificado (región Brasil). Los tres registros DNS los puso Resend solo, con el *Auto configure* de Vercel. La API key vive en Supabase → Authentication → SMTP, con usuario `resend` y remitente `hola@lapatoteca.cl`. |
 | Buscador de direcciones | Llave de Google Cloud con el correo de la empresa, restringida a los dominios de `lapatoteca.cl`, `*.vercel.app` y `localhost:3000`, y a Maps JavaScript API + Places API (New). |
 
@@ -1637,6 +1661,13 @@ npm run typecheck
 5. ~~**PWA** + pulido~~ — hecho: manifest, service worker con pantalla sin
    conexión, aviso de instalación y la pantalla de datos del backoffice
    (respaldo, restauración y reinicio del seed).
+6. ~~**A producción**~~ — hecho: la base en Supabase con RLS probado, login
+   real con correo y contraseña, puertas en el servidor (`proxy.ts`), el
+   repositorio y la identidad detrás del mismo interruptor
+   (`NEXT_PUBLIC_ORIGEN_DATOS`), correo saliente por Resend, dominio
+   `lapatoteca.cl` en Vercel, y la planilla de turnos con el veredicto del
+   día de prueba. El prototipo con datos del navegador **no se retiró**:
+   sigue siendo el modo de desarrollo y de demo.
 
 ## 8. Del folleto
 
