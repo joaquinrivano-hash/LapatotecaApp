@@ -14,9 +14,11 @@ import {
   crearCuenta,
   diaDePruebaAgendado,
   disponibilidadDeUnDia,
+  loPagadoPorElDiaDePrueba,
   reprogramarDiaDePrueba,
   RegistroRechazado,
 } from "./registro";
+import { devolucionesPorTransferir } from "./cobros-pendientes";
 import { habilitarPeso } from "./perros";
 import { cancelarDiaDeJardin, ReservaRechazada } from "./reservas";
 
@@ -498,6 +500,125 @@ describe("cambiar o cancelar el día de prueba", () => {
     );
     const [pago] = await repo.pagos.porCliente(cliente.id);
     expect(pago.estado).toBe("reembolsado");
+  });
+
+  describe("si ya lo había pagado", () => {
+    const BANCO = {
+      titular: "Camila Rojas",
+      rut: "12.345.678-5",
+      banco: "Banco Estado",
+      tipoDeCuenta: "Cuenta RUT",
+      numero: "12345678",
+    };
+
+    async function pagarElDia(clienteId: string) {
+      const [pago] = await repo.pagos.porCliente(clienteId);
+      await repo.pagos.actualizar(pago.id, {
+        estado: "pagado",
+        pagadoEn: CON_TIEMPO,
+        metodo: "transferencia",
+      });
+    }
+
+    async function conDiaPagado() {
+      const agendado = await conDiaAgendado();
+      await pagarElDia(agendado.cliente.id);
+      return agendado;
+    }
+
+    it("lo pagado es el cobro del día, y solo si está pagado", async () => {
+      const { cliente, perro } = await conDiaAgendado();
+      const dia = await diaDePruebaAgendado(repo, perro.id);
+      expect(await loPagadoPorElDiaDePrueba(repo, dia!.id)).toBe(0);
+
+      await pagarElDia(cliente.id);
+      expect(await loPagadoPorElDiaDePrueba(repo, dia!.id)).toBe(
+        PRECIOS.diaDePrueba,
+      );
+    });
+
+    it("a tiempo, queda entero por devolver y aparece en Por devolver", async () => {
+      const { cliente, perro } = await conDiaPagado();
+
+      const { aDevolver } = await cancelarDiaDePrueba(
+        repo,
+        perro.id,
+        CON_TIEMPO,
+        BANCO,
+      );
+
+      expect(aDevolver).toBe(PRECIOS.diaDePrueba);
+      const [pago] = await repo.pagos.porCliente(cliente.id);
+      // Reembolsado CONSERVANDO el monto: es lo que se le debe.
+      expect([pago.estado, pago.monto]).toEqual([
+        "reembolsado",
+        PRECIOS.diaDePrueba,
+      ]);
+
+      const porDevolver = await devolucionesPorTransferir(repo);
+      expect(porDevolver.map((d) => [d.cliente.id, d.pago.monto])).toEqual([
+        [cliente.id, PRECIOS.diaDePrueba],
+      ]);
+      // La cuenta queda en la ficha, a la vista de quien transfiere.
+      expect(porDevolver[0].cuenta).toEqual(BANCO);
+    });
+
+    it("tarde, la casa se queda con el cargo y devuelve el resto", async () => {
+      const { cliente, perro } = await conDiaPagado();
+
+      const { aDevolver } = await cancelarDiaDePrueba(
+        repo,
+        perro.id,
+        ENCIMA,
+        BANCO,
+      );
+
+      const resto = PRECIOS.diaDePrueba - PRECIOS.cancelacionTardiaDiaDePrueba;
+      expect(aDevolver).toBe(resto);
+      const pagos = await repo.pagos.porCliente(cliente.id);
+      expect(
+        pagos.map((p) => [p.estado, p.monto]).sort(),
+      ).toEqual(
+        [
+          ["pagado", PRECIOS.cancelacionTardiaDiaDePrueba],
+          ["reembolsado", resto],
+        ].sort(),
+      );
+      // Se reparte, no se suma: lo que entró sigue sumando lo que entró, y el
+      // tablero no ve un ingreso nuevo.
+      expect(pagos.reduce((s, p) => s + p.monto, 0)).toBe(PRECIOS.diaDePrueba);
+      expect(
+        (await devolucionesPorTransferir(repo)).map((d) => d.pago.monto),
+      ).toEqual([resto]);
+    });
+
+    it("el aviso dice cuánto hay que devolverle", async () => {
+      const { perro } = await conDiaPagado();
+
+      await cancelarDiaDePrueba(repo, perro.id, CON_TIEMPO, BANCO);
+
+      const [aviso] = await repo.notificaciones.sinLeer();
+      expect(aviso.cambios.find((c) => c.campo === "Cobro")?.despues).toBe(
+        "hay que devolverle $10.000, avisó a tiempo",
+      );
+    });
+
+    it("si no alcanzó a pagar, no guarda una cuenta que no se va a usar", async () => {
+      const { cliente, perro } = await conDiaAgendado();
+
+      const { aDevolver } = await cancelarDiaDePrueba(
+        repo,
+        perro.id,
+        CON_TIEMPO,
+        BANCO,
+      );
+
+      expect(aDevolver).toBe(0);
+      expect((await repo.clientes.obtener(cliente.id))!.datosBancarios).toBe(
+        undefined,
+      );
+      expect(await devolucionesPorTransferir(repo)).toEqual([]);
+    });
   });
 
   it("un perro que ya llegó no se cancela: eso es un retiro", async () => {

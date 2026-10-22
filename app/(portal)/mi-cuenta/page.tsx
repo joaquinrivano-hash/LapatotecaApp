@@ -13,9 +13,6 @@ import {
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,13 +20,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import { MiPerro } from "@/components/portal/mi-perro";
+import {
+  CuentaParaDevolver,
+  cuentaInicial,
+  faltanDatosDeCuenta,
+} from "@/components/portal/cuenta-para-devolver";
 import { ContactoCasa } from "@/components/shared/contacto-casa";
 import { YaPuedeReservar } from "@/components/shared/ya-puede-reservar";
 import { ComoPagar } from "@/components/shared/como-pagar";
 import { excedePeso } from "@/lib/rules/admision";
 import { PrecioCLP } from "@/components/shared/precio";
 import { BarraParticipacion } from "@/components/admin/barra-participacion";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { useCliente } from "@/lib/hooks/use-cliente";
 import { NEGOCIO } from "@/lib/config/negocio";
@@ -521,17 +523,8 @@ function CancelarDia({
   datosGuardados?: DatosBancarios;
 }) {
   const [confirmando, setConfirmando] = useState(false);
-  const [cuenta, setCuenta] = useState<DatosBancarios>(
-    datosGuardados ?? {
-      titular: "",
-      rut: "",
-      banco: "",
-      tipoDeCuenta: TIPOS_DE_CUENTA[0],
-      numero: "",
-    },
-  );
+  const [cuenta, setCuenta] = useState(() => cuentaInicial(datosGuardados));
   const { ocupado, ejecutar } = useAccion();
-  const idTipoDeCuenta = useId();
 
   // Lo pagado no depende del reloj, así que se pide una vez.
   const pagado = useConsulta(
@@ -551,9 +544,7 @@ function CancelarDia({
   // Si el cobro seguía pendiente, anularlo ya es la devolución: ofrecerle una
   // transferencia a alguien que nunca pagó es prometerle algo que no llega.
   const aDevolver = devolucion.devuelve ? (pagado.datos ?? 0) : 0;
-  const faltaCuenta =
-    aDevolver > 0 &&
-    (!cuenta.titular.trim() || !cuenta.rut.trim() || !cuenta.numero.trim());
+  const faltaCuenta = aDevolver > 0 && faltanDatosDeCuenta(cuenta);
 
   if (!confirmando) {
     return (
@@ -581,64 +572,11 @@ function CancelarDia({
       </p>
 
       {aDevolver > 0 && (
-        <div className="bg-secondary/50 space-y-3 rounded-xl p-3">
-          <p className="text-sm font-semibold">
-            Te devolvemos <PrecioCLP monto={aDevolver} /> por transferencia
-          </p>
-          <p className="text-muted-foreground text-xs text-pretty">
-            Dinos a qué cuenta. La hacemos dentro de los próximos días hábiles.
-          </p>
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <CampoCuenta
-              etiqueta="Nombre del titular"
-              valor={cuenta.titular}
-              alCambiar={(titular) => setCuenta({ ...cuenta, titular })}
-            />
-            <CampoCuenta
-              etiqueta="RUT del titular"
-              valor={cuenta.rut}
-              alCambiar={(rut) => setCuenta({ ...cuenta, rut })}
-            />
-            <CampoCuenta
-              etiqueta="Banco"
-              valor={cuenta.banco}
-              alCambiar={(banco) => setCuenta({ ...cuenta, banco })}
-            />
-            <div className="space-y-1">
-              <Label htmlFor={idTipoDeCuenta} className="text-xs">
-                Tipo de cuenta
-              </Label>
-              <Select
-                id={idTipoDeCuenta}
-                value={cuenta.tipoDeCuenta}
-                onChange={(e) =>
-                  setCuenta({ ...cuenta, tipoDeCuenta: e.target.value })
-                }
-              >
-                {TIPOS_DE_CUENTA.map((tipo) => (
-                  <option key={tipo} value={tipo}>
-                    {tipo}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="sm:col-span-2">
-              <CampoCuenta
-                etiqueta="Número de cuenta"
-                valor={cuenta.numero}
-                alCambiar={(numero) => setCuenta({ ...cuenta, numero })}
-              />
-            </div>
-          </div>
-
-          {/* El titular puede no ser el cliente: hay cuentas a nombre de la
-              pareja, y el banco rechaza si el nombre no calza con el RUT. */}
-          <p className="text-muted-foreground text-xs text-pretty">
-            Si la cuenta está a nombre de otra persona, pon sus datos: el banco
-            rechaza la transferencia cuando el nombre no calza con el RUT.
-          </p>
-        </div>
+        <CuentaParaDevolver
+          aDevolver={aDevolver}
+          cuenta={cuenta}
+          alCambiar={setCuenta}
+        />
       )}
 
       <div className="flex flex-wrap gap-2">
@@ -694,40 +632,6 @@ function CancelarDia({
           Mejor no
         </Button>
       </div>
-    </div>
-  );
-}
-
-const TIPOS_DE_CUENTA = [
-  "Cuenta corriente",
-  "Cuenta vista",
-  "Cuenta RUT",
-  "Cuenta de ahorro",
-];
-
-function CampoCuenta({
-  etiqueta,
-  valor,
-  alCambiar,
-}: {
-  etiqueta: string;
-  valor: string;
-  alCambiar: (valor: string) => void;
-}) {
-  // La etiqueta va amarrada al campo con `htmlFor`. Sin eso un lector de
-  // pantalla lee cinco cajas de texto sin nombre, y tocar la etiqueta en el
-  // celular no enfoca nada: el área tocable se reduce a la caja.
-  const id = useId();
-  return (
-    <div className="space-y-1">
-      <Label htmlFor={id} className="text-xs">
-        {etiqueta}
-      </Label>
-      <Input
-        id={id}
-        value={valor}
-        onChange={(e) => alCambiar(e.target.value)}
-      />
     </div>
   );
 }

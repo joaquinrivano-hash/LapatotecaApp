@@ -30,6 +30,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MiPerro } from "@/components/portal/mi-perro";
+import {
+  CuentaParaDevolver,
+  cuentaInicial,
+  faltanDatosDeCuenta,
+} from "@/components/portal/cuenta-para-devolver";
 import { ContactoCasa } from "@/components/shared/contacto-casa";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
@@ -42,11 +47,13 @@ import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { useCliente } from "@/lib/hooks/use-cliente";
 import { hoyDelStaff } from "@/lib/servicios/asistencia";
 import {
+  aDevolverAlCancelar,
   agendarDiaDePrueba,
   cancelarDiaDePrueba,
   cotizarDiaDePrueba,
   diaDePruebaAgendado,
   disponibilidadDeVariosDias,
+  loPagadoPorElDiaDePrueba,
   politicaDeCancelacion,
   reprogramarDiaDePrueba,
   RegistroRechazado,
@@ -60,6 +67,7 @@ import {
   sumarDias,
 } from "@/lib/utils/fecha";
 import { formatearCLP } from "@/lib/utils/moneda";
+import type { DatosBancarios } from "@/lib/types";
 
 /** Cuántos días adelante se muestran para elegir. */
 const DIAS_A_LA_VISTA = 14;
@@ -154,31 +162,6 @@ export default function DiaDePrueba() {
         return;
       }
       toast.error("No pudimos agendar ese día.", {
-        description: problema instanceof Error ? problema.message : undefined,
-      });
-    }
-  }
-
-  async function cancelar() {
-    if (!elegido) return;
-    try {
-      const { politica: aplicada } = await ejecutar((repo) =>
-        cancelarDiaDePrueba(repo, elegido.id),
-      );
-      toast.success(`Cancelamos el día de ${elegido.nombre}`, {
-        description: aplicada.sinCosto
-          ? "No te cobramos nada."
-          : `Avisaste con menos de ${NEGOCIO.diaDePrueba.horasParaCancelarSinCosto} horas, así que queda el cargo por cancelación tardía.`,
-      });
-      router.push("/mi-cuenta");
-    } catch (problema: unknown) {
-      if (problema instanceof RegistroRechazado) {
-        toast.error(problema.message, {
-          description: problema.motivos.join(" "),
-        });
-        return;
-      }
-      toast.error("No pudimos cancelar ese día.", {
         description: problema instanceof Error ? problema.message : undefined,
       });
     }
@@ -308,7 +291,7 @@ export default function DiaDePrueba() {
         </Card>
       )}
 
-      {yaAgendado && politica && (
+      {elegido && yaAgendado && politica && (
         <Card>
           <CardContent className="space-y-3 p-5">
             <div className="flex items-start gap-3">
@@ -328,15 +311,15 @@ export default function DiaDePrueba() {
                 </p>
               </div>
             </div>
-            <Button
-              variant="outline"
-              className="w-full"
-              disabled={ocupado}
-              onClick={cancelar}
-            >
-              <CalendarX />
-              Cancelar el día de prueba
-            </Button>
+            <CancelarDiaDePrueba
+              key={yaAgendado.id}
+              perroId={elegido.id}
+              perro={elegido.nombre}
+              estadiaId={yaAgendado.id}
+              inicioProgramado={yaAgendado.inicioProgramado}
+              datosGuardados={base.datos?.cliente?.datosBancarios}
+              alCancelar={() => router.push("/mi-cuenta")}
+            />
           </CardContent>
         </Card>
       )}
@@ -530,6 +513,131 @@ export default function DiaDePrueba() {
           es quien viene este día.
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Cancelar el día de prueba, con la condición a la vista antes de confirmar.
+ *
+ * Igual que el día de jardín en Mi cuenta: el primer toque no cancela, abre lo
+ * que pasa si cancela AHORA. Y si ya lo pagó y algo vuelve, pide la cuenta ahí
+ * mismo: sin eso la devolución queda anotada en "Por devolver" y sin a dónde
+ * mandarla.
+ */
+function CancelarDiaDePrueba({
+  perroId,
+  perro,
+  estadiaId,
+  inicioProgramado,
+  datosGuardados,
+  alCancelar,
+}: {
+  perroId: string;
+  perro: string;
+  estadiaId: string;
+  inicioProgramado: string;
+  datosGuardados?: DatosBancarios;
+  alCancelar: () => void;
+}) {
+  const [confirmando, setConfirmando] = useState(false);
+  const [cuenta, setCuenta] = useState(() => cuentaInicial(datosGuardados));
+  const { ocupado, ejecutar } = useAccion();
+
+  // Lo pagado no depende del reloj, así que se pide una vez.
+  const pagado = useConsulta(
+    (repo) => loPagadoPorElDiaDePrueba(repo, estadiaId),
+    [estadiaId],
+  );
+
+  // La política sí, y se recalcula en el render: si la pestaña queda abierta
+  // toda la tarde, lo que se ve es la condición de ahora.
+  const politica = politicaDeCancelacion(inicioProgramado);
+  const aDevolver = aDevolverAlCancelar(politica, pagado.datos ?? 0);
+  const faltaCuenta = aDevolver > 0 && faltanDatosDeCuenta(cuenta);
+  const horas = NEGOCIO.diaDePrueba.horasParaCancelarSinCosto;
+
+  if (!confirmando) {
+    return (
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={() => setConfirmando(true)}
+      >
+        <CalendarX />
+        Cancelar el día de prueba
+      </Button>
+    );
+  }
+
+  async function cancelar() {
+    try {
+      const resultado = await ejecutar((repo) =>
+        cancelarDiaDePrueba(
+          repo,
+          perroId,
+          new Date().toISOString(),
+          aDevolver > 0 ? cuenta : undefined,
+        ),
+      );
+      toast.success(`Cancelamos el día de ${perro}`, {
+        description:
+          resultado.aDevolver > 0
+            ? `Te transferimos ${formatearCLP(resultado.aDevolver)} en los próximos días hábiles.`
+            : resultado.politica.sinCosto
+              ? "No te cobramos nada."
+              : `Avisaste con menos de ${horas} horas, así que queda el cargo por cancelación tardía.`,
+      });
+      alCancelar();
+    } catch (problema: unknown) {
+      if (problema instanceof RegistroRechazado) {
+        toast.error(problema.message, {
+          description: problema.motivos.join(" "),
+        });
+        return;
+      }
+      toast.error("No pudimos cancelar ese día.", {
+        description: problema instanceof Error ? problema.message : undefined,
+      });
+    }
+  }
+
+  return (
+    <div className="border-border/60 space-y-3 border-t pt-3">
+      <p className="text-sm text-pretty">
+        {politica.sinCosto
+          ? aDevolver > 0
+            ? "Todavía estás a tiempo, así que te devolvemos lo que pagaste."
+            : "Todavía estás a tiempo: cancelas y no te cobramos nada."
+          : aDevolver > 0
+            ? `Quedan menos de ${horas} horas, así que se cobra el cargo por cancelación tardía de ${formatearCLP(politica.costo)} y te devolvemos el resto.`
+            : `Quedan menos de ${horas} horas, así que queda un cargo por cancelación tardía de ${formatearCLP(politica.costo)}.`}
+      </p>
+
+      {aDevolver > 0 && (
+        <CuentaParaDevolver
+          aDevolver={aDevolver}
+          cuenta={cuenta}
+          alCambiar={setCuenta}
+        />
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant={politica.sinCosto ? "default" : "destructive"}
+          disabled={ocupado || pagado.cargando || faltaCuenta}
+          onClick={cancelar}
+        >
+          {faltaCuenta ? "Completa la cuenta" : "Sí, cancelar"}
+        </Button>
+        <Button
+          variant="outline"
+          disabled={ocupado}
+          onClick={() => setConfirmando(false)}
+        >
+          Mejor no
+        </Button>
+      </div>
     </div>
   );
 }

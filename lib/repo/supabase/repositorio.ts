@@ -849,6 +849,9 @@ function agendaDe(cliente: Cliente0): AgendaRepo {
           sinCosto: r.sin_costo === true,
           costo: Number(r.costo),
         },
+        // La versión anterior de la función no lo devolvía: entonces no
+        // había nada que devolver, porque no tocaba lo pagado.
+        aDevolver: Number(r.a_devolver ?? 0),
       };
     },
 

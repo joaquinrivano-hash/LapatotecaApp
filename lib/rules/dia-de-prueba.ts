@@ -14,7 +14,7 @@ import { NEGOCIO } from "@/lib/config/negocio";
 import { PRECIOS } from "@/lib/config/precios";
 import { verificarCapacidad, type OcupanteRango } from "@/lib/rules/capacidad";
 import { horasEntre, instanteEn } from "@/lib/utils/fecha";
-import type { FechaISO, ID, InstanteISO } from "@/lib/types";
+import type { FechaISO, ID, InstanteISO, Pago } from "@/lib/types";
 
 export type MotivoNoDisponible = "pasado" | "tomado" | "sin_cupo";
 
@@ -145,4 +145,36 @@ export function politicaDeCancelacion(
   ahora: InstanteISO = new Date().toISOString(),
 ): PoliticaDeCancelacion {
   return politicaConAviso(horasEntre(ahora, inicioProgramado));
+}
+
+/**
+ * El cobro DEL DÍA de prueba: el primero que se emitió.
+ *
+ * Los que vienen después son cargos por moverlo encima de la hora, y esos no
+ * se tocan al cancelar: cada aviso tardío se cobra, y cancelar después a
+ * tiempo no borra el anterior.
+ */
+export function cobroDelDiaDePrueba(
+  pagos: Pago[],
+  estadiaId: ID,
+): Pago | undefined {
+  return pagos
+    .filter((p) => p.referenciaId === estadiaId && p.concepto === "dia_de_prueba")
+    .sort(
+      (a, b) =>
+        a.emitidoEn.localeCompare(b.emitidoEn) || a.id.localeCompare(b.id),
+    )[0];
+}
+
+/**
+ * Cuánto de lo ya pagado vuelve al cancelar.
+ *
+ * A tiempo, todo. Tarde, la casa se queda con el cargo y devuelve el resto:
+ * quien pagó $10.000 y cancela sobre la hora debe $5.000, no $10.000.
+ */
+export function aDevolverAlCancelar(
+  politica: PoliticaDeCancelacion,
+  pagado: number,
+): number {
+  return politica.sinCosto ? pagado : Math.max(0, pagado - politica.costo);
 }

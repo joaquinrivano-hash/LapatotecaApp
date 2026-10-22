@@ -264,8 +264,9 @@ export interface AgendaRepo {
   ): Promise<PlanContratado>;
   /**
    * Con aviso, el cobro del día queda anulado (reembolsado en cero, no
-   * borrado); encima de la hora, queda pendiente con el cargo tardío. El
-   * perro vuelve a la fila.
+   * borrado); encima de la hora, queda pendiente con el cargo tardío. Si ya
+   * lo había pagado, lo que corresponda queda por devolver. El perro vuelve a
+   * la fila.
    */
   cancelarDiaDePrueba(estadiaId: ID, ahora: InstanteISO): Promise<DiaDePruebaCancelado>;
   /** Encima de la hora suma un cargo aparte, que queda pendiente. */
@@ -302,6 +303,11 @@ export interface PlanContratado {
 export interface DiaDePruebaCancelado {
   estadia: EstadiaJardin;
   politica: PoliticaDeCancelacion;
+  /**
+   * Lo que hay que transferirle de vuelta. Cero si no alcanzó a pagar: ahí
+   * anular el cobro ya fue la devolución.
+   */
+  aDevolver: number;
 }
 
 export interface DiaDePruebaMovido {

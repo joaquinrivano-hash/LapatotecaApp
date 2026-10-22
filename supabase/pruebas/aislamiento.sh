@@ -383,6 +383,17 @@ prueba_en () {
    update perros set dia_de_prueba = jsonb_build_object('estado', 'agendado') where id = '$LOLA';"
 }
 
+# Lo mismo, pero el dueño ya transfirió y Administración lo marcó pagado.
+prueba_pagada_en () {
+  como_la_casa "insert into estadias_jardin (id, cliente_id, perro_id, fecha, inicio_programado, fin_programado, origen, estado)
+     values ('$PRUEBA', '$ANA_CLI', '$LOLA', (now() + interval '$1')::date,
+             now() + interval '$1', now() + interval '$1' + interval '6 hours',
+             'dia_de_prueba', 'esperada');
+   insert into pagos (cliente_id, concepto, referencia_id, monto, estado, emitido_en, pagado_en)
+     values ('$ANA_CLI', 'dia_de_prueba', '$PRUEBA', 10000, 'pagado', now() - interval '1 hour', now() - interval '30 minutes');
+   update perros set dia_de_prueba = jsonb_build_object('estado', 'agendado') where id = '$LOLA';"
+}
+
 # Un día suelto de jardín de Lola, con su cobro.
 suelto_en () {
   echo "insert into estadias_jardin (id, cliente_id, perro_id, fecha, inicio_programado, fin_programado, origen, estado)
@@ -414,6 +425,17 @@ intento "lo mueve encima de la hora: se suma el cargo" "pendiente 10000, pendien
   "$(prueba_en '3 hours') $MOVER $COBRO_DE_PRUEBA"
 intento "y cancelar después a tiempo no borra el cargo" "reembolsado 0, pendiente 5000" \
   "$(prueba_en '3 hours') $MOVER select cancelar_dia_de_prueba('$PRUEBA'); $COBRO_DE_PRUEBA"
+intento "pagó y cancela a tiempo: queda entero por devolver" "reembolsado 10000" \
+  "$(prueba_pagada_en '3 days') select cancelar_dia_de_prueba('$PRUEBA'); $COBRO_DE_PRUEBA"
+intento "y la función dice cuánto hay que devolver" "10000" \
+  "$(prueba_pagada_en '3 days') select cancelar_dia_de_prueba('$PRUEBA')->>'a_devolver';"
+intento "pagó y cancela tarde: se queda el cargo, devuelve el resto" "pagado 5000, reembolsado 5000" \
+  "$(prueba_pagada_en '3 hours') select cancelar_dia_de_prueba('$PRUEBA');
+   select string_agg(estado || ' ' || monto, ', ' order by estado)
+     from pagos where referencia_id = '$PRUEBA';"
+intento "y lo que entró suma lo mismo que entró" "10000" \
+  "$(prueba_pagada_en '3 hours') select cancelar_dia_de_prueba('$PRUEBA');
+   select sum(monto) from pagos where referencia_id = '$PRUEBA';"
 intento "cancela un día suelto a tiempo: anulado" "reembolsado 0" \
   "$(suelto_en '3 days') select cancelar_dia_de_jardin('$SUELTO');
    select estado || ' ' || monto from pagos where referencia_id = '$SUELTO';"

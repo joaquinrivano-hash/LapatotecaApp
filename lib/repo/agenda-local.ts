@@ -17,11 +17,15 @@ import { NEGOCIO } from "@/lib/config/negocio";
 import { PRECIOS } from "@/lib/config/precios";
 import { ErrorRepositorio } from "@/lib/repo/error";
 import type { AgendaRepo, RepositorioPatoteca } from "@/lib/repo/tipos";
-import { politicaDeCancelacion } from "@/lib/rules/dia-de-prueba";
+import {
+  aDevolverAlCancelar,
+  cobroDelDiaDePrueba,
+  politicaDeCancelacion,
+} from "@/lib/rules/dia-de-prueba";
 import { comprarPlan, esDiaHabil, planVigente } from "@/lib/rules/planes";
 import { calcularDevolucionJardin } from "@/lib/rules/precio-jardin";
 import { fechaISO } from "@/lib/utils/fecha";
-import type { EstadiaJardin, ID, Pago, PlanComprado } from "@/lib/types";
+import type { EstadiaJardin, ID, PlanComprado } from "@/lib/types";
 
 const ms = (instante: string) => new Date(instante).getTime();
 
@@ -29,22 +33,6 @@ type Colecciones = Pick<
   RepositorioPatoteca,
   "estadiasJardin" | "pagos" | "perros" | "planes"
 >;
-
-/**
- * El cobro DEL DÍA de prueba: el primero que se emitió.
- *
- * Los que vienen después son cargos por moverlo encima de la hora, y esos no
- * se tocan al cancelar: cada aviso tardío se cobra, y cancelar después a
- * tiempo no borra el anterior.
- */
-function cobroDelDia(pagos: Pago[], estadiaId: ID): Pago | undefined {
-  return pagos
-    .filter((p) => p.referenciaId === estadiaId && p.concepto === "dia_de_prueba")
-    .sort(
-      (a, b) =>
-        a.emitidoEn.localeCompare(b.emitidoEn) || a.id.localeCompare(b.id),
-    )[0];
-}
 
 export function crearAgendaLocal(repo: Colecciones): AgendaRepo {
   /** El día, si todavía se puede cambiar. Un perro que ya llegó, no. */
@@ -211,12 +199,14 @@ export function crearAgendaLocal(repo: Colecciones): AgendaRepo {
         estado: "cancelada",
       });
 
-      // Solo si sigue pendiente: anularlo ES la devolución. En cero se marca
-      // reembolsado en vez de borrarse: un cobro que desaparece no deja
-      // rastro de que existió, y la cobranza del mes tiene que poder
-      // explicarse.
-      const cobro = cobroDelDia(await repo.pagos.listar(), estadiaId);
-      if (cobro?.estado === "pendiente") {
+      const cobro = cobroDelDiaDePrueba(await repo.pagos.listar(), estadiaId);
+      let aDevolver = 0;
+
+      if (cobro?.estado === "pendiente" || cobro?.estado === "vencido") {
+        // No alcanzó a pagar: anularlo ES la devolución. En cero se marca
+        // reembolsado en vez de borrarse: un cobro que desaparece no deja
+        // rastro de que existió, y la cobranza del mes tiene que poder
+        // explicarse.
         await repo.pagos.actualizar(
           cobro.id,
           politica.costo > 0
@@ -233,13 +223,40 @@ export function crearAgendaLocal(repo: Colecciones): AgendaRepo {
                 venceEn: undefined,
               },
         );
+      } else if (cobro?.estado === "pagado") {
+        // Ya pagó: la plata está en la casa y lo que corresponda vuelve.
+        // Reembolsado CONSERVANDO el monto, que es lo que se le debe y lo que
+        // aparece en "Por devolver".
+        aDevolver = aDevolverAlCancelar(politica, cobro.monto);
+        if (aDevolver > 0 && politica.costo === 0) {
+          await repo.pagos.actualizar(cobro.id, {
+            estado: "reembolsado",
+            venceEn: undefined,
+          });
+        } else if (aDevolver > 0) {
+          // Tarde: la casa se queda con el cargo y devuelve el resto. Se
+          // reparte en vez de sumar un cobro de devolución, porque el
+          // tablero suma montos: lo que entró tiene que seguir sumando lo
+          // mismo que entró.
+          await repo.pagos.actualizar(cobro.id, { monto: politica.costo });
+          await repo.pagos.crear({
+            clienteId: cobro.clienteId,
+            concepto: "dia_de_prueba",
+            referenciaId: estadiaId,
+            monto: aDevolver,
+            estado: "reembolsado",
+            metodo: cobro.metodo,
+            emitidoEn: cobro.emitidoEn,
+            pagadoEn: cobro.pagadoEn,
+          });
+        }
       }
 
       await repo.perros.actualizar(estadia.perroId, {
         diaDePrueba: { estado: "pendiente" },
       });
 
-      return { estadia: cancelada, politica };
+      return { estadia: cancelada, politica, aDevolver };
     },
 
     async reprogramarDiaDePrueba(estadiaId, nuevo, ahora) {

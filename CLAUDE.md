@@ -843,13 +843,35 @@ backoffice sí sigue siendo alerta, porque el perro todavía no es cliente.
 
 | | Cancelar | Cambiar la fecha |
 |---|---|---|
-| Con 24 h o más | El cobro se anula | Sin costo |
-| Con menos de 24 h | El cobro pasa a $5.000 | Se suma un cargo de $5.000 |
+| Con 24 h o más | El cobro se anula; si ya pagó, se le devuelve entero | Sin costo |
+| Con menos de 24 h | El cobro pasa a $5.000; si ya pagó, se le devuelve el resto | Se suma un cargo de $5.000 |
 
-Como el cobro está pendiente, **anularlo es la devolución**: no hay plata que
+Si el cobro está pendiente, **anularlo es la devolución**: no hay plata que
 devolver, hay un cobro que dejar de existir. Y no se borra, se marca
 reembolsado en cero: un cobro que desaparece no deja rastro de que existió, y
 la cobranza del mes tiene que poder explicarse.
+
+**Si ya lo pagó, la plata está en la casa y vuelve**, igual que en el día de
+jardín (ver "Devolver la plata no es lo mismo que anular el cobro"). A tiempo,
+el cobro queda reembolsado **conservando el monto** y aparece en "Por
+devolver". Tarde, la casa se queda con el cargo y devuelve el resto: el cobro
+se **reparte** —el mismo queda pagado por $5.000 y los otros $5.000 van en un
+cobro aparte, reembolsado, con la fecha de emisión y de pago del original—.
+Se reparte y no se suma un cobro de devolución porque el tablero suma
+montos: uno nuevo inflaría el ingreso del día, y lo que entró tiene que
+seguir sumando lo que entró. La primera versión solo miraba el cobro
+pendiente: quien había transferido y cancelaba a tiempo se quedaba sin su
+plata y sin que nada lo mostrara.
+
+Quien paga antes no puede salir peor parado que quien no pagó: el que no
+transfirió y cancela tarde debe $5.000, así que el que transfirió los
+$10.000 recupera $5.000. Las condiciones que se ven antes de pagar lo dicen
+así; una versión anterior decía "no hay devolución" para el aviso tardío.
+
+La pantalla del día de prueba muestra la condición **antes** de cancelar,
+recalculada en el render, y si algo vuelve pide la cuenta ahí mismo con el
+mismo formulario del día de jardín (`components/portal/cuenta-para-devolver.tsx`),
+que se guarda en la ficha del cliente.
 
 **Cada aviso tardío se cobra por su cuenta.** El cargo por mover el día
 encima de la hora es un cobro aparte, y cancelar después a tiempo anula el
@@ -1360,7 +1382,9 @@ una transacción** —el día, el cobro, el pack, el perro—:
 `cancelar_dia_de_prueba`, `reprogramar_dia_de_prueba` y
 `cancelar_dia_de_jardin`. La app llega a ellas por `repo.agenda`, que en el
 prototipo es `lib/repo/agenda-local.ts`, la misma secuencia escrita sobre las
-colecciones. **Si cambias una, cambia la otra.**
+colecciones. **Si cambias una, cambia la otra.** `cancelar_dia_de_prueba`
+vive hoy en `20261022170000_devolver_el_dia_de_prueba.sql`, que la redefine
+para devolver lo ya pagado: la versión de `cambios_de_agenda` es la vieja.
 
 Cuatro cosas que no son obvias:
 
@@ -1889,6 +1913,7 @@ no tienen un orden que no rompa nada (ver más abajo): el código llegó a
 | `20261022140000_marcado_por` | Quién marcó cada llegada y salida, firmado por la base (`firmar_la_marca`) | Corrida (al 22-10-2026) |
 | `20261022150000_cambios_de_agenda` | Cancelar y mover lo agendado con su cobro, en la base; el disparador que no deja al dueño reescribir estadías ni reservas. **Sin ella, cancelar desde el portal falla** (antes de este cambio quedaba a medias) | Corrida el 22-10-2026, verificada desde afuera |
 | `20261022160000_planes_y_dia_de_prueba` | Comprar y usar un plan y agendar el día de prueba, en la base; los disparadores que no dejan al dueño tocar planes, aprobarse el día de prueba ni insertar días o reservas por fuera. **Va junto con su código**: con una sin la otra, agendar el día de prueba y usar el plan fallan (ver abajo) | Corrida el 22-10-2026, verificada desde afuera |
+| `20261022170000_devolver_el_dia_de_prueba` | Redefine `cancelar_dia_de_prueba` para que lo ya pagado quede en "Por devolver". **No está acoplada**: sin ella el código nuevo funciona igual, con el comportamiento viejo (lo pagado no se devuelve), así que se puede correr después de publicar. Si alguna vez se vuelve a correr `cambios_de_agenda` suelto, hay que correr esta después | **Sin confirmar** |
 
 La regla de acá en adelante:
 
@@ -1915,8 +1940,9 @@ si una migración ya corrió, desde afuera": las seis funciones pasaron de
 
 La prueba de aislamiento (`supabase/pruebas/aislamiento.sh`) ya corrió en
 verde con las once primeras, en la sesión que juntó las ramas (`39f7663`),
-y con las quince (hasta `planes_y_dia_de_prueba`) el 22-10-2026, en la
-sesión que arregló las cancelaciones y cerró los planes y el día de prueba. Eso dice que las migraciones hacen lo que dicen en
+con las quince (hasta `planes_y_dia_de_prueba`) el 22-10-2026, en la
+sesión que arregló las cancelaciones y cerró los planes y el día de prueba,
+y con las dieciséis (hasta `devolver_el_dia_de_prueba`) ese mismo día. Eso dice que las migraciones hacen lo que dicen en
 un Postgres limpio; si corrieron en producción lo dice la tabla.
 
 #### Lo que falta hacer afuera, y lo que falta decidir
@@ -1991,6 +2017,12 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
 8. Probar en la vista previa de `pruebas` **del proyecto `lapatoteca`** —no
    en `lapatoteca-app-git-pruebas-…`, que es el proyecto viejo— y recién
    entonces pasar `pruebas` a `main`.
+9. Correr en Supabase `20261022170000_devolver_el_dia_de_prueba` (editor SQL,
+   pegar el archivo entero, Run). Hasta que corra, un día de prueba ya
+   pagado y cancelado a tiempo **no aparece en "Por devolver"**. Como la
+   función ya existía, el truco del `401` no distingue la versión: se
+   confirma con `select prosrc like '%a_devolver%' from pg_proc where
+   proname = 'cancelar_dia_de_prueba';`, que tiene que dar `true`.
 
 **Decisiones de producto abiertas:**
 

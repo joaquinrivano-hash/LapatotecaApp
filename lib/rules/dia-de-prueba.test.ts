@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { NEGOCIO } from "@/lib/config/negocio";
 import { PRECIOS } from "@/lib/config/precios";
 import {
+  aDevolverAlCancelar,
   bloquesDeEntrada,
+  cobroDelDiaDePrueba,
   hayBloquesLibres,
   minutosDeEntrada,
   politicaConAviso,
@@ -10,6 +12,7 @@ import {
   rangoDelBloque,
 } from "@/lib/rules/dia-de-prueba";
 import type { OcupanteRango } from "@/lib/rules/capacidad";
+import type { Pago } from "@/lib/types";
 
 const LUNES = "2026-09-28";
 
@@ -142,5 +145,51 @@ describe("politicaDeCancelacion", () => {
     );
     expect(politica.horasDeAviso).toBe(24);
     expect(politica.sinCosto).toBe(true);
+  });
+});
+
+describe("aDevolverAlCancelar", () => {
+  const PRECIO = PRECIOS.diaDePrueba;
+  const CARGO = PRECIOS.cancelacionTardiaDiaDePrueba;
+
+  it("a tiempo vuelve todo lo pagado", () => {
+    expect(aDevolverAlCancelar(politicaConAviso(48), PRECIO)).toBe(PRECIO);
+  });
+
+  it("tarde la casa se queda con el cargo y devuelve el resto", () => {
+    expect(aDevolverAlCancelar(politicaConAviso(3), PRECIO)).toBe(
+      PRECIO - CARGO,
+    );
+  });
+
+  it("si no pagó, no hay nada que devolver", () => {
+    expect(aDevolverAlCancelar(politicaConAviso(48), 0)).toBe(0);
+    expect(aDevolverAlCancelar(politicaConAviso(3), 0)).toBe(0);
+  });
+
+  it("nunca devuelve en negativo", () => {
+    expect(aDevolverAlCancelar(politicaConAviso(3), CARGO - 1000)).toBe(0);
+  });
+});
+
+describe("cobroDelDiaDePrueba", () => {
+  const cobro = (id: string, emitidoEn: string, concepto = "dia_de_prueba") =>
+    ({
+      id,
+      clienteId: "c1",
+      concepto,
+      referenciaId: "e1",
+      monto: 10000,
+      estado: "pendiente",
+      emitidoEn,
+    }) as Pago;
+
+  it("es el primero que se emitió, no el cargo por moverlo tarde", () => {
+    const pagos = [
+      cobro("cargo", "2026-06-15T10:00:00.000Z"),
+      cobro("dia", "2026-06-10T10:00:00.000Z"),
+      cobro("otro", "2026-06-01T10:00:00.000Z", "dia_suelto"),
+    ];
+    expect(cobroDelDiaDePrueba(pagos, "e1")?.id).toBe("dia");
   });
 });

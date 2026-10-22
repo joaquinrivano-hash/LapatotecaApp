@@ -555,6 +555,31 @@ describe("agenda", () => {
     expect(estadia.inicioProgramado).toBe("2026-10-23T12:00:00.000Z");
   });
 
+  it("cancelar trae cuánto hay que devolver, y sin el dato es cero", async () => {
+    // La hora no viaja: la que vale es la de la base.
+    const AHORA = "2026-10-22T08:30:00.000Z";
+    const pagado = repo(() => ({
+      data: {
+        estadia: ESTADIA,
+        horas_de_aviso: 30,
+        sin_costo: true,
+        costo: 0,
+        a_devolver: 10000,
+      },
+    }));
+    expect(
+      (await pagado.repo.agenda.cancelarDiaDePrueba("uuid-e", AHORA)).aDevolver,
+    ).toBe(10000);
+
+    // La función de antes no lo devolvía: entonces no tocaba lo pagado.
+    const antes = repo(() => ({
+      data: { estadia: ESTADIA, horas_de_aviso: 30, sin_costo: true, costo: 0 },
+    }));
+    expect(
+      (await antes.repo.agenda.cancelarDiaDePrueba("uuid-e", AHORA)).aDevolver,
+    ).toBe(0);
+  });
+
   it("mover el día manda el nuevo horario y trae el cargo, si hubo", async () => {
     const { repo: r, llamadas, argumentosDe } = repo(() => ({
       data: {

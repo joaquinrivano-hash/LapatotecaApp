@@ -17,7 +17,9 @@ import {
 } from "@/lib/rules/alta-perro";
 import { vigenciaAntiparasitario, vigenciaVacuna } from "@/lib/rules/perro";
 import {
+  aDevolverAlCancelar,
   bloquesDeEntrada,
+  cobroDelDiaDePrueba,
   MOTIVO_EN_PALABRAS,
   politicaDeCancelacion,
   rangoDelBloque,
@@ -51,6 +53,7 @@ import type {
   FechaISO,
   ID,
   Configuracion,
+  DatosBancarios,
   InstanteISO,
   Medicamento,
   Perro,
@@ -439,9 +442,9 @@ function motivosDelRechazo(previa: CotizacionDiaDePrueba): string[] {
 
 /* ── Cambiar o cancelar ────────────────────────────────────────────── */
 
-// La regla vive en `lib/rules`; se sigue exportando desde acá porque es
-// donde la busca la pantalla del día de prueba.
-export { politicaDeCancelacion, type PoliticaDeCancelacion };
+// Las reglas viven en `lib/rules`; se siguen exportando desde acá porque es
+// donde las busca la pantalla del día de prueba.
+export { aDevolverAlCancelar, politicaDeCancelacion, type PoliticaDeCancelacion };
 
 /** El día de prueba vigente de un perro, si lo tiene. */
 export async function diaDePruebaAgendado(
@@ -484,13 +487,35 @@ async function diaQueSePuedeCambiar(
 }
 
 /**
+ * Lo que el dueño ya pagó por el día de prueba: el cobro DEL DÍA, si está
+ * pagado. Los cargos por moverlo tarde no cuentan, porque cancelar no los
+ * devuelve.
+ *
+ * No depende de la hora, así que la pantalla lo pide una vez y la política la
+ * recalcula en cada render: lo que cambia con el reloj es cuánto vuelve, no
+ * cuánto se pagó.
+ */
+export async function loPagadoPorElDiaDePrueba(
+  repo: RepositorioPatoteca,
+  estadiaId: ID,
+): Promise<number> {
+  const cobro = cobroDelDiaDePrueba(await repo.pagos.listar(), estadiaId);
+  return cobro?.estado === "pagado" ? cobro.monto : 0;
+}
+
+/**
  * Cancela el día de prueba.
  *
- * Con 24 horas o más de aviso el cobro queda anulado —como está pendiente,
- * anularlo ES la devolución— y no se borra: queda reembolsado en cero, que es
- * la constancia de que existió. Con menos, ese mismo cobro queda pendiente
- * por el cargo de cancelación tardía: no se devuelve la jornada, pero tampoco
- * se cobra entera.
+ * Si no alcanzó a pagarlo, con 24 horas o más de aviso el cobro queda
+ * anulado —anularlo ES la devolución— y no se borra: queda reembolsado en
+ * cero, que es la constancia de que existió. Con menos, ese mismo cobro queda
+ * pendiente por el cargo de cancelación tardía: no se devuelve la jornada,
+ * pero tampoco se cobra entera.
+ *
+ * Si ya lo pagó, la plata está en la casa: a tiempo vuelve entera, y tarde
+ * vuelve todo menos el cargo. Lo que vuelve queda reembolsado con su monto,
+ * que es lo que aparece en "Por devolver", y los datos de la cuenta se
+ * guardan en su ficha.
  *
  * Los cargos que hubo por moverlo encima de la hora no se tocan: cada aviso
  * tardío se cobra, y cancelar después a tiempo no borra el anterior.
@@ -504,23 +529,47 @@ export async function cancelarDiaDePrueba(
   repo: RepositorioPatoteca,
   perroId: ID,
   ahora: InstanteISO = new Date().toISOString(),
-): Promise<{ politica: PoliticaDeCancelacion }> {
+  /** Dónde devolverle la plata, si alcanzó a pagar. Se guardan en su ficha. */
+  datosBancarios?: DatosBancarios,
+): Promise<{ politica: PoliticaDeCancelacion; aDevolver: number }> {
   const estadia = await diaQueSePuedeCambiar(repo, perroId, "cancelar");
 
-  const { estadia: cancelada, politica } =
-    await repo.agenda.cancelarDiaDePrueba(estadia.id, ahora);
+  const {
+    estadia: cancelada,
+    politica,
+    aDevolver,
+  } = await repo.agenda.cancelarDiaDePrueba(estadia.id, ahora);
+
+  // En la ficha y no en el cobro, igual que en el día de jardín: nadie se
+  // sabe su número de cuenta de memoria.
+  if (aDevolver > 0 && datosBancarios) {
+    await repo.clientes.actualizar(estadia.clienteId, { datosBancarios });
+  }
 
   await avisarDelDiaDePrueba(repo, cancelada, {
     queHizo: "canceló",
     cambios: [{ campo: "Día", despues: describirLlegada(cancelada) }],
     politica,
-    cobro: politica.sinCosto
-      ? "anulado, avisó a tiempo"
-      : `queda en ${formatearCLP(politica.costo)} por cancelar tarde`,
+    cobro: describirCobroCancelado(politica, aDevolver),
     ahora,
   });
 
-  return { politica };
+  return { politica, aDevolver };
+}
+
+/** En qué quedó el cobro, para la bandeja de Administración. */
+function describirCobroCancelado(
+  politica: PoliticaDeCancelacion,
+  aDevolver: number,
+): string {
+  if (aDevolver > 0) {
+    return politica.sinCosto
+      ? `hay que devolverle ${formatearCLP(aDevolver)}, avisó a tiempo`
+      : `hay que devolverle ${formatearCLP(aDevolver)}; se queda el cargo de ${formatearCLP(politica.costo)} por cancelar tarde`;
+  }
+  return politica.sinCosto
+    ? "anulado, avisó a tiempo"
+    : `queda en ${formatearCLP(politica.costo)} por cancelar tarde`;
 }
 
 /**

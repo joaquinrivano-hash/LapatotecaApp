@@ -39,10 +39,11 @@ export function PoliticasDelDiaDePrueba() {
             ·
           </span>
           <span className="text-pretty">
-            <strong>Con menos de {horas} horas:</strong> se cobra{" "}
-            {formatearCLP(PRECIOS.cancelacionTardiaDiaDePrueba)}. Puedes cambiar
-            la fecha, pero no hay devolución: ese cupo ya no alcanza a tomarlo
-            otro perrito.
+            <strong>Con menos de {horas} horas:</strong> cancelar o cambiar la
+            fecha cuesta{" "}
+            {formatearCLP(PRECIOS.cancelacionTardiaDiaDePrueba)}, porque ese
+            cupo ya no alcanza a tomarlo otro perrito. Si cancelas y ya habías
+            pagado, te devolvemos el resto.
           </span>
         </li>
       </ul>
