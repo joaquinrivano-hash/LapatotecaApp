@@ -281,6 +281,50 @@ intento_como "$NUEVA" "y después inscribe a su perro" "Quiltro" \
 intento_como "$NUEVA" "no puede apuntar la ficha a otra cuenta" "violates row-level security" \
   "insert into clientes (perfil_id, nombre, apellido, email, telefono, comuna) values ('$ANA', 'Colada', 'Perez', 'x@ejemplo.cl', '+56900000001', 'Nunoa');"
 
+# ── La planilla de turnos ────────────────────────────────────────────
+#
+# El turno planificado es una promesa de Administración; el fichaje es de
+# quien lo cubre. Si el que ficha pudiera correr su propia hora de
+# entrada, la comparación entre lo planificado y lo real no significaría
+# nada: el que llegó tarde quedaría puntual.
+echo "▸ turnos"
+sql "insert into turnos (id, perfil_id, fecha, desde, hasta)
+     values ('99999999-0000-0000-0000-000000000001', '$STAFF', current_date, '07:00', '15:00')
+     on conflict (id) do nothing;" >/dev/null
+
+intento_como "$STAFF" "ve la planilla completa" "1" \
+  "select count(*) from turnos where fecha = current_date;"
+
+intento_como "$STAFF" "ficha su propia entrada" "fichado" \
+  "update turnos set entrada_real = now() where perfil_id = '$STAFF';
+   select 'fichado' from turnos where perfil_id = '$STAFF' and entrada_real is not null;"
+
+intento_como "$STAFF" "no se corre su hora de entrada" "lo cambia Administración" \
+  "update turnos set desde = '09:00' where perfil_id = '$STAFF';"
+
+intento_como "$STAFF" "no se pasa el turno a otro día" "lo cambia Administración" \
+  "update turnos set fecha = current_date + 1 where perfil_id = '$STAFF';"
+
+intento_como "$STAFF" "no se arma un turno solo" "violates row-level security" \
+  "insert into turnos (perfil_id, fecha, desde, hasta)
+     values ('$STAFF', current_date + 7, '07:00', '15:00');"
+
+intento_como "$STAFF" "no se borra un turno" "1" \
+  "delete from turnos where perfil_id = '$STAFF';
+   select count(*) from turnos where perfil_id = '$STAFF';"
+
+intento "el dueño no ve la planilla" "0" \
+  "select count(*) from turnos;"
+
+intento_como "$ADMIN" "Administración sí arma la planilla" "2" \
+  "insert into turnos (perfil_id, fecha, desde, hasta)
+     values ('$STAFF', current_date + 7, '13:00', '19:00');
+   select count(*) from turnos;"
+
+intento_como "$ADMIN" "y sí corrige el horario" "09:00" \
+  "update turnos set desde = '09:00' where perfil_id = '$STAFF';
+   select desde from turnos where perfil_id = '$STAFF' limit 1;"
+
 echo "▸ repetir un archivo suelto no rompe los demás"
 psql -h "$D" -U postgres -v ON_ERROR_STOP=1 -q \
   -f "$raiz/supabase/migrations/20261014120100_permisos.sql" >/dev/null 2>&1
