@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NEGOCIO } from "@/lib/config/negocio";
 import { PRECIOS } from "@/lib/config/precios";
 import type { DatosPatoteca } from "@/lib/data/seed";
@@ -12,11 +12,13 @@ import {
   cancelarDiaDePrueba,
   cotizarDiaDePrueba,
   crearCuenta,
+  diaDePruebaAgendado,
   disponibilidadDeUnDia,
   reprogramarDiaDePrueba,
   RegistroRechazado,
 } from "./registro";
 import { habilitarPeso } from "./perros";
+import { cancelarDiaDeJardin, ReservaRechazada } from "./reservas";
 
 const LUNES = "2026-06-15";
 const MARTES = "2026-06-16";
@@ -308,6 +310,10 @@ describe("día de prueba", () => {
 describe("cambiar o cancelar el día de prueba", () => {
   const A_LAS_9 = 9 * 60;
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   /** Dos días antes: aviso de sobra. */
   const CON_TIEMPO = DOMINGO;
   /** La misma mañana: menos de 24 horas. */
@@ -417,6 +423,108 @@ describe("cambiar o cancelar el día de prueba", () => {
     await expect(
       reprogramarDiaDePrueba(repo, perro.id, MARTES, 11 * 60, CON_TIEMPO),
     ).rejects.toThrow(RegistroRechazado);
+  });
+
+  it("moverlo encima de la hora y cancelar después a tiempo deja el cargo por cobrar", async () => {
+    const { cliente, perro } = await conDiaAgendado();
+
+    // Lo mueve la misma mañana: se suma el cargo.
+    await reprogramarDiaDePrueba(repo, perro.id, MARTES, 11 * 60, ENCIMA);
+    // Y lo cancela con más de 24 horas para el día nuevo: el cobro del día se
+    // anula, pero el aviso tardío de la mañana ya se cobró.
+    const { politica } = await cancelarDiaDePrueba(repo, perro.id, en("7:00"));
+
+    expect(politica.sinCosto).toBe(true);
+    const pagos = (await repo.pagos.porCliente(cliente.id)).sort((a, b) =>
+      a.emitidoEn.localeCompare(b.emitidoEn),
+    );
+    expect(pagos.map((p) => [p.estado, p.monto])).toEqual([
+      ["reembolsado", 0],
+      ["pendiente", PRECIOS.cancelacionTardiaDiaDePrueba],
+    ]);
+  });
+
+  it("cancelar le avisa a Administración cuándo avisó y en qué quedó el cobro", async () => {
+    const { perro } = await conDiaAgendado();
+
+    await cancelarDiaDePrueba(repo, perro.id, CON_TIEMPO);
+
+    const [aviso] = await repo.notificaciones.sinLeer();
+    expect(aviso.titulo).toBe("Camila Rojas canceló el día de prueba de Trufa");
+    expect(aviso.perroId).toBe(perro.id);
+    // El día y la anticipación son hechos, no cambios: van sin `antes`.
+    expect(aviso.cambios).toEqual([
+      { campo: "Día", despues: "15-06-2026 a las 09:00" },
+      { campo: "Aviso", despues: "25 h antes" },
+      { campo: "Cobro", despues: "anulado, avisó a tiempo" },
+    ]);
+  });
+
+  it("cancelar encima de la hora dice cuánto queda por cobrar", async () => {
+    const { perro } = await conDiaAgendado();
+
+    await cancelarDiaDePrueba(repo, perro.id, ENCIMA);
+
+    const [aviso] = await repo.notificaciones.sinLeer();
+    expect(aviso.cambios.find((c) => c.campo === "Cobro")?.despues).toBe(
+      "queda en $5.000 por cancelar tarde",
+    );
+  });
+
+  it("moverlo le avisa con el día de antes y el de después", async () => {
+    const { perro } = await conDiaAgendado();
+
+    await reprogramarDiaDePrueba(repo, perro.id, MARTES, 11 * 60, ENCIMA);
+
+    const [aviso] = await repo.notificaciones.sinLeer();
+    expect(aviso.titulo).toBe("Camila Rojas cambió el día de prueba de Trufa");
+    expect(aviso.cambios).toEqual([
+      {
+        campo: "Día",
+        antes: "15-06-2026 a las 09:00",
+        despues: "16-06-2026 a las 11:00",
+      },
+      { campo: "Aviso", despues: "3 h antes" },
+      { campo: "Cobro", despues: "se suma un cargo de $5.000 por cambiarlo tarde" },
+    ]);
+  });
+
+  it("si el aviso no sale, la cancelación queda hecha igual", async () => {
+    const { cliente, perro } = await conDiaAgendado();
+    vi.spyOn(repo.notificaciones, "crear").mockRejectedValue(new Error("sin red"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      cancelarDiaDePrueba(repo, perro.id, CON_TIEMPO),
+    ).resolves.toBeTruthy();
+
+    expect((await repo.perros.obtener(perro.id))!.diaDePrueba.estado).toBe(
+      "pendiente",
+    );
+    const [pago] = await repo.pagos.porCliente(cliente.id);
+    expect(pago.estado).toBe("reembolsado");
+  });
+
+  it("un perro que ya llegó no se cancela: eso es un retiro", async () => {
+    const { perro } = await conDiaAgendado();
+    const dia = await diaDePruebaAgendado(repo, perro.id);
+    await repo.estadiasJardin.actualizar(dia!.id, { estado: "presente" });
+
+    await expect(
+      cancelarDiaDePrueba(repo, perro.id, en("10:00")),
+    ).rejects.toThrow(RegistroRechazado);
+  });
+
+  it("no se cancela por la puerta del día de jardín", async () => {
+    const { perro } = await conDiaAgendado();
+    const dia = await diaDePruebaAgendado(repo, perro.id);
+
+    await expect(
+      cancelarDiaDeJardin(repo, dia!.id, CON_TIEMPO),
+    ).rejects.toThrow(ReservaRechazada);
+    expect((await repo.estadiasJardin.obtener(dia!.id))!.estado).toBe(
+      "esperada",
+    );
   });
 
   it("sin día agendado, cancelar avisa en vez de reventar", async () => {

@@ -36,6 +36,8 @@ import type {
   InstanteISO,
   Rol,
 } from "@/lib/types";
+import type { PoliticaDeCancelacion } from "@/lib/rules/dia-de-prueba";
+import type { DevolucionJardin } from "@/lib/rules/precio-jardin";
 
 /** Datos para crear una entidad: el id lo pone el repositorio. */
 export type SinId<T> = Omit<T, "id">;
@@ -203,6 +205,60 @@ export interface EquipoRepo {
   cambiarRol(id: ID, rol: Rol): Promise<MiembroDelEquipo>;
 }
 
+/**
+ * Cancelar o mover lo que ya está agendado.
+ *
+ * No son `actualizar` sueltos porque cada uno toca el día Y su cobro, y en la
+ * nube el dueño no puede tocar un cobro: si pudiera, se lo dejaría en $0
+ * desde la consola. Por eso cada cambio es una operación entera, que en
+ * Supabase corre como función de la base (`20261022150000_cambios_de_agenda`)
+ * y nunca queda a medias.
+ *
+ * `ahora` sirve en el prototipo y en los tests. En la nube manda el reloj de
+ * la base: si mandara el del navegador, bastaría con atrasar el teléfono para
+ * cancelar gratis.
+ */
+export interface AgendaRepo {
+  /**
+   * Con aviso, el cobro del día queda anulado (reembolsado en cero, no
+   * borrado); encima de la hora, queda pendiente con el cargo tardío. El
+   * perro vuelve a la fila.
+   */
+  cancelarDiaDePrueba(estadiaId: ID, ahora: InstanteISO): Promise<DiaDePruebaCancelado>;
+  /** Encima de la hora suma un cargo aparte, que queda pendiente. */
+  reprogramarDiaDePrueba(
+    estadiaId: ID,
+    nuevo: { fecha: FechaISO; inicio: InstanteISO; fin: InstanteISO },
+    ahora: InstanteISO,
+  ): Promise<DiaDePruebaMovido>;
+  /**
+   * Con aviso, lo pendiente se anula, lo pagado queda por devolver y el día
+   * vuelve al pack. Encima de la hora el cobro queda como estaba.
+   */
+  cancelarDiaDeJardin(estadiaId: ID, ahora: InstanteISO): Promise<DiaDeJardinCancelado>;
+}
+
+export interface DiaDePruebaCancelado {
+  estadia: EstadiaJardin;
+  politica: PoliticaDeCancelacion;
+}
+
+export interface DiaDePruebaMovido {
+  estadia: EstadiaJardin;
+  politica: PoliticaDeCancelacion;
+  /** El cargo por moverlo encima de la hora, si correspondió. */
+  cargo: Pago | null;
+}
+
+export interface DiaDeJardinCancelado {
+  estadia: EstadiaJardin;
+  devolucion: DevolucionJardin;
+  /** Lo que hay que transferirle de vuelta: lo que ya había pagado. */
+  aDevolver: number;
+  /** El plan al que se le devolvió el día, si correspondía. */
+  planDevuelto: PlanComprado | null;
+}
+
 export interface SistemaRepo {
   /** Día de referencia con el que se generaron los datos actuales. */
   anclaje(): Promise<FechaISO>;
@@ -229,6 +285,7 @@ export interface RepositorioPatoteca {
   mensajes: MensajeRepo;
   turnos: TurnoRepo;
   notificaciones: NotificacionRepo;
+  agenda: AgendaRepo;
   configuracion: ConfiguracionRepo;
   equipo: EquipoRepo;
   sistema: SistemaRepo;

@@ -19,23 +19,29 @@ import { vigenciaAntiparasitario, vigenciaVacuna } from "@/lib/rules/perro";
 import {
   bloquesDeEntrada,
   MOTIVO_EN_PALABRAS,
+  politicaDeCancelacion,
   rangoDelBloque,
   type BloqueDeEntrada,
+  type PoliticaDeCancelacion,
 } from "@/lib/rules/dia-de-prueba";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
 import {
   fechaISO,
-  horasEntre,
+  formatearFechaCorta,
+  formatearHora,
   minutosDelDia,
   sumarDias,
 } from "@/lib/utils/fecha";
+import { formatearCLP } from "@/lib/utils/moneda";
 import { aE164 } from "@/lib/utils/telefono";
+import { describirAviso, dejarAviso } from "@/lib/servicios/avisos";
 import { ocupantesEnRango } from "@/lib/servicios/reservas";
 import type { ResultadoAdmision } from "@/lib/rules/admision";
 import type {
   Alergias,
   Alimentacion,
   Antiparasitario,
+  CambioDeCampo,
   Cliente,
   Cotizacion,
   EstadiaJardin,
@@ -454,28 +460,9 @@ function motivosDelRechazo(previa: CotizacionDiaDePrueba): string[] {
 
 /* ── Cambiar o cancelar ────────────────────────────────────────────── */
 
-export interface PoliticaDeCancelacion {
-  /** Horas que faltan para la llegada. Negativo si ya pasó. */
-  horasDeAviso: number;
-  /** Con aviso suficiente no se cobra nada. */
-  sinCosto: boolean;
-  /** Lo que cuesta cancelar o cambiar ahora. */
-  costo: number;
-}
-
-export function politicaDeCancelacion(
-  inicioProgramado: InstanteISO,
-  ahora: InstanteISO = new Date().toISOString(),
-): PoliticaDeCancelacion {
-  const horasDeAviso = horasEntre(ahora, inicioProgramado);
-  const sinCosto = horasDeAviso >= NEGOCIO.diaDePrueba.horasParaCancelarSinCosto;
-
-  return {
-    horasDeAviso,
-    sinCosto,
-    costo: sinCosto ? 0 : PRECIOS.cancelacionTardiaDiaDePrueba,
-  };
-}
+// La regla vive en `lib/rules`; se sigue exportando desde acá porque es
+// donde la busca la pantalla del día de prueba.
+export { politicaDeCancelacion, type PoliticaDeCancelacion };
 
 /** El día de prueba vigente de un perro, si lo tiene. */
 export async function diaDePruebaAgendado(
@@ -494,30 +481,65 @@ export async function diaDePruebaAgendado(
   );
 }
 
+/** El día de prueba que todavía se puede cancelar o mover. */
+async function diaQueSePuedeCambiar(
+  repo: RepositorioPatoteca,
+  perroId: ID,
+  queSeHace: "cancelar" | "cambiar",
+): Promise<EstadiaJardin> {
+  const estadia = await diaDePruebaAgendado(repo, perroId);
+  if (!estadia) {
+    throw new RegistroRechazado(`No hay nada que ${queSeHace}.`, [
+      "Este perrito no tiene un día de prueba agendado.",
+    ]);
+  }
+  // La base lo rechazaría igual; acá se dice en palabras.
+  if (estadia.estado !== "esperada") {
+    throw new RegistroRechazado(`Ese día ya no se puede ${queSeHace}.`, [
+      estadia.estado === "presente"
+        ? "Ya está en la casa: el retiro lo registra el equipo."
+        : "Ese día ya pasó.",
+    ]);
+  }
+  return estadia;
+}
+
 /**
  * Cancela el día de prueba.
  *
- * Con 24 horas o más de aviso se anula el cobro —como el cobro está pendiente,
- * anularlo ES la devolución—. Con menos, ese cobro se reemplaza por el de
- * cancelación tardía: no se devuelve la jornada, pero tampoco se cobra entera.
+ * Con 24 horas o más de aviso el cobro queda anulado —como está pendiente,
+ * anularlo ES la devolución— y no se borra: queda reembolsado en cero, que es
+ * la constancia de que existió. Con menos, ese mismo cobro queda pendiente
+ * por el cargo de cancelación tardía: no se devuelve la jornada, pero tampoco
+ * se cobra entera.
+ *
+ * Los cargos que hubo por moverlo encima de la hora no se tocan: cada aviso
+ * tardío se cobra, y cancelar después a tiempo no borra el anterior.
+ *
+ * El día, el cobro y el perro cambian juntos, en `repo.agenda`. Antes iban
+ * por separado y en la nube la cancelación quedaba a medias: el día
+ * cancelado, el cobro en pie y el perro "agendado" para un día que ya no
+ * existía.
  */
 export async function cancelarDiaDePrueba(
   repo: RepositorioPatoteca,
   perroId: ID,
   ahora: InstanteISO = new Date().toISOString(),
 ): Promise<{ politica: PoliticaDeCancelacion }> {
-  const estadia = await diaDePruebaAgendado(repo, perroId);
-  if (!estadia) {
-    throw new RegistroRechazado("No hay nada que cancelar.", [
-      "Este perrito no tiene un día de prueba agendado.",
-    ]);
-  }
+  const estadia = await diaQueSePuedeCambiar(repo, perroId, "cancelar");
 
-  const politica = politicaDeCancelacion(estadia.inicioProgramado, ahora);
+  const { estadia: cancelada, politica } =
+    await repo.agenda.cancelarDiaDePrueba(estadia.id, ahora);
 
-  await repo.estadiasJardin.actualizar(estadia.id, { estado: "cancelada" });
-  await ajustarCobro(repo, estadia.id, politica.costo, ahora);
-  await repo.perros.actualizar(perroId, { diaDePrueba: { estado: "pendiente" } });
+  await avisarDelDiaDePrueba(repo, cancelada, {
+    queHizo: "canceló",
+    cambios: [{ campo: "Día", despues: describirLlegada(cancelada) }],
+    politica,
+    cobro: politica.sinCosto
+      ? "anulado, avisó a tiempo"
+      : `queda en ${formatearCLP(politica.costo)} por cancelar tarde`,
+    ahora,
+  });
 
   return { politica };
 }
@@ -525,8 +547,9 @@ export async function cancelarDiaDePrueba(
 /**
  * Mueve el día de prueba a otra hora.
  *
- * Con menos de 24 horas de aviso se suma el cargo por el cambio tardío: el
- * cupo de ese día ya no se alcanza a llenar con otro perro.
+ * Con menos de 24 horas de aviso se suma el cargo por el cambio tardío, como
+ * un cobro aparte que queda pendiente: el cupo de ese día ya no se alcanza a
+ * llenar con otro perro.
  */
 export async function reprogramarDiaDePrueba(
   repo: RepositorioPatoteca,
@@ -535,13 +558,10 @@ export async function reprogramarDiaDePrueba(
   minutoDeEntrada: number,
   ahora: InstanteISO = new Date().toISOString(),
 ): Promise<{ estadia: EstadiaJardin; politica: PoliticaDeCancelacion }> {
-  const estadia = await diaDePruebaAgendado(repo, perroId);
-  if (!estadia) {
-    throw new RegistroRechazado("No hay nada que cambiar.", [
-      "Este perrito no tiene un día de prueba agendado.",
-    ]);
-  }
+  const estadia = await diaQueSePuedeCambiar(repo, perroId, "cambiar");
 
+  // Que el bloque esté libre se revisa acá, igual que al agendar: es una
+  // pregunta de capacidad, no de plata, y la base no la vuelve a hacer.
   const dia = await disponibilidadDeUnDia(repo, perroId, fecha, ahora);
   const bloque = dia.bloques.find((b) => b.minutoDelDia === minutoDeEntrada);
   if (!bloque?.disponible) {
@@ -552,59 +572,69 @@ export async function reprogramarDiaDePrueba(
     ]);
   }
 
-  const politica = politicaDeCancelacion(estadia.inicioProgramado, ahora);
   const { inicio, fin } = rangoDelBloque(fecha, minutoDeEntrada);
+  const { estadia: movida, politica } = await repo.agenda.reprogramarDiaDePrueba(
+    estadia.id,
+    { fecha, inicio, fin },
+    ahora,
+  );
 
-  const movida = await repo.estadiasJardin.actualizar(estadia.id, {
-    fecha,
-    inicioProgramado: inicio,
-    finProgramado: fin,
-  });
-
-  if (!politica.sinCosto) {
-    await repo.pagos.crear({
-      clienteId: estadia.clienteId,
-      concepto: "dia_de_prueba",
-      referenciaId: estadia.id,
-      monto: politica.costo,
-      estado: "pendiente",
-      emitidoEn: ahora,
-      venceEn: fecha,
-    });
-  }
-
-  await repo.perros.actualizar(perroId, {
-    diaDePrueba: { estado: "agendado", fecha },
+  await avisarDelDiaDePrueba(repo, movida, {
+    queHizo: "cambió",
+    cambios: [
+      {
+        campo: "Día",
+        antes: describirLlegada(estadia),
+        despues: describirLlegada(movida),
+      },
+    ],
+    politica,
+    cobro: politica.sinCosto
+      ? "sin costo, avisó a tiempo"
+      : `se suma un cargo de ${formatearCLP(politica.costo)} por cambiarlo tarde`,
+    ahora,
   });
 
   return { estadia: movida, politica };
 }
 
-/**
- * Deja el cobro del día en el monto que corresponde tras cancelar.
- *
- * En cero se marca reembolsado en vez de borrarse: un cobro que desaparece no
- * deja rastro de que existió, y la cobranza del mes tiene que poder explicarse.
- */
-async function ajustarCobro(
-  repo: RepositorioPatoteca,
-  estadiaId: ID,
-  monto: number,
-  ahora: InstanteISO,
-): Promise<void> {
-  const pagos = await repo.pagos.listar();
-  const delDia = pagos.filter(
-    (p) => p.referenciaId === estadiaId && p.estado === "pendiente",
-  );
+/** "15-06-2026 a las 09:00" */
+function describirLlegada(estadia: EstadiaJardin): string {
+  return `${formatearFechaCorta(estadia.fecha)} a las ${formatearHora(estadia.inicioProgramado)}`;
+}
 
-  for (const [i, pago] of delDia.entries()) {
-    // Si hubo cargos por cambios, el monto nuevo se queda en el primero y el
-    // resto se anula: lo que se cobra es una cancelación, no varias.
-    await repo.pagos.actualizar(pago.id, {
-      monto: i === 0 ? monto : 0,
-      estado: i === 0 && monto > 0 ? "pendiente" : "reembolsado",
-      pagadoEn: undefined,
-      venceEn: i === 0 && monto > 0 ? fechaISO(ahora) : undefined,
-    });
-  }
+/**
+ * Le cuenta a Administración que el dueño canceló o movió el día de prueba.
+ *
+ * El día y la anticipación son hechos, no cambios, así que van sin `antes`.
+ * El día de un cambio de fecha sí lleva antes y después: eso sí cambió.
+ */
+async function avisarDelDiaDePrueba(
+  repo: RepositorioPatoteca,
+  estadia: EstadiaJardin,
+  aviso: {
+    queHizo: "canceló" | "cambió";
+    cambios: CambioDeCampo[];
+    politica: PoliticaDeCancelacion;
+    cobro: string;
+    ahora: InstanteISO;
+  },
+): Promise<void> {
+  const [cliente, perro] = await Promise.all([
+    repo.clientes.obtener(estadia.clienteId),
+    repo.perros.obtener(estadia.perroId),
+  ]);
+
+  await dejarAviso(repo, {
+    clienteId: estadia.clienteId,
+    perroId: estadia.perroId,
+    titulo: `${cliente ? `${cliente.nombre} ${cliente.apellido}` : "Un dueño"} ${aviso.queHizo} el día de prueba de ${perro?.nombre ?? "su perro"}`,
+    cambios: [
+      ...aviso.cambios,
+      { campo: "Aviso", despues: describirAviso(aviso.politica.horasDeAviso) },
+      { campo: "Cobro", despues: aviso.cobro },
+    ],
+    leida: false,
+    creadaEn: aviso.ahora,
+  });
 }

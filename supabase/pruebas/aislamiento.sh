@@ -351,6 +351,104 @@ intento_como "$ADMIN" "Administración sí corrige una firma vieja" "1" \
    select count(*) from estadias_jardin
      where fecha = current_date and inicio_marcado_por = '$STAFF';"
 
+# ── Cancelar y mover lo agendado ─────────────────────────────────────
+#
+# El dueño no puede tocar un cobro, así que cancelar pasa por funciones que
+# hacen el cambio entero —el día, el cobro y el perro— con la hora de la
+# base. Antes la cancelación quedaba a medias: el día cancelado y el cobro
+# en pie, porque el update sobre `pagos` no le correspondía.
+echo "▸ cancelar y mover lo agendado"
+
+ANA_CLI=aaaaaaaa-0000-0000-0000-000000000001
+LOLA=cccccccc-0000-0000-0000-000000000001
+PRUEBA=ffffffff-0000-0000-0000-000000000001
+SUELTO=ffffffff-0000-0000-0000-000000000002
+BETO_DIA=$(sql "select id from estadias_jardin where cliente_id = 'bbbbbbbb-0000-0000-0000-000000000002';" | tail -1)
+
+# El día de prueba de Lola, agendado a tanto de ahora, con su cobro.
+prueba_en () {
+  echo "insert into estadias_jardin (id, cliente_id, perro_id, fecha, inicio_programado, fin_programado, origen, estado)
+     values ('$PRUEBA', '$ANA_CLI', '$LOLA', (now() + interval '$1')::date,
+             now() + interval '$1', now() + interval '$1' + interval '6 hours',
+             'dia_de_prueba', 'esperada');
+   insert into pagos (cliente_id, concepto, referencia_id, monto, estado, emitido_en)
+     values ('$ANA_CLI', 'dia_de_prueba', '$PRUEBA', 10000, 'pendiente', now() - interval '1 hour');
+   update perros set dia_de_prueba = jsonb_build_object('estado', 'agendado') where id = '$LOLA';"
+}
+
+# Un día suelto de jardín de Lola, con su cobro.
+suelto_en () {
+  echo "insert into estadias_jardin (id, cliente_id, perro_id, fecha, inicio_programado, fin_programado, origen, estado)
+     values ('$SUELTO', '$ANA_CLI', '$LOLA', (now() + interval '$1')::date,
+             now() + interval '$1', now() + interval '$1' + interval '9 hours',
+             'dia_suelto', 'esperada');
+   insert into pagos (cliente_id, concepto, referencia_id, monto, estado)
+     values ('$ANA_CLI', 'dia_suelto', '$SUELTO', 18000, 'pendiente');"
+}
+
+# Mover el día de prueba a dentro de tres días.
+MOVER="select reprogramar_dia_de_prueba('$PRUEBA',
+         ((now() + interval '3 days') at time zone 'America/Santiago')::date,
+         now() + interval '3 days', now() + interval '3 days 6 hours');"
+
+COBRO_DE_PRUEBA="select string_agg(estado || ' ' || monto, ', ' order by emitido_en)
+  from pagos where referencia_id = '$PRUEBA';"
+
+intento "cancela a tiempo: el cobro queda anulado, no borrado" "reembolsado 0" \
+  "$(prueba_en '3 days') select cancelar_dia_de_prueba('$PRUEBA'); $COBRO_DE_PRUEBA"
+intento "y el perro vuelve a la fila" "pendiente" \
+  "$(prueba_en '3 days') select cancelar_dia_de_prueba('$PRUEBA');
+   select dia_de_prueba->>'estado' from perros where id = '$LOLA';"
+intento "cancela encima de la hora: queda por cobrar" "pendiente 5000" \
+  "$(prueba_en '3 hours') select cancelar_dia_de_prueba('$PRUEBA'); $COBRO_DE_PRUEBA"
+intento "lo mueve con tiempo: no paga nada más" "pendiente 10000" \
+  "$(prueba_en '2 days') $MOVER $COBRO_DE_PRUEBA"
+intento "lo mueve encima de la hora: se suma el cargo" "pendiente 10000, pendiente 5000" \
+  "$(prueba_en '3 hours') $MOVER $COBRO_DE_PRUEBA"
+intento "y cancelar después a tiempo no borra el cargo" "reembolsado 0, pendiente 5000" \
+  "$(prueba_en '3 hours') $MOVER select cancelar_dia_de_prueba('$PRUEBA'); $COBRO_DE_PRUEBA"
+intento "cancela un día suelto a tiempo: anulado" "reembolsado 0" \
+  "$(suelto_en '3 days') select cancelar_dia_de_jardin('$SUELTO');
+   select estado || ' ' || monto from pagos where referencia_id = '$SUELTO';"
+intento "cancela un día suelto encima: queda por cobrar" "pendiente 18000" \
+  "$(suelto_en '3 hours') select cancelar_dia_de_jardin('$SUELTO');
+   select estado || ' ' || monto from pagos where referencia_id = '$SUELTO';"
+intento_como "$ADMIN" "Administración cancela por el dueño" "cancelada" \
+  "select cancelar_dia_de_jardin('$BETO_DIA');
+   select estado from estadias_jardin where id = '$BETO_DIA';"
+
+echo "▸ y lo que nadie se salta"
+intento "corre la hora del día para cancelar gratis" "se cancela o se cambia desde la app" \
+  "$(prueba_en '3 hours') update estadias_jardin set inicio_programado = now() + interval '3 days' where id = '$PRUEBA';"
+intento "marca cancelado el día sin pasar por el cobro" "se cancela o se cambia desde la app" \
+  "$(suelto_en '3 days') update estadias_jardin set estado = 'cancelada' where id = '$SUELTO';"
+intento "se confirma solo la reserva de hotel" "se cancela o se cambia desde la app" \
+  "insert into reservas_hotel (id, cliente_id, perro_id, inicio_programado, fin_programado, estado, cotizacion)
+     values ('ffffffff-0000-0000-0000-000000000003', '$ANA_CLI', '$LOLA', now() + interval '5 days', now() + interval '7 days', 'pendiente', '{}');
+   update reservas_hotel set estado = 'confirmada' where id = 'ffffffff-0000-0000-0000-000000000003';"
+intento "cancela el día de otro dueño" "No existe ese día" \
+  "select cancelar_dia_de_jardin('$BETO_DIA');"
+intento "cancela el de prueba por la puerta del jardín" "desde su propia pantalla" \
+  "$(prueba_en '3 hours') select cancelar_dia_de_jardin('$PRUEBA');"
+intento "lo mueve a una hora que ya pasó" "no sirve" \
+  "$(prueba_en '3 days') select reprogramar_dia_de_prueba('$PRUEBA',
+     ((now() - interval '1 day') at time zone 'America/Santiago')::date,
+     now() - interval '1 day', now() - interval '18 hours');"
+intento "cancela dos veces" "ya no se puede cancelar" \
+  "$(prueba_en '3 days') select cancelar_dia_de_prueba('$PRUEBA'); select cancelar_dia_de_prueba('$PRUEBA');"
+intento_como "$STAFF" "el cuidador cancela un día (es plata)" "No existe ese día" \
+  "select cancelar_dia_de_jardin('$BETO_DIA');"
+
+# Los avisos los escribe el dueño y los lee Administración. Pedir la fila de
+# vuelta (`returning`, que es lo que hace `.select()` en supabase-js) exige
+# poder LEERLA, así que falla aunque el insert esté permitido. Por eso el
+# repositorio la inserta sin pedirla.
+echo "▸ los avisos del dueño"
+intento "deja un aviso sin pedirlo de vuelta" "dejado" \
+  "insert into notificaciones (cliente_id, perro_id, titulo) values ('$ANA_CLI', '$LOLA', 'Canceló'); select 'dejado';"
+intento "pedirlo de vuelta falla, aunque pueda dejarlo" "violates row-level security" \
+  "insert into notificaciones (cliente_id, perro_id, titulo) values ('$ANA_CLI', '$LOLA', 'Canceló') returning id;"
+
 echo "▸ repetir un archivo suelto no rompe los demás"
 psql -h "$D" -U postgres -v ON_ERROR_STOP=1 -q \
   -f "$raiz/supabase/migrations/20261014120100_permisos.sql" >/dev/null 2>&1

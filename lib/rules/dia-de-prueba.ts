@@ -11,8 +11,9 @@
  */
 
 import { NEGOCIO } from "@/lib/config/negocio";
+import { PRECIOS } from "@/lib/config/precios";
 import { verificarCapacidad, type OcupanteRango } from "@/lib/rules/capacidad";
-import { instanteEn } from "@/lib/utils/fecha";
+import { horasEntre, instanteEn } from "@/lib/utils/fecha";
 import type { FechaISO, ID, InstanteISO } from "@/lib/types";
 
 export type MotivoNoDisponible = "pasado" | "tomado" | "sin_cupo";
@@ -109,4 +110,39 @@ export function bloquesDeEntrada({
 /** Si un día tiene al menos una hora libre. Para pintar el calendario. */
 export function hayBloquesLibres(bloques: BloqueDeEntrada[]): boolean {
   return bloques.some((b) => b.disponible);
+}
+
+/* ── Cambiar o cancelar ────────────────────────────────────────────── */
+
+export interface PoliticaDeCancelacion {
+  /** Horas que faltan para la llegada. Negativo si ya pasó. */
+  horasDeAviso: number;
+  /** Con aviso suficiente no se cobra nada. */
+  sinCosto: boolean;
+  /** Lo que cuesta cancelar o cambiar ahora. */
+  costo: number;
+}
+
+/**
+ * Lo que cuesta cancelar o mover el día de prueba con tantas horas de aviso.
+ *
+ * Separada de `politicaDeCancelacion` porque en la nube las horas las mide la
+ * base con su propio reloj, y lo que vuelve es ese número: la regla tiene que
+ * poder aplicarse a él sin rehacer la cuenta con la hora del navegador.
+ */
+export function politicaConAviso(horasDeAviso: number): PoliticaDeCancelacion {
+  const sinCosto = horasDeAviso >= NEGOCIO.diaDePrueba.horasParaCancelarSinCosto;
+
+  return {
+    horasDeAviso,
+    sinCosto,
+    costo: sinCosto ? 0 : PRECIOS.cancelacionTardiaDiaDePrueba,
+  };
+}
+
+export function politicaDeCancelacion(
+  inicioProgramado: InstanteISO,
+  ahora: InstanteISO = new Date().toISOString(),
+): PoliticaDeCancelacion {
+  return politicaConAviso(horasEntre(ahora, inicioProgramado));
 }
