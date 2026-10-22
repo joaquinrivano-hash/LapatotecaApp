@@ -1734,21 +1734,20 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
 1. ~~Correr en Supabase `20261022150000_cambios_de_agenda` y
    `20261022160000_planes_y_dia_de_prueba`~~ — hecho el 22-10-2026,
    verificado desde afuera.
-2. Ahora que corrieron, **ordenar lo que dejaron a medias los bugs que
-   arreglan**:
-   - Los días de prueba cancelados a medias: la estadía `cancelada`, el
-     perro todavía `agendado` y el cobro pendiente. Pasó al menos con
-     **Emma** (cuenta de javi), agendada para el 22-10. Se encuentran con
-     `select f.id, f.nombre, e.id as estadia from perros f join
-     estadias_jardin e on e.perro_id = f.id and e.origen = 'dia_de_prueba'
-     where f.dia_de_prueba->>'estado' = 'agendado' and e.estado =
-     'cancelada' and not exists (select 1 from estadias_jardin v where
-     v.perro_id = f.id and v.origen = 'dia_de_prueba' and v.estado <>
-     'cancelada');` y se arreglan devolviendo el perro a
-     `{"estado": "pendiente"}` y dejando el cobro en lo que corresponda
-     (reembolsado en cero si avisó a tiempo, $5.000 si no).
-   - Los planes que se compraron sin cobro (la compra fallaba después de
-     crear el plan): `select p.* from planes p left join pagos g on
+2. ~~Ordenar lo que dejaron a medias los bugs que arreglan~~ — hecho el
+   22-10-2026. Se confirmaron en la base los 6 disparadores nuevos. El único
+   día de prueba cancelado a medias era el de **Emma** (cuenta de prueba de
+   la dueña): volvió a `pendiente` y su cobro quedó reembolsado en $0. No
+   había planes sin cobro. Si vuelve a aparecer algo así, las consultas son:
+   - días de prueba a medias: `select f.id, f.nombre, e.id as estadia from
+     perros f join estadias_jardin e on e.perro_id = f.id and e.origen =
+     'dia_de_prueba' where f.dia_de_prueba->>'estado' = 'agendado' and
+     e.estado = 'cancelada' and not exists (select 1 from estadias_jardin v
+     where v.perro_id = f.id and v.origen = 'dia_de_prueba' and v.estado <>
+     'cancelada');` — se arreglan devolviendo el perro a
+     `{"estado": "pendiente"}` y dejando el cobro reembolsado en cero si
+     avisó a tiempo, o en $5.000 si no.
+   - planes sin cobro: `select p.* from planes p left join pagos g on
      g.referencia_id = p.id and g.concepto = 'plan' where g.id is null;`.
 3. Cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel, proyecto **`lapatoteca`**,
    Production y Preview, como Secret. Después **Redeploy** sin caché.
