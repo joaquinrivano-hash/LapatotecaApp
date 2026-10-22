@@ -1592,6 +1592,44 @@ alta necesita para dibujarse).
 idempotencia de la cuenta del día 1. Antes la cuidaba el servicio; ahora la
 cuida el lugar donde no se puede olvidar.
 
+#### Saber qué build está publicada, desde afuera
+
+Igual que con las migraciones: una sesión no ve Vercel, pero **sí puede
+preguntarle al sitio qué código está sirviendo**. Sirve para no dar por
+publicado algo que no lo está.
+
+La técnica: elegir una cadena que **solo exista desde cierto commit** y que
+sobreviva a la minificación —un literal de texto, un id, una clave de
+objeto—, abrir una página PÚBLICA que cargue ese código, y buscarla en el
+JS que el navegador descarga de verdad:
+
+```js
+page.on("response", async (r) => {
+  if ((r.headers()["content-type"] ?? "").includes("javascript"))
+    cuerpos.push(await r.text());
+});
+```
+
+Tres trampas, las tres pisadas el 22-10:
+
+- **Buscar en los chunks equivocados da falso negativo.** Primero se buscó
+  algo de `/admin` en los chunks de `/ingresar`: el código de admin no se
+  carga ahí, así que "no está" no significaba nada. La página tiene que ser
+  una que cargue el código que se busca.
+- **`document.querySelectorAll("script[src]")` no los ve todos.** Next carga
+  parte por importación dinámica. Hay que escuchar las respuestas de red.
+- **Un nombre de constante no sirve de marcador**: la minificación lo borra.
+  Un literal como `"admin:casa"` sí queda.
+
+Lo más convincente no es la ausencia sino **encontrar el código viejo**. Acá
+el JS publicado decía `onClick:()=>x("staff",{staff:e})` cuando el commit
+nuevo tiene `{ staff: nombre, usuarioId: idDeStaff(nombre) }`: eso no se
+discute.
+
+Y las cabeceras ayudan a confirmarlo: `x-vercel-cache: HIT` con un `age` de
+más de media hora dice que el edge sigue sirviendo lo mismo de antes del
+push — un deploy nuevo habría invalidado esa caché.
+
 #### Saber si una migración ya corrió, desde afuera
 
 Sin sesión no se puede leer ninguna tabla del dominio, pero **sí se puede
@@ -1994,6 +2032,47 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
 
 **Afuera del código** (lo hace la dueña o quien tenga acceso a los paneles):
 
+0. **PENDIENTE Y BLOQUEANTE — producción no se está actualizando.** Al cerrar
+   el 22-10-2026 (05:33 UTC), `lapatoteca.cl` servía una build **anterior**
+   al último push. Esto es lo primero que hay que mirar mañana, porque
+   mientras siga así **nada de lo que se suba a `main` se ve**.
+
+   Lo verificado, para no repetirlo:
+
+   - En GitHub `main` está en `9ff8e04` y **sí** tiene el código nuevo
+     (`usuarioId: idDeStaff(nombre)` en `selector-de-rol.tsx`).
+   - El sitio publicado —apex y `www`, los dos— sirve el código viejo
+     (`x("staff",{staff:e})`), comprobado como explica "Saber qué build está
+     publicada, desde afuera". Cabeceras: `x-vercel-cache: HIT`, `age` de
+     ~34 min, o sea de antes del push.
+   - Se sondeó el dominio diez veces en ~8 minutos y no cambió; media hora
+     después seguía igual.
+   - **El código no es el problema**: el preview de la rama
+     `claude/sweet-pascal-hkmq5c` —que es `main` más 3 commits— sí muestra
+     la grilla de turnos. Vercel compila esto sin problema.
+   - Ninguna migración nueva en ese push, así que no es la base.
+
+   Entonces es la publicación de producción. En el proyecto que tiene el
+   dominio, por orden:
+
+   1. **Deployments → el de Production**: ¿existe uno de `9ff8e04`? ¿Ready,
+      Error o Building? Si falló, el log dice por qué.
+   2. **Settings → Git → Production Branch**: tiene que decir `main`.
+   3. **Settings → Domains**: ¿`lapatoteca.cl` apunta a *Production* o quedó
+      clavado a un deployment puntual?
+   4. **¿Es el proyecto correcto?** En la lista de "Active Branches" que se
+      miró aparecían ramas viejas (`prueba/supabase`, `prueba/turnos`,
+      `prueba/marcado-por`) y **no** `main`. Que `main` no esté ahí es normal
+      si es la rama de producción —esa lista es de previews—, pero conviene
+      confirmar que esa pantalla es la de **`lapatoteca`** y no la del
+      proyecto viejo `lapatoteca-app`, que sigue conectado al mismo repo.
+      Es exactamente la trampa anotada en "Dónde vive cada cosa".
+
+   **Atajo mientras tanto**: el menú "..." de cualquier deployment listo
+   tiene *Promote to Production*. El de `pruebas` sirve si está al mismo
+   commit que `main`; el de una rama `claude/…` subiría además trabajo que
+   no pasó por `main`.
+
 1. ~~Correr en Supabase `20261022150000_cambios_de_agenda` y
    `20261022160000_planes_y_dia_de_prueba`~~ — hecho el 22-10-2026,
    verificado desde afuera.
@@ -2132,7 +2211,13 @@ tema tiene su explicación más arriba en este archivo.
   alta que crea la cuenta de acceso, y la app con la base vacía.
 - **El equipo**: alta del personal por invitación, el correo de invitación
   que sale de verdad (PR #4 y #5), y la planilla de turnos con el fichaje
-  desde `/staff`.
+  desde `/staff`. Después se le agregó la **vista de grilla** —una columna
+  por turno, una fila por media hora— al lado de la vista por día, y que
+  Administración también se pueda asignar a un turno.
+- **El día de prueba, de punta a punta** (22-10): la tarjeta de `/admin`
+  muestra los que VIENEN además de los que esperan veredicto —antes uno
+  recién agendado no aparecía en ningún lado—, y el ingreso sin reserva ya
+  no deja entrar a un perro que todavía no es cliente.
 - **El alta y la ficha** (PR #1): sexo y castración fijos para el dueño, el
   sobrepeso que se conversa y Administración habilita, el antiparasitario
   vencido que avisa, el día de prueba que dice qué falta antes de elegir hora,
