@@ -1873,8 +1873,10 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
      llamarse igual. Si está, se borra. Lo único que se pierde es probar
      "olvidé mi contraseña" desde una vista previa; entrar con contraseña
      ahí funciona igual, porque no usa la dirección de vuelta.
-5. Confirmar que el **tope de correos por hora** de Supabase se subió en
-   Authentication → Rate Limits (ver más arriba: Resend solo no lo sube).
+5. ~~Confirmar que el **tope de correos por hora** de Supabase se subió en
+   Authentication → Rate Limits~~ — **revisado el 22-10-2026: está en 100
+   por hora**, de sobra para el volumen de la casa (ver más arriba: Resend
+   solo no lo sube).
    Cada cliente nuevo recibe un correo de confirmación: con el tope bajo,
    un día con varias altas deja a alguien sin poder crear su cuenta.
 6. En `/admin/configuracion`: cargar el WhatsApp de la casa y la cuenta para
