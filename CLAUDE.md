@@ -2039,8 +2039,10 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
 
    Lo verificado, para no repetirlo:
 
-   - En GitHub `main` está en `9ff8e04` y **sí** tiene el código nuevo
-     (`usuarioId: idDeStaff(nombre)` en `selector-de-rol.tsx`).
+   - En GitHub `main` **sí** tiene el código nuevo: la marca para
+     comprobarlo es `usuarioId: idDeStaff(nombre)` en
+     `selector-de-rol.tsx`. (Al escribir esto main estaba en `9ff8e04` y
+     siguió avanzando con otras sesiones; el hash envejece, la marca no.)
    - El sitio publicado —apex y `www`, los dos— sirve el código viejo
      (`x("staff",{staff:e})`), comprobado como explica "Saber qué build está
      publicada, desde afuera". Cabeceras: `x-vercel-cache: HIT`, `age` de
