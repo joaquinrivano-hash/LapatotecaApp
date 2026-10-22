@@ -1764,12 +1764,19 @@ Supabase y se cambia en `/admin/configuracion`. Una sesión nueva no lo ve.
 
 | Qué | Para qué | Estado al 22-10-2026 |
 |---|---|---|
-| WhatsApp de la casa | Lo que ve el dueño cuando algo "se conversa" (un perro con sobrepeso, un link de pago). | Sin confirmar si se cargó |
-| Cuenta para transferir | Lo que se abre al tocar "transferencia" en los cobros, el abono y el día suelto. | Sin confirmar si se cargó |
+| WhatsApp de la casa | Lo que ve el dueño cuando algo "se conversa" (un perro con sobrepeso, un link de pago). | **Cargado** (verificado desde afuera) |
+| Cuenta para transferir | Lo que se abre al tocar "transferencia" en los cobros, el abono y el día suelto. | **Cargada**, los seis campos (verificado desde afuera) |
 | Campos obligatorios, vacunas, listas | Qué se le pide a una ficha nueva y qué ofrecen los desplegables. | Los de fábrica, salvo que alguien los haya cambiado |
 
 Vacíos no rompen nada: la app dice "te escribimos nosotros" o "te mandamos
 los datos por WhatsApp", que es lo único que se puede cumplir.
+
+**Ojo: todo lo de `configuracion` se lee sin sesión**, también el titular,
+el RUT y el número de cuenta. La tabla está abierta porque el formulario de
+alta la necesita antes de que exista una cuenta (ver "La nube"). Si la
+cuenta es de la empresa, es lo mismo que ponerla en una boleta; si el RUT es
+personal, conviene mover los datos de pago a algo que solo vea quien tiene
+sesión. **Pendiente de que la dueña diga de quién es la cuenta.**
 
 #### Qué migraciones corrieron en producción
 
@@ -1889,8 +1896,10 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
    solo no lo sube).
    Cada cliente nuevo recibe un correo de confirmación: con el tope bajo,
    un día con varias altas deja a alguien sin poder crear su cuenta.
-6. En `/admin/configuracion`: cargar el WhatsApp de la casa y la cuenta para
-   transferir.
+6. ~~En `/admin/configuracion`: cargar el WhatsApp de la casa y la cuenta
+   para transferir~~ — hecho el 22-10-2026, verificado desde afuera. Queda
+   decidir si los datos de pago siguen visibles sin sesión (ver "Lo que vive
+   en la base y se edita desde la app").
 7. Mandarle a `pxeclt@gmail.com` el enlace por WhatsApp desde
    `/admin/equipo`, si su invitación sigue en la lista. Al crear su cuenta en
    `/crear-cuenta/equipo` con ese mismo correo escribe su nombre, que es con
