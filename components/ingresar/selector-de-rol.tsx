@@ -9,7 +9,11 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LogoPatoteca } from "@/components/shared/logo";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
-import { STAFF, idDeStaff } from "@/lib/data/catalogos";
+import {
+  ADMIN_DEL_PROTOTIPO,
+  STAFF,
+  idDeStaff,
+} from "@/lib/data/catalogos";
 import { useConsulta } from "@/lib/hooks/use-consulta";
 import { useMontado } from "@/lib/hooks/use-montado";
 import { useSesion } from "@/lib/store/sesion";
@@ -173,7 +177,7 @@ export function SelectorDeRol() {
           descripcion="Clientes, calendario, pagos, planes y números"
           icono={ShieldCheck}
           activo={false}
-          onClick={() => ir("admin")}
+          onClick={() => ir("admin", { usuarioId: ADMIN_DEL_PROTOTIPO.id })}
         />
       </div>
 
