@@ -77,6 +77,72 @@ export async function diasDePruebaPorEvaluar(
     .sort((a, b) => b.diasEsperando - a.diasEsperando);
 }
 
+export interface DiaDePruebaQueViene {
+  perro: Perro;
+  cliente: Cliente | null;
+  estadia: EstadiaJardin;
+  fecha: FechaISO;
+  /** Cuántos días faltan. 0 es hoy. */
+  diasParaQueLlegue: number;
+}
+
+/**
+ * Los días de prueba agendados que todavía no ocurren.
+ *
+ * Existe porque un día de prueba recién agendado no aparecía EN NINGÚN LADO
+ * del backoffice: la cola de veredictos solo mira los que ya pasaron —un
+ * jueves no se evalúa el martes— y el calendario de ocupación muestra un
+ * número, no quién viene. Entonces el dueño agendaba, pagaba, y la casa se
+ * enteraba el día que el perro aparecía en la puerta.
+ *
+ * Es la primera vez que ese dueño le pide algo a la casa, así que es
+ * justamente el que no puede pasar desapercibido.
+ *
+ * Se mira por la estadía y no por `perro.diaDePrueba.fecha`: si lo
+ * reprogramaron, la jornada es la que quedó. Un perro sin estadía agendada
+ * no entra —no hay nada que venir a esperar— y ahí la cola de veredictos lo
+ * recoge cuando corresponda.
+ */
+export async function diasDePruebaQueVienen(
+  repo: RepositorioPatoteca,
+  hoy: FechaISO,
+): Promise<DiaDePruebaQueViene[]> {
+  const perros = await repo.perros.listar();
+  const agendados = perros.filter((p) => p.diaDePrueba.estado === "agendado");
+  if (agendados.length === 0) return [];
+
+  const porPerro = new Map(agendados.map((p) => [p.id, p]));
+  const [clientes, estadias] = await Promise.all([
+    repo.clientes.listar(),
+    // Sin tope por arriba: un dueño puede agendar para el mes que viene y
+    // un rango de "los próximos siete días" lo dejaría invisible otra vez,
+    // que es exactamente el problema que esto viene a arreglar.
+    repo.estadiasJardin.enRango(hoy, "9999-12-31"),
+  ]);
+
+  const porCliente = new Map(clientes.map((c) => [c.id, c]));
+
+  return estadias
+    .filter(
+      (e) =>
+        e.origen === "dia_de_prueba" &&
+        e.estado !== "cancelada" &&
+        e.fecha >= hoy &&
+        porPerro.has(e.perroId),
+    )
+    .map((estadia) => {
+      const perro = porPerro.get(estadia.perroId)!;
+      return {
+        perro,
+        cliente: porCliente.get(perro.clienteId) ?? null,
+        estadia,
+        fecha: estadia.fecha,
+        diasParaQueLlegue: diasEntreISO(hoy, estadia.fecha),
+      };
+    })
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+
 /** Días de calendario entre dos fechas ya normalizadas a días de Santiago. */
 function diasEntreISO(desde: FechaISO, hasta: FechaISO): number {
   const ms = Date.parse(`${hasta}T12:00:00Z`) - Date.parse(`${desde}T12:00:00Z`);

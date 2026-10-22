@@ -5,7 +5,9 @@ import {
   evaluarAdmision,
   tieneVacunasAlDia,
   vacunasFaltantes,
+  motivoParaNoRecibirlo,
   vacunasPorVencer,
+  yaEsCliente,
 } from "./admision";
 
 const HOY = "2026-06-15";
@@ -232,5 +234,30 @@ describe("avisos que no bloquean", () => {
 
     expect(r.admitido).toBe(false);
     expect(r.bloqueos.map((p) => p.motivo)).toEqual(["desparasitacion"]);
+  });
+});
+
+describe("yaEsCliente", () => {
+  it("es cliente con el día de prueba aprobado", () => {
+    expect(yaEsCliente(perro())).toBe(true);
+    expect(motivoParaNoRecibirlo(perro())).toBeNull();
+  });
+
+  it("agendado todavía no es cliente", () => {
+    const p = perro({ diaDePrueba: { estado: "agendado", fecha: HOY } });
+    expect(yaEsCliente(p)).toBe(false);
+    expect(motivoParaNoRecibirlo(p)).toContain("agendado");
+  });
+
+  it("rechazado no es cliente, y el motivo lo dice", () => {
+    const p = perro({ diaDePrueba: { estado: "rechazado" } });
+    expect(yaEsCliente(p)).toBe(false);
+    expect(motivoParaNoRecibirlo(p)).toContain("no fue aprobado");
+  });
+
+  it("sin día de prueba el motivo es que le falta", () => {
+    const p = perro({ diaDePrueba: { estado: "pendiente" } });
+    expect(yaEsCliente(p)).toBe(false);
+    expect(motivoParaNoRecibirlo(p)).toBe("Le falta su día de prueba");
   });
 });
