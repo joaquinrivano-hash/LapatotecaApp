@@ -2054,11 +2054,37 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
      la grilla de turnos. Vercel compila esto sin problema.
    - Ninguna migración nueva en ese push, así que no es la base.
 
+   **Revisado de nuevo el 22-10 a las 11:20 UTC**, seis horas después: seguía
+   igual. Lo que se agregó:
+
+   - **Hasta dónde llega lo publicado.** El JS de producción tiene
+     `agendar_dia_con_plan` (entró con `850720c`, 03:34 UTC) y no tiene la
+     marca del selector (entró con `cc1dc5e`, 04:46 UTC). La última
+     publicación de producción fue entre esas dos horas; nada de lo que llegó
+     a `main` después se publicó. Coincide con la caché: la portada llevaba
+     en el edge desde las 03:53 UTC.
+   - **El equipo de Vercel es `rivano1`**, sacado del comentario del bot de
+     Vercel en el PR #6. La lista de publicaciones está en
+     `https://vercel.com/rivano1/lapatoteca/deployments`. Las vistas previas
+     (`lapatoteca-git-<rama>-rivano1.vercel.app`) existen pero piden login de
+     Vercel, así que desde afuera no se ve qué sirven.
+   - **Cada push publica dos veces**: los dos proyectos (`lapatoteca` y
+     `lapatoteca-app`) están conectados al repo y los dos dejan su estado en
+     GitHub. Con tres sesiones a la vez hubo 82 commits en 24 horas entre
+     todas las ramas. Si la cuenta es Hobby, el tope es de **100
+     publicaciones al día** y al pasarlo Vercel deja de publicar sin avisar
+     en el sitio: el estado del commit dice "Resource is limited - try again
+     in X hours (more than 100, code: api-deployments-free-per-day)". **Es
+     una hipótesis**, la que mejor calza con que se cortara de golpe a media
+     noche; se confirma o descarta en la lista de publicaciones. Si es eso,
+     desconectar `lapatoteca-app` del repo corta el gasto a la mitad.
+
    Entonces es la publicación de producción. En el proyecto que tiene el
    dominio, por orden:
 
-   1. **Deployments → el de Production**: ¿existe uno de `9ff8e04`? ¿Ready,
-      Error o Building? Si falló, el log dice por qué.
+   1. **Deployments → el de Production**: ¿existe uno del último commit de
+      `main`? ¿Ready, Error, Canceled o Building? Si falló, el log dice por
+      qué.
    2. **Settings → Git → Production Branch**: tiene que decir `main`.
    3. **Settings → Domains**: ¿`lapatoteca.cl` apunta a *Production* o quedó
       clavado a un deployment puntual?
