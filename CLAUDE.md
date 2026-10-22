@@ -928,6 +928,57 @@ a anotar, no las que pasaron. Se muestra solo cuando hay algo que advertir.
 Solo entran jornadas y estadías **cerradas**. Una en curso no tiene hora de
 retiro, y contarla como "retiro a las 00:00" sería inventar un dato.
 
+### La planilla de turnos
+
+`lib/rules/turnos.ts`, `lib/servicios/turnos.ts` y la pestaña **Turnos** de
+`/admin/equipo`. Equipo tiene dos pestañas porque son dos trabajos distintos
+con la misma gente: quién **puede** entrar (accesos) y quién **está** cuando
+hay perros (turnos).
+
+Va día por día y no en una grilla de siete columnas: en el celular la grilla
+obliga a desplazarse de lado para leer un turno.
+
+**Lo real llega por dos caminos y nunca se mezclan.** El fichaje
+(`entradaReal` / `salidaReal`) es la hora que la persona declaró. Los
+**rastros** —reportes e incidentes, que llevan su nombre y su hora— son un
+PISO, no la presencia: si llegó a las 7 y el primer perro a las 8, su primer
+rastro es a las 8. Por eso la pantalla escribe "Entró 07:22" para el fichaje
+y *"activo desde 13:40"* en itálica para el rastro. Decirlos igual
+convertiría una deducción en un hecho, y eso después se usa para conversar
+sobre puntualidad. Sin ninguno de los dos, la respuesta es "no se sabe".
+
+Ojo con un hueco que queda: **marcar una llegada no guarda quién apretó el
+botón**, y marcar llegadas es lo que más se hace en un turno. Así que un
+turno tranquilo se parece a uno ausente, y la pantalla no lo presenta como
+ausencia. Se arregla con una columna `marcado_por` en `estadias_jardin` y
+`reservas_hotel`.
+
+**El turno planificado no lo puede tocar quien lo cubre.** RLS sabe acotar
+filas, no columnas, así que la política que deja fichar dejaría también
+reescribir el propio horario — y entonces el que llegó tarde quedaría
+puntual. Lo cuida el disparador `proteger_turno_planificado`, misma idea que
+`proteger_ficha_de_la_casa`.
+
+**La cobertura se mide solo en las horas de atención**
+(`NEGOCIO.turnos.horasQueSeCubren`, 07:00–21:00 del folleto), no en las 24.
+De noche quedan los perros de hotel durmiendo y eso no es una pregunta de
+planilla: la dueña vive en la casa. Marcar cada noche como descubierta haría
+que el aviso rojo apareciera los siete días y entonces se deja de mirar,
+justo antes de que aparezca el que importa.
+
+Por lo mismo, con la planilla vacía **no se listan los huecos**: sería "nadie
+cubre de 00:00 a 24:00" repetido siete veces. Ese caso lo dice una sola
+línea, y en rojo solo si ese día hubo perros.
+
+Dos detalles chicos que costaron un rato: el final del día es `"24:00"` y no
+`"00:00"` —el minuto 1440 da la vuelta al reloj y un hueco de un día entero
+se leía como que no dura nada—, y el botón de fichar aparece **solo si hay
+turno asignado para hoy**: pedirle a alguien que fiche algo que nadie
+planificó es pedirle que invente el dato.
+
+El seed no inventa turnos. Sesenta días de planilla que nadie escribió es
+llenar la pantalla de datos falsos.
+
 ### El calendario y su semáforo
 
 En la tira de días el color va al revés de un semáforo de alerta: **verde desde
@@ -1081,11 +1132,21 @@ del propio admin) o copiarlo. La primera versión decía "Invitamos a…" y la
 persona se quedó esperando un correo que nunca iba a salir.
 
 El único correo que sí manda el sistema es la **confirmación de Supabase** al
-registrarse. Con el servidor de correo que trae Supabase por defecto, ese
-correo solo llega a direcciones del equipo del proyecto en Supabase y con un
-tope de pocos envíos por hora. Para que llegue a cualquiera hay que
-configurar un SMTP propio en Supabase (Authentication → SMTP) o apagar la
-confirmación de correo.
+registrarse, y **sale por Resend** (ver "Dónde vive cada cosa"). El remitente
+que Supabase trae por defecto no sirve para operar: solo llega a direcciones
+del equipo del proyecto y con un tope de pocos envíos por hora.
+
+Ese tope costó una tarde entera de diagnóstico, así que vale escribir cómo se
+ve desde adentro: la cuenta **queda creada** aunque el correo no salga, y
+Supabase responde `Error sending confirmation email`. Por eso el mensaje que
+ve la persona no la invita a reintentar —reintentar gasta otro envío, no
+arregla nada y la deja convencida de que no tiene cuenta cuando sí la tiene—
+sino que le pide que escriba.
+
+Y una trampa del cambio a Resend: **conectar un SMTP propio NO sube el tope
+de envíos**. Sigue en el número bajo del remitente incluido hasta que se
+suba a mano en Authentication → Rate Limits. Sin eso parece que Resend quedó
+mal configurado cuando lo que pasa es que Supabase no lo deja mandar.
 
 #### Grants y políticas son dos cosas
 
@@ -1277,6 +1338,7 @@ afuera, y se actualiza cuando cambia:
 | Hosting | Proyecto de Vercel **`lapatoteca`**: tiene el dominio y publica `main` como Production. |
 | Proyecto viejo | **`lapatoteca-app`** en Vercel quedó sin el dominio y está por borrarse. Ahí vive `lapatoteca-apppruebas.vercel.app`, que apuntaba a `prueba/vista-dueno`. **No se cargan variables ahí.** |
 | Base y login | Supabase, proyecto `kcxzoesspkggpchvqlnw`, plan Pro (US$25 + IVA al mes, el servidor Micro lo cubre el crédito). |
+| Correo saliente | **Resend**, dominio `lapatoteca.cl` verificado (región Brasil). Los tres registros DNS los puso Resend solo, con el *Auto configure* de Vercel. La API key vive en Supabase → Authentication → SMTP, con usuario `resend` y remitente `hola@lapatoteca.cl`. |
 | Buscador de direcciones | Llave de Google Cloud con el correo de la empresa, restringida a los dominios de `lapatoteca.cl`, `*.vercel.app` y `localhost:3000`, y a Maps JavaScript API + Places API (New). |
 
 Variables en Vercel (proyecto `lapatoteca`, Production y Preview):
