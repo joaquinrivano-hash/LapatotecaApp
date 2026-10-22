@@ -2032,74 +2032,47 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
 
 **Afuera del código** (lo hace la dueña o quien tenga acceso a los paneles):
 
-0. **PENDIENTE Y BLOQUEANTE — producción no se está actualizando.** Al cerrar
-   el 22-10-2026 (05:33 UTC), `lapatoteca.cl` servía una build **anterior**
-   al último push. Esto es lo primero que hay que mirar mañana, porque
-   mientras siga así **nada de lo que se suba a `main` se ve**.
+0. ~~**Producción no se estaba actualizando**~~ — **se destrabó el 22-10 a
+   las 11:25 UTC** con un push nuevo a `main` (`7d70919`): Vercel lo publicó
+   en menos de un minuto y el sitio pasó a servir el código del último
+   commit, verificado desde afuera con los textos de `fb4c702` ("Todavía
+   estás a tiempo, así que te devolvemos lo que pagaste."). **La causa no se
+   confirmó**, y por eso queda anotado cómo se ve y qué mirar si vuelve.
 
-   Lo verificado, para no repetirlo:
+   Cómo se vio: entre ~04:46 y 11:24 UTC ningún push a `main` se publicó.
+   El JS de producción tenía `agendar_dia_con_plan` (entró con `850720c`,
+   03:34 UTC) y no la marca del selector, `usuarioId: idDeStaff(nombre)`
+   (entró con `cc1dc5e`, 04:46 UTC), y la portada llevaba en el edge desde
+   las 03:53 UTC. El código no era: la vista previa de una rama con ese
+   mismo código compilaba, y `build` local en verde.
 
-   - En GitHub `main` **sí** tiene el código nuevo: la marca para
-     comprobarlo es `usuarioId: idDeStaff(nombre)` en
-     `selector-de-rol.tsx`. (Al escribir esto main estaba en `9ff8e04` y
-     siguió avanzando con otras sesiones; el hash envejece, la marca no.)
-   - El sitio publicado —apex y `www`, los dos— sirve el código viejo
-     (`x("staff",{staff:e})`), comprobado como explica "Saber qué build está
-     publicada, desde afuera". Cabeceras: `x-vercel-cache: HIT`, `age` de
-     ~34 min, o sea de antes del push.
-   - Se sondeó el dominio diez veces en ~8 minutos y no cambió; media hora
-     después seguía igual.
-   - **El código no es el problema**: el preview de la rama
-     `claude/sweet-pascal-hkmq5c` —que es `main` más 3 commits— sí muestra
-     la grilla de turnos. Vercel compila esto sin problema.
-   - Ninguna migración nueva en ese push, así que no es la base.
+   **La hipótesis que mejor calza** es el tope de **100 publicaciones al
+   día** de Vercel Hobby: cada push publica **dos veces**, porque los dos
+   proyectos (`lapatoteca` y el viejo `lapatoteca-app`) siguen conectados
+   al repo, y con tres sesiones a la vez hubo 82 commits en 24 horas entre
+   todas las ramas. El tope es por ventana móvil, así que horas después
+   vuelve a haber cupo — que es justo lo que pasó. Al pasarlo, el estado
+   del commit en GitHub dice "Resource is limited - try again in X hours
+   (more than 100, code: api-deployments-free-per-day)" y el sitio no
+   avisa nada. **Desconectar `lapatoteca-app` del repo** corta el gasto a
+   la mitad y de todas formas está por borrarse.
 
-   **Revisado de nuevo el 22-10 a las 11:20 UTC**, seis horas después: seguía
-   igual. Lo que se agregó:
+   Si vuelve a pasar, en `https://vercel.com/rivano1/lapatoteca/deployments`
+   (el equipo es `rivano1`, sacado del comentario del bot de Vercel en el
+   PR #6):
 
-   - **Hasta dónde llega lo publicado.** El JS de producción tiene
-     `agendar_dia_con_plan` (entró con `850720c`, 03:34 UTC) y no tiene la
-     marca del selector (entró con `cc1dc5e`, 04:46 UTC). La última
-     publicación de producción fue entre esas dos horas; nada de lo que llegó
-     a `main` después se publicó. Coincide con la caché: la portada llevaba
-     en el edge desde las 03:53 UTC.
-   - **El equipo de Vercel es `rivano1`**, sacado del comentario del bot de
-     Vercel en el PR #6. La lista de publicaciones está en
-     `https://vercel.com/rivano1/lapatoteca/deployments`. Las vistas previas
-     (`lapatoteca-git-<rama>-rivano1.vercel.app`) existen pero piden login de
-     Vercel, así que desde afuera no se ve qué sirven.
-   - **Cada push publica dos veces**: los dos proyectos (`lapatoteca` y
-     `lapatoteca-app`) están conectados al repo y los dos dejan su estado en
-     GitHub. Con tres sesiones a la vez hubo 82 commits en 24 horas entre
-     todas las ramas. Si la cuenta es Hobby, el tope es de **100
-     publicaciones al día** y al pasarlo Vercel deja de publicar sin avisar
-     en el sitio: el estado del commit dice "Resource is limited - try again
-     in X hours (more than 100, code: api-deployments-free-per-day)". **Es
-     una hipótesis**, la que mejor calza con que se cortara de golpe a media
-     noche; se confirma o descarta en la lista de publicaciones. Si es eso,
-     desconectar `lapatoteca-app` del repo corta el gasto a la mitad.
+   1. ¿Existe una publicación del último commit de `main`? ¿Ready, Error,
+      Canceled? Si no existe o falló, el estado dice por qué.
+   2. **Settings → Git → Production Branch** tiene que decir `main`, y
+      **Settings → Domains** apuntar a *Production*, no a una publicación
+      puntual.
+   3. Que la pantalla sea la de **`lapatoteca`** y no la de
+      `lapatoteca-app` (ver "Dónde vive cada cosa").
 
-   Entonces es la publicación de producción. En el proyecto que tiene el
-   dominio, por orden:
-
-   1. **Deployments → el de Production**: ¿existe uno del último commit de
-      `main`? ¿Ready, Error, Canceled o Building? Si falló, el log dice por
-      qué.
-   2. **Settings → Git → Production Branch**: tiene que decir `main`.
-   3. **Settings → Domains**: ¿`lapatoteca.cl` apunta a *Production* o quedó
-      clavado a un deployment puntual?
-   4. **¿Es el proyecto correcto?** En la lista de "Active Branches" que se
-      miró aparecían ramas viejas (`prueba/supabase`, `prueba/turnos`,
-      `prueba/marcado-por`) y **no** `main`. Que `main` no esté ahí es normal
-      si es la rama de producción —esa lista es de previews—, pero conviene
-      confirmar que esa pantalla es la de **`lapatoteca`** y no la del
-      proyecto viejo `lapatoteca-app`, que sigue conectado al mismo repo.
-      Es exactamente la trampa anotada en "Dónde vive cada cosa".
-
-   **Atajo mientras tanto**: el menú "..." de cualquier deployment listo
-   tiene *Promote to Production*. El de `pruebas` sirve si está al mismo
-   commit que `main`; el de una rama `claude/…` subiría además trabajo que
-   no pasó por `main`.
+   Las vistas previas (`lapatoteca-git-<rama>-rivano1.vercel.app`) piden
+   login de Vercel, así que desde afuera no se ve qué sirven: lo único
+   que una sesión puede mirar es el dominio de producción. **Atajo**: el
+   menú "..." de una publicación lista tiene *Promote to Production*.
 
 1. ~~Correr en Supabase `20261022150000_cambios_de_agenda` y
    `20261022160000_planes_y_dia_de_prueba`~~ — hecho el 22-10-2026,
