@@ -811,6 +811,32 @@ Cancelar y mover le dejan un aviso a Administración, igual que el día de
 jardín: el día, con cuánta anticipación avisó y en qué quedó el cobro. Al
 mover, el día va con su antes y su después, porque eso sí cambió.
 
+#### Y alguien tiene que cerrarlo
+
+`lib/servicios/evaluacion.ts` y la tarjeta de `/admin`. El día de prueba es
+una evaluación, y hasta que no tiene veredicto el perro **no puede reservar**
+— o sea, un cliente que no vuelve.
+
+El estado ya se podía cambiar desde la ficha del perro, con dos problemas que
+lo hacían inservible: no se encontraba —había que acordarse de qué perro vino,
+buscar a su dueño y entrar a editar, sin que nada avisara que faltaba una
+decisión— y pasaba por la validación de la ficha completa, así que a un perro
+al que le faltaba un dato no se le podía dar el veredicto. Aprobar es un
+juicio sobre cómo se portó, no sobre si el formulario está lleno.
+
+Ahora es su propia acción, con su propia cola en el tablero, ordenada por el
+que lleva más tiempo esperando: lo que se añeja es lo que se termina no
+decidiendo. Se esconde sola cuando no hay nada.
+
+**Aprobar es un toque; rechazar pide el motivo.** Casi todos se aprueban, y un
+rechazo sin explicación no le sirve a nadie el día que alguien lo lea. La nota
+se guarda también al aprobar: "le costó la primera hora pero después jugó
+bien" es justo lo que el equipo quiere leer cuando el perro llegue.
+
+Solo entran los días que **ya pasaron**: uno agendado para el jueves no se
+evalúa el martes. Y la fecha que manda es la de la jornada, no la de la ficha:
+si lo reprogramaron, la estadía es la que quedó.
+
 Las condiciones se muestran **antes de pagar**, no detrás de un enlace.
 Enterarse después es la manera segura de que se sientan letra chica.
 

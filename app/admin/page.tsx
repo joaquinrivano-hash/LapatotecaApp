@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CumpleanosDelMes } from "@/components/shared/cumpleanos";
 import { AvisosDeDuenos } from "@/components/admin/avisos-de-duenos";
+import { DiasDePruebaPorEvaluar } from "@/components/admin/dias-de-prueba";
 import { HorariosDelDia } from "@/components/admin/horarios-del-dia";
 import { PrecioCLP } from "@/components/shared/precio";
 import { Tile } from "@/components/shared/tile";
@@ -218,6 +219,8 @@ export default function Numeros() {
           </Card>
         </div>
       </div>
+
+      <DiasDePruebaPorEvaluar hoy={hoy} />
 
       <AvisosDeDuenos />
 
