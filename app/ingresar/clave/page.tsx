@@ -8,7 +8,7 @@ import { KeyRound } from "lucide-react";
 import { LogoPatoteca } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { InputClave } from "@/components/shared/input-clave";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { autenticacion, hayAuthReal } from "@/lib/auth";
@@ -152,9 +152,8 @@ export default function CambiarClave() {
             <form onSubmit={guardar} className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor={idClave}>Contraseña nueva</Label>
-                <Input
+                <InputClave
                   id={idClave}
-                  type="password"
                   autoComplete="new-password"
                   required
                   value={clave}
@@ -167,9 +166,8 @@ export default function CambiarClave() {
 
               <div className="space-y-1.5">
                 <Label htmlFor={idRepetida}>Escríbela otra vez</Label>
-                <Input
+                <InputClave
                   id={idRepetida}
-                  type="password"
                   autoComplete="new-password"
                   required
                   value={repetida}

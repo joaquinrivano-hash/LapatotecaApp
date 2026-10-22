@@ -2,17 +2,25 @@
 
 import { useId, useState } from "react";
 import { toast } from "sonner";
-import { Mail, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
+import {
+  Copy,
+  Mail,
+  MessageCircle,
+  ShieldCheck,
+  Trash2,
+  UserPlus,
+  Users,
+} from "lucide-react";
 
 import { EstadoVacio } from "@/components/shared/estado-vacio";
-import { PlanillaDeTurnos } from "@/components/admin/planilla-turnos";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { hayAuthReal } from "@/lib/auth";
+import { PlanillaDeTurnos } from "@/components/admin/planilla-turnos";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { useSesion } from "@/lib/store/sesion";
 import type { Rol } from "@/lib/types";
@@ -35,7 +43,51 @@ const NOMBRE_DEL_ROL: Record<Rol, string> = {
  * Entonces se anota el correo ANTES y la base le pone el rol cuando esa
  * persona se registre. Quien llegue por su cuenta, sin estar anotado, nace
  * dueño.
+ *
+ * **La app no manda ningún correo.** Mandarlo desde acá exigiría la llave
+ * `service_role` de Supabase viviendo en un servidor, que es justo lo que este
+ * diseño evita. Por eso, en vez de prometer un correo que no sale, la pantalla
+ * deja el mensaje con el enlace listo para que Administración lo mande por
+ * WhatsApp o desde su propio correo. Una invitación que nadie recibe es una
+ * persona esperando algo que no va a llegar.
  */
+
+/** Dónde se registra el equipo: el alta normal del portal pide un perro. */
+function enlaceDeRegistro(): string {
+  return `${window.location.origin}/crear-cuenta/equipo`;
+}
+
+function mensajeDeInvitacion(rol: Rol, email: string): string {
+  return [
+    `¡Hola! Te invitamos al equipo de La Patoteca como ${NOMBRE_DEL_ROL[rol].toLowerCase()}.`,
+    `Crea tu cuenta acá, con este mismo correo (${email}):`,
+    enlaceDeRegistro(),
+  ].join("\n\n");
+}
+
+function mandarPorWhatsapp(rol: Rol, email: string) {
+  // Sin número: WhatsApp abre el selector de contactos con el mensaje escrito.
+  window.open(
+    `https://wa.me/?text=${encodeURIComponent(mensajeDeInvitacion(rol, email))}`,
+    "_blank",
+    "noreferrer",
+  );
+}
+
+function mandarPorCorreo(rol: Rol, email: string) {
+  const asunto = encodeURIComponent("Tu cuenta en La Patoteca");
+  const cuerpo = encodeURIComponent(mensajeDeInvitacion(rol, email));
+  window.location.href = `mailto:${email}?subject=${asunto}&body=${cuerpo}`;
+}
+
+async function copiarEnlace() {
+  try {
+    await navigator.clipboard.writeText(enlaceDeRegistro());
+    toast.success("Copiamos el enlace");
+  } catch {
+    toast.error("No pudimos copiarlo", { description: enlaceDeRegistro() });
+  }
+}
 export default function Equipo() {
   const idCorreo = useId();
   const yo = useSesion((s) => s.usuarioId);
@@ -51,8 +103,9 @@ export default function Equipo() {
     evento.preventDefault();
     try {
       await ejecutar((repo) => repo.equipo.invitar(correo, rol));
-      toast.success(`Invitamos a ${correo.trim().toLowerCase()}`, {
-        description: `Cuando se registre con ese correo, su cuenta nace como ${NOMBRE_DEL_ROL[rol].toLowerCase()}.`,
+      toast.success(`Anotamos a ${correo.trim().toLowerCase()}`, {
+        description:
+          "Ahora mándale el enlace para crear su cuenta: está abajo, en Invitaciones sin usar.",
       });
       setCorreo("");
     } catch (problema) {
@@ -115,9 +168,9 @@ export default function Equipo() {
           ) : (
             <>
               <p className="text-muted-foreground text-sm text-pretty">
-                Anota el correo de quien va a trabajar contigo. Cuando se
-                registre con ese mismo correo, su cuenta nace con el rol que le
-                pusiste.
+                Anota el correo de quien va a trabajar contigo y mándale el
+                enlace para crear su cuenta. Cuando se registre con ese mismo
+                correo, su cuenta nace con el rol que le pusiste.
               </p>
 
               <Card>
@@ -142,12 +195,10 @@ export default function Equipo() {
                         placeholder="maria@lapatoteca.cl"
                       />
                       <p className="text-muted-foreground text-xs text-pretty">
-                        Tiene que ser el mismo con el que se va a registrar, en{" "}
-                        <span className="font-semibold">
-                          /crear-cuenta/equipo
-                        </span>
-                        . Pásale ese enlace: el alta normal del portal pide un
-                        perro.
+                        Tiene que ser el mismo con el que se va a registrar. No
+                        le llega ningún correo nuestro: después de anotarlo te
+                        dejamos el mensaje con el enlace listo para que se lo
+                        mandes.
                       </p>
                     </div>
 
@@ -177,8 +228,8 @@ export default function Equipo() {
                       className="w-full"
                       disabled={ocupado}
                     >
-                      <Mail />
-                      Invitar
+                      <UserPlus />
+                      Anotar invitación
                     </Button>
                   </form>
                 </CardContent>
@@ -198,33 +249,77 @@ export default function Equipo() {
                       No hay ninguna esperando.
                     </p>
                   ) : (
-                    <ul className="space-y-2">
-                      {sinUsar.map((invitacion) => (
-                        <li
-                          key={invitacion.email}
-                          className="bg-secondary/40 flex items-center gap-3 rounded-xl p-3"
-                        >
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate font-semibold">
-                              {invitacion.email}
-                            </span>
-                            <span className="text-muted-foreground block text-sm">
-                              {NOMBRE_DEL_ROL[invitacion.rol]} · anotada el{" "}
-                              {formatearFechaCorta(invitacion.creadaEn)}
-                            </span>
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Cancelar la invitación de ${invitacion.email}`}
-                            disabled={ocupado}
-                            onClick={() => cancelar(invitacion.email)}
+                    <>
+                      <p className="text-muted-foreground text-sm text-pretty">
+                        Mándale el enlace a cada persona para que cree su
+                        cuenta. Puedes volver a mandarlo las veces que haga
+                        falta.
+                      </p>
+                      <ul className="space-y-2">
+                        {sinUsar.map((invitacion) => (
+                          <li
+                            key={invitacion.email}
+                            className="bg-secondary/40 space-y-3 rounded-xl p-3"
                           >
-                            <Trash2 />
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
+                            <div className="flex items-center gap-3">
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate font-semibold">
+                                  {invitacion.email}
+                                </span>
+                                <span className="text-muted-foreground block text-sm">
+                                  {NOMBRE_DEL_ROL[invitacion.rol]} · anotada el{" "}
+                                  {formatearFechaCorta(invitacion.creadaEn)}
+                                </span>
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Cancelar la invitación de ${invitacion.email}`}
+                                disabled={ocupado}
+                                onClick={() => cancelar(invitacion.email)}
+                              >
+                                <Trash2 />
+                              </Button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() =>
+                                  mandarPorWhatsapp(
+                                    invitacion.rol,
+                                    invitacion.email,
+                                  )
+                                }
+                              >
+                                <MessageCircle />
+                                Mandar por WhatsApp
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  mandarPorCorreo(
+                                    invitacion.rol,
+                                    invitacion.email,
+                                  )
+                                }
+                              >
+                                <Mail />
+                                Por correo
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={copiarEnlace}
+                              >
+                                <Copy />
+                                Copiar enlace
+                              </Button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
                   )}
                 </CardContent>
               </Card>

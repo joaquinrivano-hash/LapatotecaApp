@@ -212,6 +212,18 @@ export const NEGOCIO = {
     email: "",
   },
 
+  /**
+   * Dónde está la casa: Providencia, cerca de Diagonal Oriente con Manuel
+   * Montt. El buscador de direcciones prioriza lo que queda cerca de acá,
+   * así "Italia 1500" sugiere la avenida de Ñuñoa y no una calle de Arica.
+   */
+  ubicacion: {
+    lat: -33.4436,
+    lng: -70.6189,
+    /** Hasta dónde se prioriza, en metros. Más lejos igual aparece. */
+    radioSugerenciasM: 25_000,
+  },
+
   cobroMensual: {
     /** Día del mes en que se emite la cuenta unificada. */
     diaDelMes: 1,

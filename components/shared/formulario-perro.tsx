@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { Camera, FileImage, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InputClave } from "@/components/shared/input-clave";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -1179,15 +1180,25 @@ export function Campo({
       <Label htmlFor={id} className={pequena ? "text-xs" : undefined}>
         {etiqueta}
       </Label>
-      <Input
-        id={id}
-        type={tipo}
-        inputMode={tipo === "number" ? "decimal" : undefined}
-        value={valor}
-        autoComplete={autoComplete}
-        aria-invalid={error ? true : undefined}
-        onChange={(e) => onCambio(e.target.value)}
-      />
+      {tipo === "password" ? (
+        <InputClave
+          id={id}
+          value={valor}
+          autoComplete={autoComplete}
+          aria-invalid={error ? true : undefined}
+          onChange={(e) => onCambio(e.target.value)}
+        />
+      ) : (
+        <Input
+          id={id}
+          type={tipo}
+          inputMode={tipo === "number" ? "decimal" : undefined}
+          value={valor}
+          autoComplete={autoComplete}
+          aria-invalid={error ? true : undefined}
+          onChange={(e) => onCambio(e.target.value)}
+        />
+      )}
       {error ? (
         <p className="text-destructive text-xs">{error}</p>
       ) : ayuda ? (

@@ -722,6 +722,30 @@ sobrepeso la cuenta se crea igual, el botón dice "Crear cuenta" y no "Crear
 cuenta y agendar", y en vez del calendario va a su cuenta, que explica que lo
 conversamos.
 
+### La dirección se elige, no se escribe
+
+`components/shared/campo-direccion.tsx` y `lib/integraciones/direcciones/`.
+El alta pide la **dirección** con sugerencias de Google Places, limitadas a
+Chile y priorizando lo que queda cerca de la casa (`NEGOCIO.ubicacion`). La
+**comuna sale de lo que eligió**: no se le pregunta aparte.
+
+- Es válida recién cuando se **elige de la lista** y trae **número**. Un
+  texto escrito a mano puede no existir, y eso se descubre el día del
+  traslado. Editar después de elegir la deja sin confirmar.
+- La comuna es `administrative_area_level_3`, no `locality`: en el centro
+  Google dice "Santiago" para direcciones de comunas vecinas.
+- Se usa la API de datos y no el widget de Google, que dibuja su caja en un
+  shadow DOM sin los estilos de la marca. Sugerencias y detalle van con el
+  mismo token de sesión, que Google cobra como una sola búsqueda.
+- **Sin `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`, o si el script no carga**, el campo
+  vuelve a ser dirección y comuna escritas. El alta nunca se tranca por
+  nosotros. La llave es pública y se protege con restricción de dominio y de
+  API en Google Cloud (ver `.env.example`).
+
+Las contraseñas llevan **el ojo para verlas** (`InputClave`): en el celular se
+escribe con el pulgar, y una mal tecleada se descubre recién cuando el login
+la rechaza. Parte oculta, por si hay alguien mirando.
+
 ### El día de prueba
 
 Es **media jornada** de un día de jardín normal —6 horas, la mitad de las 12
@@ -1034,6 +1058,20 @@ Tres detalles que son la diferencia entre que funcione y que sea un agujero:
 
 El **primer admin** sí se asciende a mano, una vez, desde el editor SQL: no hay
 ningún admin todavía que pueda invitarlo. De ahí en adelante invita él.
+
+**Invitar no manda ningún correo**, y la pantalla lo dice. Mandarlo desde la
+app exigiría justamente la `service_role` key. Así que después de anotar el
+correo, `/admin/equipo` deja el mensaje con el enlace a
+`/crear-cuenta/equipo` listo para mandarlo por WhatsApp, por correo (abre el
+del propio admin) o copiarlo. La primera versión decía "Invitamos a…" y la
+persona se quedó esperando un correo que nunca iba a salir.
+
+El único correo que sí manda el sistema es la **confirmación de Supabase** al
+registrarse. Con el servidor de correo que trae Supabase por defecto, ese
+correo solo llega a direcciones del equipo del proyecto en Supabase y con un
+tope de pocos envíos por hora. Para que llegue a cualquiera hay que
+configurar un SMTP propio en Supabase (Authentication → SMTP) o apagar la
+confirmación de correo.
 
 #### Grants y políticas son dos cosas
 

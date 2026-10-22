@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CabeceraPublica } from "@/components/shared/cabecera-publica";
+import { CampoDireccion } from "@/components/shared/campo-direccion";
 import { ContactoCasa } from "@/components/shared/contacto-casa";
 import {
   aBorrador,
@@ -57,8 +58,10 @@ export default function CrearCuenta() {
     apellido: "",
     email: "",
     telefono: "",
-    comuna: "Providencia",
+    comuna: "",
+    direccion: "",
   });
+  const [direccionValida, setDireccionValida] = useState(false);
   const [perro, setPerro] = useState<EstadoPerro>(estadoVacio);
   // Los reparos del formulario se muestran recién cuando intenta guardar: ir
   // marcando en rojo lo que todavía no alcanza a escribir es hostil.
@@ -76,7 +79,7 @@ export default function CrearCuenta() {
     cuenta.apellido.trim() !== "" &&
     cuenta.email.trim() !== "" &&
     esTelefonoValido(cuenta.telefono) &&
-    cuenta.comuna.trim() !== "" &&
+    direccionValida &&
     (!conCuentaReal || clave.length >= LARGO_MINIMO_CLAVE);
 
   async function crear() {
@@ -245,12 +248,13 @@ export default function CrearCuenta() {
               }
             />
 
-            <Campo
-              id="comuna"
-              etiqueta="Comuna"
-              valor={cuenta.comuna}
-              onCambio={(v) => setCuenta({ ...cuenta, comuna: v })}
-              autoComplete="address-level2"
+            <CampoDireccion
+              onCambio={({ direccion, comuna, valida }) => {
+                // Funcional: la dirección llega después de esperar a Google,
+                // y para entonces `cuenta` pudo cambiar en otro campo.
+                setCuenta((c) => ({ ...c, direccion, comuna }));
+                setDireccionValida(valida);
+              }}
             />
           </CardContent>
         </Card>
