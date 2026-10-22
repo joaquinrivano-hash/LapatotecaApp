@@ -221,3 +221,34 @@ export function evaluarAdmision(
   const bloqueos = problemas.filter((p) => p.bloquea);
   return { admitido: bloqueos.length === 0, problemas, bloqueos };
 }
+
+/**
+ * Si el perro ya es cliente de la casa.
+ *
+ * El día de prueba aprobado es lo que lo convierte en cliente: antes de eso
+ * nadie lo vio conviviendo con los demás. Por eso es la condición para
+ * entrar sin reserva, que es la única vía donde no hay nada agendado que lo
+ * avale.
+ */
+export function yaEsCliente(perro: Perro): boolean {
+  return perro.diaDePrueba.estado === "aprobado";
+}
+
+/**
+ * Por qué todavía no se lo puede recibir sin reserva. Null si sí se puede.
+ *
+ * La lista del ingreso no planificado lo muestra al lado del nombre en vez
+ * de esconder al perro: a quien está buscando a uno que sabe que existe,
+ * "no aparece" le dice que la app se equivocó. Esto le dice qué falta.
+ */
+export function motivoParaNoRecibirlo(perro: Perro): string | null {
+  if (yaEsCliente(perro)) return null;
+  switch (perro.diaDePrueba.estado) {
+    case "rechazado":
+      return "Su día de prueba no fue aprobado";
+    case "agendado":
+      return "Su día de prueba está agendado, todavía sin aprobar";
+    default:
+      return "Le falta su día de prueba";
+  }
+}

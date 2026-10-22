@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
+import { motivoParaNoRecibirlo } from "@/lib/rules/admision";
 import { PrecioCLP } from "@/components/shared/precio";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import {
@@ -94,7 +95,14 @@ function Contenido({ onListo }: { onListo: () => void }) {
     );
   }
 
-  const resultados = encontrados.datos ?? [];
+  // Los que ya son clientes arriba; los demás igual se muestran, con el
+  // motivo al lado. Esconderlos haría que quien busca a un perro que sabe
+  // que existe piense que la app se equivocó.
+  const resultados = [...(encontrados.datos ?? [])].sort(
+    (a, b) =>
+      Number(motivoParaNoRecibirlo(a) !== null) -
+      Number(motivoParaNoRecibirlo(b) !== null),
+  );
 
   return (
     <>
@@ -134,13 +142,10 @@ function Contenido({ onListo }: { onListo: () => void }) {
           </p>
         ) : (
           <ul className="space-y-1.5">
-            {resultados.slice(0, 20).map((candidato) => (
-              <li key={candidato.id}>
-                <button
-                  type="button"
-                  onClick={() => setPerro(candidato)}
-                  className="hover:bg-secondary/70 flex w-full items-center gap-3 rounded-xl p-2 text-left transition-colors"
-                >
+            {resultados.slice(0, 20).map((candidato) => {
+              const motivo = motivoParaNoRecibirlo(candidato);
+              const cuerpo = (
+                <>
                   <PerroAvatar
                     id={candidato.id}
                     nombre={candidato.nombre}
@@ -150,15 +155,63 @@ function Contenido({ onListo }: { onListo: () => void }) {
                     <span className="block truncate font-semibold">
                       {candidato.nombre}
                     </span>
-                    <span className="text-muted-foreground block truncate text-sm">
-                      {candidato.raza} · {candidato.pesoKg} kg
+                    {/* La raza se trunca sin perder nada; el motivo NO, que
+                        es justo el dato por el que ese perro está apagado.
+                        Truncado se leía "Su día de prueba está agenda…". */}
+                    <span
+                      className={cn(
+                        "text-muted-foreground block text-sm",
+                        motivo ? "text-pretty" : "truncate",
+                      )}
+                    >
+                      {motivo ?? `${candidato.raza} · ${candidato.pesoKg} kg`}
                     </span>
                   </span>
-                </button>
-              </li>
-            ))}
+                </>
+              );
+
+              return (
+                <li key={candidato.id}>
+                  {motivo ? (
+                    /* Sin día de prueba aprobado no se puede recibir, y esto
+                       no se fuerza: la jornada completa en la casa es lo que
+                       el día de prueba evalúa. Va apagado y con el motivo,
+                       no escondido. */
+                    <div
+                      aria-disabled
+                      className="flex w-full items-start gap-3 rounded-xl p-2 text-left opacity-55"
+                    >
+                      {cuerpo}
+                      <Badge variant="outline" className="mt-0.5 shrink-0">
+                        No es cliente
+                      </Badge>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPerro(candidato)}
+                      className="hover:bg-secondary/70 flex w-full items-center gap-3 rounded-xl p-2 text-left transition-colors"
+                    >
+                      {cuerpo}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
+
+        {/* Una lista entera de filas apagadas deja a quien busca sin saber
+            qué hacer. El día de prueba lo agenda el dueño desde su cuenta y
+            lo aprueba Administración, así que eso es lo que hay que decirle
+            —no es algo que se resuelva en la puerta. */}
+        {resultados.length > 0 &&
+          resultados.every((p) => motivoParaNoRecibirlo(p) !== null) && (
+            <p className="text-muted-foreground px-2 pb-2 text-sm text-pretty">
+              Ninguno puede quedarse todavía. El día de prueba lo agenda el
+              dueño desde su cuenta y lo aprueba Administración.
+            </p>
+          )}
       </div>
     </>
   );
@@ -179,7 +232,11 @@ function Revision({
 }) {
   const { ocupado, ejecutar } = useAccion();
   const opciones = opcionesDeRetiro();
-  const retiro = finMinutos ?? opciones.at(-1)?.minutos ?? 19 * 60;
+  // `opcionesDeRetiro` garantiza al menos una opción, y siempre posterior a
+  // ahora. El `19 * 60` que había acá era un precio de negocio hardcodeado
+  // —el cierre— y además producía una estadía que terminaba antes de
+  // empezar cuando el perro llegaba después de esa hora.
+  const retiro = finMinutos ?? opciones[opciones.length - 1].minutos;
 
   const revision = useConsulta(
     (repo) =>

@@ -6,6 +6,7 @@ import { CLAVE_ALMACEN, crearRepositorioLocal } from "@/lib/repo/local";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
 import {
   diasDePruebaPorEvaluar,
+  diasDePruebaQueVienen,
   esperandoSuPrimeraReserva,
   reciénAprobados,
   resolverDiaDePrueba,
@@ -250,5 +251,87 @@ describe("reciénAprobados", () => {
       estadiasJardin: [estadia("2026-10-28", { id: "est-2", origen: "dia_suelto" })],
     });
     await expect(reciénAprobados(repo, "cli-1")).resolves.toEqual([]);
+  });
+});
+
+describe("diasDePruebaQueVienen", () => {
+  it("muestra el día de prueba agendado a futuro", async () => {
+    montar({
+      perros: [perro({ diaDePrueba: { estado: "agendado", fecha: "2026-10-29" } })],
+      estadiasJardin: [estadia("2026-10-29", { estado: "esperada" })],
+    });
+
+    const [x] = await diasDePruebaQueVienen(repo, HOY);
+    expect(x.perro.nombre).toBe("Trufa");
+    expect(x.fecha).toBe("2026-10-29");
+    expect(x.diasParaQueLlegue).toBe(7);
+    expect(x.cliente?.nombre).toBe("Camila");
+  });
+
+  it("el de hoy todavía cuenta como que viene", async () => {
+    montar({
+      perros: [perro({ diaDePrueba: { estado: "agendado", fecha: HOY } })],
+      estadiasJardin: [estadia(HOY, { estado: "esperada" })],
+    });
+
+    const [x] = await diasDePruebaQueVienen(repo, HOY);
+    expect(x.diasParaQueLlegue).toBe(0);
+  });
+
+  it("el que ya pasó no viene: lo toma la cola de veredictos", async () => {
+    montar({
+      perros: [perro()],
+      estadiasJardin: [estadia("2026-10-20")],
+    });
+
+    await expect(diasDePruebaQueVienen(repo, HOY)).resolves.toEqual([]);
+    expect(await diasDePruebaPorEvaluar(repo, HOY)).toHaveLength(1);
+  });
+
+  it("una cancelada no viene", async () => {
+    montar({
+      perros: [perro({ diaDePrueba: { estado: "agendado", fecha: "2026-10-29" } })],
+      estadiasJardin: [estadia("2026-10-29", { estado: "cancelada" })],
+    });
+
+    await expect(diasDePruebaQueVienen(repo, HOY)).resolves.toEqual([]);
+  });
+
+  it("manda la fecha de la estadía, no la de la ficha: reprogramar la mueve", async () => {
+    montar({
+      // La ficha quedó con la fecha vieja y la jornada se movió al 29.
+      perros: [perro({ diaDePrueba: { estado: "agendado", fecha: "2026-10-24" } })],
+      estadiasJardin: [estadia("2026-10-29", { estado: "esperada" })],
+    });
+
+    const [x] = await diasDePruebaQueVienen(repo, HOY);
+    expect(x.fecha).toBe("2026-10-29");
+  });
+
+  it("un día suelto normal no es un día de prueba", async () => {
+    montar({
+      perros: [perro({ diaDePrueba: { estado: "agendado", fecha: "2026-10-29" } })],
+      estadiasJardin: [
+        estadia("2026-10-29", { estado: "esperada", origen: "dia_suelto" }),
+      ],
+    });
+
+    await expect(diasDePruebaQueVienen(repo, HOY)).resolves.toEqual([]);
+  });
+
+  it("salen ordenados por el que llega primero", async () => {
+    montar({
+      perros: [
+        perro({ id: "perro-1", nombre: "Trufa" }),
+        perro({ id: "perro-2", nombre: "Mota" }),
+      ],
+      estadiasJardin: [
+        estadia("2026-10-30", { id: "e1", perroId: "perro-1", estado: "esperada" }),
+        estadia("2026-10-25", { id: "e2", perroId: "perro-2", estado: "esperada" }),
+      ],
+    });
+
+    const cola = await diasDePruebaQueVienen(repo, HOY);
+    expect(cola.map((x) => x.perro.nombre)).toEqual(["Mota", "Trufa"]);
   });
 });

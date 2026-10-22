@@ -11,7 +11,11 @@
  */
 
 import { NEGOCIO } from "@/lib/config/negocio";
-import { evaluarAdmision, type ResultadoAdmision } from "@/lib/rules/admision";
+import {
+  evaluarAdmision,
+  motivoParaNoRecibirlo,
+  type ResultadoAdmision,
+} from "@/lib/rules/admision";
 import { elegirPlanParaUsar } from "@/lib/rules/planes";
 import {
   calcularOcupacionDia,
@@ -414,6 +418,19 @@ export async function registrarIngreso(
     );
   }
 
+  // Esto NO se fuerza, a diferencia de los demás reparos. El ingreso no
+  // planificado es para perros que ya son clientes: a uno nuevo todavía
+  // nadie lo vio con los otros, y la jornada completa en la casa es
+  // justamente lo que el día de prueba evalúa antes de permitirla. Dejarlo
+  // entrar por acá sería saltarse la evaluación, no decidir sobre ella.
+  const motivo = motivoParaNoRecibirlo(revision.perro);
+  if (motivo) {
+    throw new IngresoBloqueado(
+      `${revision.perro.nombre} todavía no es cliente: ${motivo.toLowerCase()}.`,
+      revision,
+    );
+  }
+
   if (!revision.sinReparos && !opciones.forzar) {
     throw new IngresoBloqueado(
       `${revision.perro.nombre} no cumple algún requisito o no hay cupo.`,
@@ -475,7 +492,7 @@ export function opcionesDeRetiro(
     Math.ceil((ahoraMin + NEGOCIO.jardin.horasJornadaCorta * 60 - 60) / 30) * 30,
   );
 
-  return [
+  const futuras = [
     { etiqueta: "Media jornada", minutos: media },
     { etiqueta: "Jornada completa", minutos: cierre },
   ].filter(
@@ -483,6 +500,24 @@ export function opcionesDeRetiro(
       opcion.minutos > ahoraMin &&
       todas.findIndex((o) => o.minutos === opcion.minutos) === i,
   );
+
+  // NUNCA se devuelve vacío, y eso no es una comodidad para la pantalla.
+  // Pasado el cierre las dos opciones quedan en el pasado, y con la lista
+  // vacía quien llamaba se inventaba una hora de retiro —el cierre— que ya
+  // había ocurrido: la estadía nacía terminando ANTES de empezar y el día
+  // desaparecía del calendario, porque un rango invertido no ocupa ninguna
+  // franja. Esto era el origen de esos rangos al revés, no un dato corrupto.
+  //
+  // El perro que llega después del cierre es una excepción y lo buscan
+  // luego, así que la estimación honesta es la hora siguiente.
+  if (futuras.length > 0) return futuras;
+
+  return [
+    {
+      etiqueta: "En una hora",
+      minutos: Math.min(24 * 60, Math.ceil((ahoraMin + 60) / 30) * 30),
+    },
+  ];
 }
 
 /** Marca que el perro no llegó. No cobra nada. */
