@@ -51,6 +51,7 @@ export default function CrearCuenta() {
   const conCuentaReal = hayAuthReal();
   const [clave, setClave] = useState("");
   const [porConfirmar, setPorConfirmar] = useState<string | null>(null);
+  const [falloAlCrear, setFalloAlCrear] = useState<string | null>(null);
 
   const [cuenta, setCuenta] = useState({
     nombre: "",
@@ -83,6 +84,7 @@ export default function CrearCuenta() {
 
   async function crear() {
     if (!configuracion.datos) return;
+    setFalloAlCrear(null);
 
     const revision = revisarAltaDePerro(borrador, configuracion.datos, hoy);
     setFaltantes(revision);
@@ -134,7 +136,28 @@ export default function CrearCuenta() {
         });
         return;
       }
-      toast.error("No pudimos crear la cuenta.");
+      /*
+       * El motivo se muestra, no se traga.
+       *
+       * La versión anterior ponía "No pudimos crear la cuenta" y descartaba
+       * el error. Eso bastaba cuando lo único que podía fallar era la ficha
+       * —y eso ya lo cubre RegistroRechazado—, pero desde que hay cuentas de
+       * acceso fallan cosas que la persona SÍ puede resolver: el correo ya
+       * registrado, la contraseña corta, el remitente pasado de su límite.
+       * Un mensaje fijo las convierte todas en "algo salió mal".
+       *
+       * Los mensajes de Supabase ya vienen traducidos por `explicarAuth`.
+       */
+      const motivo =
+        problema instanceof Error ? problema.message : String(problema);
+      toast.error("No pudimos crear la cuenta.", {
+        description: motivo,
+        // Más tiempo del normal: el formulario es largo y si el aviso se va
+        // antes de que alcance a leerlo, no queda dónde volver a verlo.
+        duration: 12000,
+      });
+      // Y queda escrito bajo el botón, que es donde está mirando.
+      setFalloAlCrear(motivo);
     }
   }
 
@@ -303,6 +326,18 @@ export default function CrearCuenta() {
               ? "Crear cuenta"
               : "Crear cuenta y agendar"}
         </Button>
+
+        {/* El motivo queda a la vista bajo el botón. El aviso flotante se
+            va solo, y este formulario es largo: si se fue antes de que lo
+            leyera, no había dónde volver a verlo. */}
+        {falloAlCrear && (
+          <p
+            role="alert"
+            className="bg-destructive/10 text-destructive rounded-xl px-3 py-2 text-center text-sm font-semibold text-pretty"
+          >
+            {falloAlCrear}
+          </p>
+        )}
 
         <p className="text-muted-foreground text-center text-xs text-pretty">
           Recibimos perritos de hasta {NEGOCIO.admision.pesoMaximoKg} kg, con

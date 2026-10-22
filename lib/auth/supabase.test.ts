@@ -48,6 +48,17 @@ describe("explicarAuth", () => {
     ).toMatch(/6 caracteres/);
   });
 
+  // El que más aparece al abrir un proyecto: el remitente incluido de
+  // Supabase manda muy pocos por hora. La cuenta queda creada sin que la
+  // persona reciba nada, así que el mensaje no la puede invitar a
+  // reintentar: reintentar gasta otro envío y no arregla nada.
+  it("explica el correo que no salió sin pedir que lo reintente", () => {
+    const m = explicarAuth({ message: "Error sending confirmation email" });
+    expect(m).toMatch(/no pudimos mandarte el correo/i);
+    expect(m).toMatch(/ya existe/i);
+    expect(m).not.toMatch(/vuelve a probar/i);
+  });
+
   it("deja pasar lo que no sabe traducir, en vez de inventar", () => {
     expect(explicarAuth({ message: "algo rarísimo del servidor" })).toBe(
       "algo rarísimo del servidor",
