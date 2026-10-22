@@ -773,6 +773,30 @@ Las contraseñas llevan **el ojo para verlas** (`InputClave`): en el celular se
 escribe con el pulgar, y una mal tecleada se descubre recién cuando el login
 la rechaza. Parte oculta, por si hay alguien mirando.
 
+### "Olvidé mi contraseña": la sesión tiene que ser la del enlace
+
+`/ingresar/clave`. La primera versión dejaba cambiar la contraseña con
+**cualquier sesión abierta** en ese navegador. Y el enlace casi siempre se
+abre en otro aparato que el que lo pidió: se pide en el computador y se abre
+desde el correo del teléfono. Ahí Supabase no lo puede usar —le falta la
+mitad (`code_verifier`) que quedó guardada donde se pidió— y, a propósito,
+**no borra la sesión que había**. La pantalla veía esa sesión, mostraba el
+formulario y le cambiaba la contraseña a la cuenta abierta en ese navegador,
+no a la del correo. Se vio probándolo el 22-10: se pidió para la cuenta de
+prueba, se cambió la contraseña y entrar con la nueva dio "no calzan". Que
+el cambio haya caído en la cuenta abierta en ese navegador es lo más
+probable, **sin confirmar**.
+
+Ahora pregunta `sesionDelEnlaceDeClave`, que solo acepta la sesión si la
+librería **usó** el enlace. La señal es que, al usarlo, la librería borra el
+`code` de la barra; si sigue ahí, no se pudo usar y la sesión es ajena. Por
+eso la pantalla lee la dirección en el render, antes de que nada la limpie.
+Y dice **de qué cuenta** es la contraseña antes de guardarla.
+
+Si el enlace se abre en otro aparato, la pantalla dice que se abre solo
+donde se pidió. Es el límite del flujo con `code_verifier` (PKCE), no un
+error: es justamente lo que impide que un enlace reenviado le sirva a otro.
+
 ### El día de prueba
 
 Es **media jornada** de un día de jardín normal —6 horas, la mitad de las 12
@@ -1822,7 +1846,13 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
 3. ~~Cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel~~ — **decidido no
    cargarla** (22-10-2026): las invitaciones al equipo van por WhatsApp.
    Los cuidados por si algún día se carga están en "Dónde vive cada cosa".
-4. Revisar en Supabase → Authentication → URL Configuration:
+4. Revisar en Supabase → Authentication → URL Configuration. **Revisado el
+   22-10-2026**: Site URL `https://lapatoteca.cl` (sirve: Vercel la manda a
+   `www` conservando el enlace) y solo las dos Redirect URLs de abajo, sin
+   `vercel.app`. La prueba de "olvidé mi contraseña" llegó a la pantalla
+   correcta y destapó un error de esa pantalla, ya arreglado (ver "Olvidé mi
+   contraseña: la sesión tiene que ser la del enlace"); **falta repetir la
+   prueba** pidiendo el enlace y abriéndolo en el mismo navegador.
    - **Site URL** = `https://www.lapatoteca.cl`. Es adonde vuelve el correo
      de **confirmación** al registrarse; Supabase trae `localhost:3000` por
      defecto, y con eso el enlace no abre.

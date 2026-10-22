@@ -5,7 +5,7 @@
  * se dibuja y lo que podría dibujar de más.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { crearAutenticacionSupabase, explicarAuth } from "@/lib/auth/supabase";
 import { clienteFalso, type Responder } from "@/lib/repo/supabase/falso";
@@ -354,5 +354,57 @@ describe("abrirDesdeEnlace", () => {
 
     const identidad = await auth.abrirDesdeEnlace({ tipo: "nada" });
     expect(identidad.rol).toBe("staff");
+  });
+});
+
+describe("sesionDelEnlaceDeClave", () => {
+  // La pantalla de contraseña nueva le cambiaba la contraseña a la cuenta
+  // abierta en el navegador, no a la del correo, cuando el enlace se abría
+  // en otro aparato que el que lo pidió.
+  const LLEGADA = "https://www.lapatoteca.cl/ingresar/clave?code=abc123";
+  const LIMPIA = "https://www.lapatoteca.cl/ingresar/clave";
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sin enlace en la dirección no toma ninguna sesión, aunque haya", async () => {
+    const getUser = vi.fn().mockResolvedValue({ data: { user: usuario } });
+    const { auth } = doble({ getUser } as Auth, tablas({ rol: "admin" }, null));
+
+    await expect(auth.sesionDelEnlaceDeClave(LIMPIA)).resolves.toBeNull();
+    expect(getUser).not.toHaveBeenCalled();
+  });
+
+  it("si la librería usó el enlace (borró el code), es la sesión del enlace", async () => {
+    vi.stubGlobal("location", { href: LIMPIA });
+    const { auth } = doble(
+      { getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }) } as Auth,
+      tablas({ rol: "cliente", nombre: "Javiera" }, { id: "uuid-c" }),
+    );
+
+    const identidad = await auth.sesionDelEnlaceDeClave(LLEGADA);
+    expect(identidad?.email).toBe(usuario.email);
+  });
+
+  it("si el code sigue en la barra, la sesión abierta es OTRA y no se toca", async () => {
+    // Abierto en un navegador donde no se pidió: Supabase no lo puede usar y
+    // deja la sesión que había, por ejemplo la de Administración.
+    vi.stubGlobal("location", { href: LLEGADA });
+    const { auth } = doble(
+      { getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }) } as Auth,
+      tablas({ rol: "admin" }, null),
+    );
+
+    await expect(auth.sesionDelEnlaceDeClave(LLEGADA)).resolves.toBeNull();
+  });
+
+  it("sin nadie con sesión, tampoco", async () => {
+    vi.stubGlobal("location", { href: LIMPIA });
+    const { auth } = doble({
+      getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
+    } as Auth);
+
+    await expect(auth.sesionDelEnlaceDeClave(LLEGADA)).resolves.toBeNull();
   });
 });

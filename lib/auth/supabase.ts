@@ -184,6 +184,25 @@ export function crearAutenticacionSupabase(
       if (error) throw new ErrorAutenticacion(explicarAuth(error));
     },
 
+    async sesionDelEnlaceDeClave(direccionAlLlegar) {
+      const codigo = new URL(direccionAlLlegar).searchParams.get("code");
+      if (!codigo) return null;
+
+      // `getUser` espera a que la librería termine de leer el enlace.
+      const { data, error } = await sb.auth.getUser();
+      if (error || !data.user) return null;
+
+      // Cuando el enlace sirve, la librería borra el `code` de la barra. Si
+      // sigue ahí, no se pudo usar en este navegador —le falta la mitad que
+      // quedó guardada donde se pidió el correo— y la sesión que hay es OTRA,
+      // anterior: justo la que no hay que tocar.
+      const ahora = globalThis.location?.href;
+      if (!ahora || new URL(ahora).searchParams.get("code") === codigo) {
+        return null;
+      }
+      return identidadDe(data.user);
+    },
+
     async abrirDesdeEnlace(enlace) {
       if (enlace.tipo === "error") throw new ErrorAutenticacion(enlace.mensaje);
 

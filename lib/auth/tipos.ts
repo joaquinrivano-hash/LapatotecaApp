@@ -68,6 +68,20 @@ export interface Autenticacion {
    */
   cambiarClave(nueva: string): Promise<void>;
   /**
+   * Quién abrió el enlace de "olvidé mi contraseña" en ESTA carga, o null.
+   *
+   * No alcanza con `actual()`. Si el enlace se abre en otro navegador que el
+   * que lo pidió —lo normal: se pide en el computador y se abre desde el
+   * correo del teléfono—, Supabase no lo puede usar ahí y, a propósito, deja
+   * la sesión que hubiera. Con `actual()` la pantalla tomaba esa sesión ajena
+   * por la del enlace y le cambiaba la contraseña a OTRA cuenta: la que
+   * estaba abierta en ese navegador.
+   *
+   * Recibe la dirección tal como llegó, leída antes de que la librería la
+   * limpie.
+   */
+  sesionDelEnlaceDeClave(direccionAlLlegar: string): Promise<Identidad | null>;
+  /**
    * Abre la sesión que trae el enlace de un correo (la invitación al equipo).
    *
    * Recibe el enlace ya leído por `leerEnlaceDeCorreo` y no la URL, para que

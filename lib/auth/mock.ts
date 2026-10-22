@@ -53,6 +53,12 @@ export function crearAutenticacionMock(): Autenticacion {
       throw new ErrorAutenticacion(SIN_CONTRASENAS);
     },
 
+    // En el prototipo no hay enlaces de correo: nunca hay sesión que venga
+    // de uno.
+    async sesionDelEnlaceDeClave() {
+      return null;
+    },
+
     async salir() {
       useSesion.getState().salir();
     },
