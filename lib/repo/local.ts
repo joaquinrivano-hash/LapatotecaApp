@@ -10,7 +10,9 @@
  */
 
 import { generarSeed, type DatosPatoteca } from "@/lib/data/seed";
+import { crearAgendaLocal } from "@/lib/repo/agenda-local";
 import { crearAlmacenLocal, type Almacen } from "@/lib/repo/almacen";
+import { ErrorRepositorio } from "@/lib/repo/error";
 import { configuracionPorDefecto } from "@/lib/rules/alta-perro";
 import type {
   ClienteRepo,
@@ -60,12 +62,7 @@ import type {
 
 export const CLAVE_ALMACEN = "patoteca:datos:v1";
 
-export class ErrorRepositorio extends Error {
-  constructor(mensaje: string) {
-    super(mensaje);
-    this.name = "ErrorRepositorio";
-  }
-}
+export { ErrorRepositorio };
 
 /** Todo lo que sale del repositorio es una copia: nadie muta el set por error. */
 function clonar<T>(valor: T): T {
@@ -672,15 +669,24 @@ export function crearRepositorioLocal(
     },
   };
 
+  const perros = new PerrosLocal(ctx, "perro", (d) => d.perros);
+  const estadiasJardin = new EstadiasJardinLocal(
+    ctx,
+    "est",
+    (d) => d.estadiasJardin,
+  );
+  const planes = new PlanesLocal(ctx, "plan", (d) => d.planes);
+  const pagos = new PagosLocal(ctx, "pago", (d) => d.pagos);
+
   return {
     clientes: new ClientesLocal(ctx, "cli", (d) => d.clientes),
-    perros: new PerrosLocal(ctx, "perro", (d) => d.perros),
+    perros,
     reservasHotel: new ReservasHotelLocal(ctx, "res", (d) => d.reservasHotel),
-    estadiasJardin: new EstadiasJardinLocal(ctx, "est", (d) => d.estadiasJardin),
-    planes: new PlanesLocal(ctx, "plan", (d) => d.planes),
+    estadiasJardin,
+    planes,
     suscripciones: new SuscripcionesLocal(ctx, "susc", (d) => d.suscripciones),
     servicios: new ServiciosLocal(ctx, "serv", (d) => d.servicios),
-    pagos: new PagosLocal(ctx, "pago", (d) => d.pagos),
+    pagos,
     cuentasMensuales: new CuentasMensualesLocal(
       ctx,
       "cuenta",
@@ -693,6 +699,7 @@ export function crearRepositorioLocal(
     mensajes: new MensajesLocal(ctx, "msg", (d) => d.mensajes),
     turnos: new TurnosLocal(ctx, "turno", (d) => d.turnos ?? []),
     notificaciones: new NotificacionesLocal(ctx, "avi", (d) => d.notificaciones),
+    agenda: crearAgendaLocal({ estadiasJardin, pagos, perros, planes }),
     configuracion,
     equipo,
     sistema,

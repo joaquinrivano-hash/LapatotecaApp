@@ -144,6 +144,10 @@ export async function actualizarPerroComoDueno(
   const permitidos = { ...cambios };
   delete permitidos.sexo;
   delete permitidos.esterilizado;
+  // El día de prueba lo agenda la app y lo cierra la casa: desde la ficha,
+  // el dueño se lo podría dar por aprobado. En la nube lo cuida además el
+  // disparador `proteger_el_dia_de_prueba`.
+  delete permitidos.diaDePrueba;
 
   const perro = await repo.perros.actualizar(perroId, permitidos);
   const diferencias = compararFichas(antes, perro);

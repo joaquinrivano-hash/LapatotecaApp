@@ -30,6 +30,8 @@ import { marcarPagado } from "./cobranza";
 
 const LUNES = "2026-06-15";
 const en = (hora: string, dia = LUNES) => instanteEnHora(dia, hora);
+/** Cuando se agenda: unos días antes. Un día que ya pasó no se agenda. */
+const ANTES = en("10:00", "2026-06-10");
 
 const CLIENTE: Cliente = {
   id: "cli-001",
@@ -287,7 +289,7 @@ describe("día de jardín", () => {
     const { estadia, planUsado } = await reservarDiaJardin(repo, {
       perroId: "perro-001",
       fecha: LUNES,
-    });
+    }, ANTES);
 
     expect(estadia.estado).toBe("esperada");
     expect(estadia.origen).toBe("plan");
@@ -295,9 +297,9 @@ describe("día de jardín", () => {
   });
 
   it("no deja agendar dos veces el mismo día", async () => {
-    await reservarDiaJardin(repo, { perroId: "perro-001", fecha: LUNES });
+    await reservarDiaJardin(repo, { perroId: "perro-001", fecha: LUNES }, ANTES);
     await expect(
-      reservarDiaJardin(repo, { perroId: "perro-001", fecha: LUNES }),
+      reservarDiaJardin(repo, { perroId: "perro-001", fecha: LUNES }, ANTES),
     ).rejects.toThrow(ReservaRechazada);
   });
 
@@ -305,7 +307,7 @@ describe("día de jardín", () => {
     const { pago, estadia } = await reservarDiaJardin(repo, {
       perroId: "perro-001",
       fecha: LUNES,
-    });
+    }, ANTES);
 
     expect(pago?.concepto).toBe("dia_suelto");
     expect(pago?.monto).toBe(estadia.cotizacion?.total);
@@ -318,7 +320,7 @@ describe("día de jardín", () => {
     const { pago, planUsado } = await reservarDiaJardin(repo, {
       perroId: "perro-001",
       fecha: LUNES,
-    });
+    }, ANTES);
 
     expect(pago).toBeNull();
     expect(planUsado?.diasUsados).toBe(PLAN_VIGENTE.diasUsados + 1);
@@ -327,7 +329,7 @@ describe("día de jardín", () => {
 });
 
 describe("comprar plan", () => {
-  it("cobra el plan por día y lo deja pagado", async () => {
+  it("cobra el plan por día y deja el cobro pendiente", async () => {
     const { plan, pago } = await comprarPlanDeJardin(
       repo,
       { perroId: "perro-001", tipo: "dias", dias: 12 },
@@ -337,7 +339,11 @@ describe("comprar plan", () => {
     expect(plan.diasTotales).toBe(12);
     expect(plan.precio).toBe(168_000);
     expect(plan.venceEn).toBe("2026-06-30");
-    expect(pago.estado).toBe("pagado");
+    // No hay pasarela: el dueño transfiere y Administración lo marca
+    // pagado. Darlo por pagado al comprar era lo que en la nube fallaba.
+    expect(pago.estado).toBe("pendiente");
+    expect(pago.pagadoEn).toBeUndefined();
+    expect(pago.monto).toBe(168_000);
   });
 
   it("el pase libre cuesta lo mismo sin importar los días", async () => {
@@ -453,7 +459,7 @@ describe("cancelar un día de jardín", () => {
     const { estadia } = await reservarDiaJardin(repo, {
       perroId: "perro-001",
       fecha: MANANA,
-    });
+    }, ANTES);
     return cancelarDiaDeJardin(repo, estadia.id, ahora);
   }
 
@@ -488,7 +494,7 @@ describe("cancelar un día de jardín", () => {
     const { estadia } = await reservarDiaJardin(repo, {
       perroId: "perro-001",
       fecha: MANANA,
-    });
+    }, ANTES);
     expect((await repo.planes.obtener(PLAN_VIGENTE.id))!.diasUsados).toBe(
       PLAN_VIGENTE.diasUsados + 1,
     );
@@ -508,7 +514,7 @@ describe("cancelar un día de jardín", () => {
     const { estadia } = await reservarDiaJardin(repo, {
       perroId: "perro-001",
       fecha: MANANA,
-    });
+    }, ANTES);
 
     const { planDevuelto } = await cancelarDiaDeJardin(
       repo,
@@ -525,7 +531,7 @@ describe("cancelar un día de jardín", () => {
     const { estadia } = await reservarDiaJardin(repo, {
       perroId: "perro-001",
       fecha: MANANA,
-    });
+    }, ANTES);
     await cancelarDiaDeJardin(repo, estadia.id, en("08:00", "2026-06-14"));
     await expect(
       cancelarDiaDeJardin(repo, estadia.id, en("09:00", "2026-06-14")),
@@ -547,7 +553,7 @@ describe("devolver la plata cuando ya estaba pagada", () => {
     const { estadia, pago } = await reservarDiaJardin(repo, {
       perroId: "perro-001",
       fecha: MANANA,
-    });
+    }, ANTES);
     await repo.pagos.actualizar(pago!.id, {
       estado: "pagado",
       metodo: "transferencia",
@@ -563,7 +569,7 @@ describe("devolver la plata cuando ya estaba pagada", () => {
     const { estadia } = await reservarDiaJardin(repo, {
       perroId: "perro-001",
       fecha: MANANA,
-    });
+    }, ANTES);
     const { aDevolver } = await cancelarDiaDeJardin(
       repo,
       estadia.id,
@@ -644,7 +650,7 @@ describe("Administración se entera de la cancelación", () => {
     const { estadia, pago } = await reservarDiaJardin(repo, {
       perroId: "perro-001",
       fecha: MANANA,
-    });
+    }, ANTES);
     if (pagar) {
       await repo.pagos.actualizar(pago!.id, {
         estado: "pagado",

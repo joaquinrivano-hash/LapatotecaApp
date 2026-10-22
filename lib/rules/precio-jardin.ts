@@ -166,7 +166,20 @@ export function calcularDevolucionJardin(
   inicioProgramado: InstanteISO,
   momentoCancelacion: InstanteISO,
 ): DevolucionJardin {
-  const horasDeAviso = horasEntre(momentoCancelacion, inicioProgramado);
+  return devolucionJardinConAviso(
+    horasEntre(momentoCancelacion, inicioProgramado),
+  );
+}
+
+/**
+ * La misma regla, dado el aviso en horas.
+ *
+ * En la nube esas horas las mide la base con su reloj —el del navegador se
+ * puede atrasar a mano—, y la pantalla explica lo que la base decidió.
+ */
+export function devolucionJardinConAviso(
+  horasDeAviso: number,
+): DevolucionJardin {
   const minimo = NEGOCIO.jardin.horasParaCancelarSinCosto;
 
   if (horasDeAviso >= minimo) {

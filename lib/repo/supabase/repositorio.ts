@@ -20,7 +20,7 @@
 
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 
-import { ErrorRepositorio } from "@/lib/repo/local";
+import { ErrorRepositorio } from "@/lib/repo/error";
 import {
   enRangoDeDias,
   filtroEnColumnas,
@@ -30,6 +30,7 @@ import {
 } from "@/lib/repo/supabase/consultas";
 import { aEntidad, aFila, type Fila } from "@/lib/repo/supabase/mapeo";
 import type {
+  AgendaRepo,
   ClienteRepo,
   ColeccionRepo,
   ConfiguracionRepo,
@@ -56,6 +57,7 @@ import type {
   TurnoRepo,
 } from "@/lib/repo/tipos";
 import { configuracionPorDefecto } from "@/lib/rules/alta-perro";
+import { devolucionJardinConAviso } from "@/lib/rules/precio-jardin";
 import type {
   Cliente,
   Configuracion,
@@ -589,6 +591,28 @@ class NotificacionesSupabase
   extends ColeccionSupabase<Notificacion>
   implements NotificacionRepo
 {
+  /**
+   * Deja el aviso sin pedirlo de vuelta.
+   *
+   * El dueño escribe avisos y no los lee: la bandeja es de Administración.
+   * Pedir la fila de vuelta —`.select()`, que en Postgres es `insert …
+   * returning`— obliga a pasar también la política de LECTURA, así que el
+   * insert permitido fallaba igual con "violates row-level security": el
+   * dueño corregía la ficha de su perro, se guardaba, y le salía un error.
+   *
+   * Por eso acá, y solo acá, el id lo pone el navegador. La regla de que los
+   * ids los pone la base es para no dejar elegir la llave de algo que después
+   * se lee; elegir la de una fila que uno mismo no puede ver no sirve de nada.
+   */
+  async crear(datos: SinId<Notificacion>): Promise<Notificacion> {
+    const notificacion: Notificacion = { ...datos, id: crypto.randomUUID() };
+    const { error } = await this.tablaDe().insert(
+      aFila(notificacion as unknown as Record<string, unknown>),
+    );
+    if (error) reventar("No se pudo dejar el aviso", error);
+    return notificacion;
+  }
+
   sinLeer() {
     return this.porColumna("leida", false);
   }
@@ -733,6 +757,144 @@ function equipoDe(cliente: Cliente0): EquipoRepo {
   };
 }
 
+/**
+ * Cancelar y mover lo agendado: cada cambio es una función de la base.
+ *
+ * El dueño no puede tocar un cobro, y está bien que no pueda: con `update`
+ * sobre `pagos` se dejaría cualquiera en $0 desde la consola. Así que cada
+ * cambio corre entero en la base (`20261022150000_cambios_de_agenda.sql`),
+ * en una transacción y con el reloj de la base. La hora que manda la app se
+ * ignora a propósito: si contara, atrasar el teléfono sería cancelar gratis.
+ *
+ * Las funciones devuelven el día, el plan y el cargo como filas dentro de un
+ * json; cada una se traduce con el mismo `aEntidad` que el resto.
+ */
+function agendaDe(cliente: Cliente0): AgendaRepo {
+  async function llamar(
+    funcion: string,
+    parametros: Record<string, unknown>,
+    contexto: string,
+  ): Promise<Fila> {
+    const { data, error } = await cliente.rpc(funcion, parametros);
+    if (error) reventar(contexto, error);
+    return data as Fila;
+  }
+
+  const entidad = <T>(fila: unknown): T | null =>
+    fila ? aEntidad<T>(fila as Fila) : null;
+
+  return {
+    async agendarDiaDePrueba(perroId, horario, cotizacion) {
+      const r = await llamar(
+        "agendar_dia_de_prueba",
+        {
+          perro: perroId,
+          nueva_fecha: horario.fecha,
+          nuevo_inicio: horario.inicio,
+          nuevo_fin: horario.fin,
+          la_cotizacion: cotizacion,
+        },
+        "No se pudo agendar el día de prueba",
+      );
+      return {
+        estadia: entidad<EstadiaJardin>(r.estadia)!,
+        pago: entidad<Pago>(r.pago)!,
+        perro: entidad<Perro>(r.perro)!,
+      };
+    },
+
+    async agendarDiaConPlan(planId, horario, cotizacion) {
+      const r = await llamar(
+        "agendar_dia_con_plan",
+        {
+          plan: planId,
+          nueva_fecha: horario.fecha,
+          nuevo_inicio: horario.inicio,
+          nuevo_fin: horario.fin,
+          la_cotizacion: cotizacion,
+        },
+        "No se pudo agendar el día con el plan",
+      );
+      return {
+        estadia: entidad<EstadiaJardin>(r.estadia)!,
+        plan: entidad<PlanComprado>(r.plan)!,
+      };
+    },
+
+    async comprarPlan(perroId, compra) {
+      // Días, precio y vencimiento los calcula la base con las mismas
+      // reglas: si los mandara la app, un plan de 99 días por $0 sería una
+      // línea de consola.
+      const r = await llamar(
+        "comprar_plan_de_jardin",
+        { perro: perroId, tipo_de_plan: compra.tipo, dias: compra.dias ?? null },
+        "No se pudo comprar el plan",
+      );
+      return {
+        plan: entidad<PlanComprado>(r.plan)!,
+        pago: entidad<Pago>(r.pago)!,
+      };
+    },
+
+    async cancelarDiaDePrueba(estadiaId) {
+      const r = await llamar(
+        "cancelar_dia_de_prueba",
+        { estadia: estadiaId },
+        "No se pudo cancelar el día de prueba",
+      );
+      return {
+        estadia: entidad<EstadiaJardin>(r.estadia)!,
+        politica: {
+          horasDeAviso: Number(r.horas_de_aviso),
+          sinCosto: r.sin_costo === true,
+          costo: Number(r.costo),
+        },
+      };
+    },
+
+    async reprogramarDiaDePrueba(estadiaId, nuevo) {
+      const r = await llamar(
+        "reprogramar_dia_de_prueba",
+        {
+          estadia: estadiaId,
+          nueva_fecha: nuevo.fecha,
+          nuevo_inicio: nuevo.inicio,
+          nuevo_fin: nuevo.fin,
+        },
+        "No se pudo cambiar el día de prueba",
+      );
+      return {
+        estadia: entidad<EstadiaJardin>(r.estadia)!,
+        politica: {
+          horasDeAviso: Number(r.horas_de_aviso),
+          sinCosto: r.sin_costo === true,
+          costo: Number(r.costo),
+        },
+        cargo: entidad<Pago>(r.cargo),
+      };
+    },
+
+    async cancelarDiaDeJardin(estadiaId) {
+      const r = await llamar(
+        "cancelar_dia_de_jardin",
+        { estadia: estadiaId },
+        "No se pudo cancelar el día",
+      );
+      return {
+        estadia: entidad<EstadiaJardin>(r.estadia)!,
+        // El texto sale de la regla con las horas que midió la base; si
+        // devuelve o no, de lo que la base hizo de verdad.
+        devolucion: {
+          ...devolucionJardinConAviso(Number(r.horas_de_aviso)),
+          devuelve: r.devuelve === true,
+        },
+        aDevolver: Number(r.a_devolver),
+        planDevuelto: entidad<PlanComprado>(r.plan),
+      };
+    },
+  };
+}
+
 /** Las tablas del dominio, en el orden en que se exportan. */
 const TABLAS_DEL_DOMINIO = [
   ["clientes", "clientes"],
@@ -852,6 +1014,7 @@ export function crearRepositorioSupabase(
       "notificaciones",
       "creada_en",
     ),
+    agenda: agendaDe(cliente),
     configuracion,
     equipo: equipoDe(cliente),
     sistema: sistemaDe(cliente, configuracion),

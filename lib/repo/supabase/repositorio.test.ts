@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 
 import { clienteFalso, filas } from "@/lib/repo/supabase/falso";
 import { crearRepositorioSupabase } from "@/lib/repo/supabase/repositorio";
+import type { Cotizacion } from "@/lib/types";
 
 const repo = (responder?: Parameters<typeof clienteFalso>[0]) => {
   const falso = clienteFalso(responder);
@@ -514,5 +515,282 @@ describe("equipo", () => {
     const { repo: r, argumentosDe } = repo(() => filas());
     await r.equipo.miembros();
     expect(argumentosDe("order")).toEqual(["creado_en", { ascending: true }]);
+  });
+});
+
+describe("agenda", () => {
+  // El dueño no puede tocar un cobro: con `update` sobre `pagos` se dejaría
+  // cualquiera en $0 desde la consola. Cancelar y mover tienen que pasar
+  // enteros por una función de la base, nunca por updates sueltos. Así fue
+  // como la cancelación del día de prueba quedaba a medias.
+  const ESTADIA = {
+    id: "uuid-e",
+    perro_id: "uuid-perro",
+    fecha: "2026-10-23",
+    inicio_programado: "2026-10-23T12:00:00+00:00",
+    estado: "cancelada",
+  };
+
+  it("cancelar el día de prueba es una sola llamada a la función", async () => {
+    const { repo: r, llamadas, argumentosDe } = repo(() => ({
+      data: {
+        estadia: ESTADIA,
+        horas_de_aviso: 3.5,
+        sin_costo: false,
+        costo: 5000,
+      },
+    }));
+
+    const { estadia, politica } = await r.agenda.cancelarDiaDePrueba(
+      "uuid-e",
+      "2026-10-23T08:30:00.000Z",
+    );
+
+    expect(llamadas.map((l) => l.tabla)).toEqual(["rpc:cancelar_dia_de_prueba"]);
+    // Sin la hora: la que vale es la de la base. Si la mandara el navegador,
+    // atrasar el teléfono sería cancelar gratis.
+    expect(argumentosDe("rpc")).toEqual([{ estadia: "uuid-e" }]);
+    expect(politica).toEqual({ horasDeAviso: 3.5, sinCosto: false, costo: 5000 });
+    expect(estadia.perroId).toBe("uuid-perro");
+    expect(estadia.inicioProgramado).toBe("2026-10-23T12:00:00.000Z");
+  });
+
+  it("mover el día manda el nuevo horario y trae el cargo, si hubo", async () => {
+    const { repo: r, llamadas, argumentosDe } = repo(() => ({
+      data: {
+        estadia: { ...ESTADIA, estado: "esperada" },
+        horas_de_aviso: 5,
+        sin_costo: false,
+        costo: 5000,
+        cargo: { id: "uuid-cargo", monto: 5000, estado: "pendiente", referencia_id: "uuid-e" },
+      },
+    }));
+
+    const { cargo, politica } = await r.agenda.reprogramarDiaDePrueba(
+      "uuid-e",
+      {
+        fecha: "2026-10-27",
+        inicio: "2026-10-27T13:00:00.000Z",
+        fin: "2026-10-27T19:00:00.000Z",
+      },
+      "2026-10-23T07:00:00.000Z",
+    );
+
+    expect(llamadas.map((l) => l.tabla)).toEqual(["rpc:reprogramar_dia_de_prueba"]);
+    expect(argumentosDe("rpc")).toEqual([
+      {
+        estadia: "uuid-e",
+        nueva_fecha: "2026-10-27",
+        nuevo_inicio: "2026-10-27T13:00:00.000Z",
+        nuevo_fin: "2026-10-27T19:00:00.000Z",
+      },
+    ]);
+    expect(politica.sinCosto).toBe(false);
+    expect(cargo).toMatchObject({ id: "uuid-cargo", referenciaId: "uuid-e" });
+  });
+
+  it("mover con tiempo no trae cargo", async () => {
+    const { repo: r } = repo(() => ({
+      data: { estadia: ESTADIA, horas_de_aviso: 50, sin_costo: true, costo: 0, cargo: null },
+    }));
+
+    const { cargo } = await r.agenda.reprogramarDiaDePrueba(
+      "uuid-e",
+      { fecha: "2026-10-27", inicio: "2026-10-27T13:00:00.000Z", fin: "2026-10-27T19:00:00.000Z" },
+      "2026-10-23T07:00:00.000Z",
+    );
+
+    expect(cargo).toBeNull();
+  });
+
+  it("cancelar un día de jardín trae lo que la base decidió", async () => {
+    const { repo: r, llamadas } = repo(() => ({
+      data: {
+        estadia: ESTADIA,
+        horas_de_aviso: 30,
+        devuelve: true,
+        a_devolver: 18000,
+        plan: { id: "uuid-plan", dias_usados: 3 },
+      },
+    }));
+
+    const resultado = await r.agenda.cancelarDiaDeJardin(
+      "uuid-e",
+      "2026-10-22T06:00:00.000Z",
+    );
+
+    expect(llamadas.map((l) => l.tabla)).toEqual(["rpc:cancelar_dia_de_jardin"]);
+    expect(resultado.devolucion.devuelve).toBe(true);
+    expect(resultado.devolucion.horasDeAviso).toBe(30);
+    expect(resultado.aDevolver).toBe(18000);
+    expect(resultado.planDevuelto).toMatchObject({ id: "uuid-plan", diasUsados: 3 });
+  });
+
+  it("sin plan no inventa uno", async () => {
+    const { repo: r } = repo(() => ({
+      data: { estadia: ESTADIA, horas_de_aviso: 2, devuelve: false, a_devolver: 0, plan: null },
+    }));
+
+    const resultado = await r.agenda.cancelarDiaDeJardin("uuid-e", "2026-10-23T10:00:00.000Z");
+
+    expect(resultado.devolucion.devuelve).toBe(false);
+    expect(resultado.planDevuelto).toBeNull();
+  });
+
+  it("lo que la base rechaza llega con su motivo", async () => {
+    const { repo: r } = repo(() => ({
+      error: { code: "P0001", message: "Ese día ya no se puede cancelar." },
+    }));
+
+    await expect(
+      r.agenda.cancelarDiaDePrueba("uuid-e", "2026-10-23T08:30:00.000Z"),
+    ).rejects.toThrow(/Ese día ya no se puede cancelar/);
+  });
+});
+
+describe("notificaciones.crear", () => {
+  // El dueño deja avisos y no los lee. Pedir la fila de vuelta (`.select()`,
+  // que es `insert … returning`) exige la política de LECTURA y el insert
+  // permitido fallaba igual.
+  it("deja el aviso sin pedirlo de vuelta", async () => {
+    const { repo: r, todosLos, argumentosDe } = repo(() => ({}));
+
+    const aviso = await r.notificaciones.crear({
+      clienteId: "uuid-c",
+      perroId: "uuid-perro",
+      titulo: "Camila canceló el día de Trufa",
+      cambios: [],
+      leida: false,
+      creadaEn: "2026-10-22T12:00:00.000Z",
+    });
+
+    expect(todosLos("select")).toEqual([]);
+    const [fila] = argumentosDe("insert") as [Record<string, unknown>];
+    expect(fila.id).toBe(aviso.id);
+    expect(fila.cliente_id).toBe("uuid-c");
+    expect(aviso.titulo).toBe("Camila canceló el día de Trufa");
+  });
+
+  it("si la base lo rechaza, falla claro", async () => {
+    const { repo: r } = repo(() => ({
+      error: { code: "42501", message: "new row violates row-level security" },
+    }));
+
+    await expect(
+      r.notificaciones.crear({
+        clienteId: "uuid-c",
+        titulo: "x",
+        cambios: [],
+        leida: false,
+        creadaEn: "2026-10-22T12:00:00.000Z",
+      }),
+    ).rejects.toThrow(/No tienes permiso/);
+  });
+});
+
+describe("agenda: agendar y comprar", () => {
+  // El dueño no escribe `planes` ni el día de prueba de su perro: con eso se
+  // dejaría el saldo del pack en cero o se aprobaría solo. Cada una es una
+  // sola llamada a una función de la base.
+  const HORARIO = {
+    fecha: "2026-10-27",
+    inicio: "2026-10-27T12:00:00.000Z",
+    fin: "2026-10-27T18:00:00.000Z",
+  };
+  const COTIZACION: Cotizacion = {
+    lineas: [],
+    subtotal: 10000,
+    descuentos: [],
+    total: 10000,
+  };
+
+  it("agendar el día de prueba manda el horario y la cotización que vio", async () => {
+    const { repo: r, llamadas, argumentosDe } = repo(() => ({
+      data: {
+        estadia: { id: "uuid-e", origen: "dia_de_prueba" },
+        pago: { id: "uuid-g", monto: 10000, estado: "pendiente" },
+        perro: { id: "uuid-perro", dia_de_prueba: { estado: "agendado", fecha: "2026-10-27" } },
+      },
+    }));
+
+    const { estadia, pago, perro } = await r.agenda.agendarDiaDePrueba(
+      "uuid-perro",
+      HORARIO,
+      COTIZACION,
+      "2026-10-22T12:00:00.000Z",
+    );
+
+    expect(llamadas.map((l) => l.tabla)).toEqual(["rpc:agendar_dia_de_prueba"]);
+    expect(argumentosDe("rpc")).toEqual([
+      {
+        perro: "uuid-perro",
+        nueva_fecha: "2026-10-27",
+        nuevo_inicio: "2026-10-27T12:00:00.000Z",
+        nuevo_fin: "2026-10-27T18:00:00.000Z",
+        la_cotizacion: COTIZACION,
+      },
+    ]);
+    expect(estadia.origen).toBe("dia_de_prueba");
+    expect(pago.estado).toBe("pendiente");
+    expect(perro.diaDePrueba.estado).toBe("agendado");
+  });
+
+  it("agendar con plan es una llamada, no un update al saldo", async () => {
+    const { repo: r, llamadas, argumentosDe } = repo(() => ({
+      data: {
+        estadia: { id: "uuid-e", origen: "plan", plan_id: "uuid-plan" },
+        plan: { id: "uuid-plan", dias_usados: 4 },
+      },
+    }));
+
+    const { estadia, plan } = await r.agenda.agendarDiaConPlan(
+      "uuid-plan",
+      HORARIO,
+      COTIZACION,
+      "2026-10-22T12:00:00.000Z",
+    );
+
+    expect(llamadas.map((l) => l.tabla)).toEqual(["rpc:agendar_dia_con_plan"]);
+    expect(argumentosDe("rpc")).toMatchObject([{ plan: "uuid-plan" }]);
+    expect(estadia.planId).toBe("uuid-plan");
+    expect(plan.diasUsados).toBe(4);
+  });
+
+  it("comprar un plan no manda ni el precio ni los días: los calcula la base", async () => {
+    const { repo: r, llamadas, argumentosDe } = repo(() => ({
+      data: {
+        plan: { id: "uuid-plan", dias_totales: 12, precio: 168000 },
+        pago: { id: "uuid-g", concepto: "plan", monto: 168000, estado: "pendiente" },
+      },
+    }));
+
+    const { plan, pago } = await r.agenda.comprarPlan(
+      "uuid-perro",
+      { tipo: "dias", dias: 12 },
+      "2026-10-22T12:00:00.000Z",
+    );
+
+    expect(llamadas.map((l) => l.tabla)).toEqual(["rpc:comprar_plan_de_jardin"]);
+    expect(argumentosDe("rpc")).toEqual([
+      { perro: "uuid-perro", tipo_de_plan: "dias", dias: 12 },
+    ]);
+    expect(plan).toMatchObject({ diasTotales: 12, precio: 168000 });
+    expect(pago.estado).toBe("pendiente");
+  });
+
+  it("el pase libre va sin días: los pone el mes", async () => {
+    const { repo: r, argumentosDe } = repo(() => ({
+      data: { plan: { id: "uuid-plan" }, pago: { id: "uuid-g" } },
+    }));
+
+    await r.agenda.comprarPlan(
+      "uuid-perro",
+      { tipo: "pase_libre" },
+      "2026-10-22T12:00:00.000Z",
+    );
+
+    expect(argumentosDe("rpc")).toEqual([
+      { perro: "uuid-perro", tipo_de_plan: "pase_libre", dias: null },
+    ]);
   });
 });

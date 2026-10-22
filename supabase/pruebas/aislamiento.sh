@@ -351,6 +351,233 @@ intento_como "$ADMIN" "Administración sí corrige una firma vieja" "1" \
    select count(*) from estadias_jardin
      where fecha = current_date and inicio_marcado_por = '$STAFF';"
 
+# ── Cancelar y mover lo agendado ─────────────────────────────────────
+#
+# El dueño no puede tocar un cobro, así que cancelar pasa por funciones que
+# hacen el cambio entero —el día, el cobro y el perro— con la hora de la
+# base. Antes la cancelación quedaba a medias: el día cancelado y el cobro
+# en pie, porque el update sobre `pagos` no le correspondía.
+echo "▸ cancelar y mover lo agendado"
+
+ANA_CLI=aaaaaaaa-0000-0000-0000-000000000001
+LOLA=cccccccc-0000-0000-0000-000000000001
+PRUEBA=ffffffff-0000-0000-0000-000000000001
+SUELTO=ffffffff-0000-0000-0000-000000000002
+BETO_DIA=$(sql "select id from estadias_jardin where cliente_id = 'bbbbbbbb-0000-0000-0000-000000000002';" | tail -1)
+
+# Lo que arma la casa antes de la prueba: corre como postgres, que es como
+# corren las funciones. El dueño ya no puede fabricar un día de prueba ni
+# marcar a su perro agendado por fuera de ellas.
+como_la_casa () {
+  echo "reset role; $1 set local role authenticated;"
+}
+
+# El día de prueba de Lola, agendado a tanto de ahora, con su cobro.
+prueba_en () {
+  como_la_casa "insert into estadias_jardin (id, cliente_id, perro_id, fecha, inicio_programado, fin_programado, origen, estado)
+     values ('$PRUEBA', '$ANA_CLI', '$LOLA', (now() + interval '$1')::date,
+             now() + interval '$1', now() + interval '$1' + interval '6 hours',
+             'dia_de_prueba', 'esperada');
+   insert into pagos (cliente_id, concepto, referencia_id, monto, estado, emitido_en)
+     values ('$ANA_CLI', 'dia_de_prueba', '$PRUEBA', 10000, 'pendiente', now() - interval '1 hour');
+   update perros set dia_de_prueba = jsonb_build_object('estado', 'agendado') where id = '$LOLA';"
+}
+
+# Un día suelto de jardín de Lola, con su cobro.
+suelto_en () {
+  echo "insert into estadias_jardin (id, cliente_id, perro_id, fecha, inicio_programado, fin_programado, origen, estado)
+     values ('$SUELTO', '$ANA_CLI', '$LOLA', (now() + interval '$1')::date,
+             now() + interval '$1', now() + interval '$1' + interval '9 hours',
+             'dia_suelto', 'esperada');
+   insert into pagos (cliente_id, concepto, referencia_id, monto, estado)
+     values ('$ANA_CLI', 'dia_suelto', '$SUELTO', 18000, 'pendiente');"
+}
+
+# Mover el día de prueba a dentro de tres días.
+MOVER="select reprogramar_dia_de_prueba('$PRUEBA',
+         ((now() + interval '3 days') at time zone 'America/Santiago')::date,
+         now() + interval '3 days', now() + interval '3 days 6 hours');"
+
+COBRO_DE_PRUEBA="select string_agg(estado || ' ' || monto, ', ' order by emitido_en)
+  from pagos where referencia_id = '$PRUEBA';"
+
+intento "cancela a tiempo: el cobro queda anulado, no borrado" "reembolsado 0" \
+  "$(prueba_en '3 days') select cancelar_dia_de_prueba('$PRUEBA'); $COBRO_DE_PRUEBA"
+intento "y el perro vuelve a la fila" "pendiente" \
+  "$(prueba_en '3 days') select cancelar_dia_de_prueba('$PRUEBA');
+   select dia_de_prueba->>'estado' from perros where id = '$LOLA';"
+intento "cancela encima de la hora: queda por cobrar" "pendiente 5000" \
+  "$(prueba_en '3 hours') select cancelar_dia_de_prueba('$PRUEBA'); $COBRO_DE_PRUEBA"
+intento "lo mueve con tiempo: no paga nada más" "pendiente 10000" \
+  "$(prueba_en '2 days') $MOVER $COBRO_DE_PRUEBA"
+intento "lo mueve encima de la hora: se suma el cargo" "pendiente 10000, pendiente 5000" \
+  "$(prueba_en '3 hours') $MOVER $COBRO_DE_PRUEBA"
+intento "y cancelar después a tiempo no borra el cargo" "reembolsado 0, pendiente 5000" \
+  "$(prueba_en '3 hours') $MOVER select cancelar_dia_de_prueba('$PRUEBA'); $COBRO_DE_PRUEBA"
+intento "cancela un día suelto a tiempo: anulado" "reembolsado 0" \
+  "$(suelto_en '3 days') select cancelar_dia_de_jardin('$SUELTO');
+   select estado || ' ' || monto from pagos where referencia_id = '$SUELTO';"
+intento "cancela un día suelto encima: queda por cobrar" "pendiente 18000" \
+  "$(suelto_en '3 hours') select cancelar_dia_de_jardin('$SUELTO');
+   select estado || ' ' || monto from pagos where referencia_id = '$SUELTO';"
+intento_como "$ADMIN" "Administración cancela por el dueño" "cancelada" \
+  "select cancelar_dia_de_jardin('$BETO_DIA');
+   select estado from estadias_jardin where id = '$BETO_DIA';"
+
+echo "▸ y lo que nadie se salta"
+intento "corre la hora del día para cancelar gratis" "se cancela o se cambia desde la app" \
+  "$(prueba_en '3 hours') update estadias_jardin set inicio_programado = now() + interval '3 days' where id = '$PRUEBA';"
+intento "marca cancelado el día sin pasar por el cobro" "se cancela o se cambia desde la app" \
+  "$(suelto_en '3 days') update estadias_jardin set estado = 'cancelada' where id = '$SUELTO';"
+intento "se confirma solo la reserva de hotel" "se cancela o se cambia desde la app" \
+  "insert into reservas_hotel (id, cliente_id, perro_id, inicio_programado, fin_programado, estado, cotizacion)
+     values ('ffffffff-0000-0000-0000-000000000003', '$ANA_CLI', '$LOLA', now() + interval '5 days', now() + interval '7 days', 'pendiente', '{}');
+   update reservas_hotel set estado = 'confirmada' where id = 'ffffffff-0000-0000-0000-000000000003';"
+intento "cancela el día de otro dueño" "No existe ese día" \
+  "select cancelar_dia_de_jardin('$BETO_DIA');"
+intento "cancela el de prueba por la puerta del jardín" "desde su propia pantalla" \
+  "$(prueba_en '3 hours') select cancelar_dia_de_jardin('$PRUEBA');"
+intento "lo mueve a una hora que ya pasó" "no sirve" \
+  "$(prueba_en '3 days') select reprogramar_dia_de_prueba('$PRUEBA',
+     ((now() - interval '1 day') at time zone 'America/Santiago')::date,
+     now() - interval '1 day', now() - interval '18 hours');"
+intento "cancela dos veces" "ya no se puede cancelar" \
+  "$(prueba_en '3 days') select cancelar_dia_de_prueba('$PRUEBA'); select cancelar_dia_de_prueba('$PRUEBA');"
+intento_como "$STAFF" "el cuidador cancela un día (es plata)" "No existe ese día" \
+  "select cancelar_dia_de_jardin('$BETO_DIA');"
+
+# Los avisos los escribe el dueño y los lee Administración. Pedir la fila de
+# vuelta (`returning`, que es lo que hace `.select()` en supabase-js) exige
+# poder LEERLA, así que falla aunque el insert esté permitido. Por eso el
+# repositorio la inserta sin pedirla.
+echo "▸ los avisos del dueño"
+intento "deja un aviso sin pedirlo de vuelta" "dejado" \
+  "insert into notificaciones (cliente_id, perro_id, titulo) values ('$ANA_CLI', '$LOLA', 'Canceló'); select 'dejado';"
+intento "pedirlo de vuelta falla, aunque pueda dejarlo" "violates row-level security" \
+  "insert into notificaciones (cliente_id, perro_id, titulo) values ('$ANA_CLI', '$LOLA', 'Canceló') returning id;"
+
+# ── Los planes y el día de prueba ────────────────────────────────────
+#
+# El dueño podía bajarse `dias_usados` a cero, insertar un plan sin cobro y
+# marcarse el día de prueba como aprobado. Ahora comprar, usar un día y
+# agendar la prueba pasan por funciones, y lo demás no se puede por fuera.
+echo "▸ comprar y usar un plan"
+
+# El próximo día hábil que esté a más de un día, para agendar con plan.
+HABIL="(select d::date from generate_series(current_date + 2, current_date + 9, interval '1 day') d
+         where extract(isodow from d) < 6 limit 1)"
+SABADO="(select d::date from generate_series(current_date + 1, current_date + 8, interval '1 day') d
+          where extract(isodow from d) = 6 limit 1)"
+COTIZACION_PLAN="'{\"total\": 0}'::jsonb"
+COMPRAR_12="select comprar_plan_de_jardin('$LOLA', 'dias', 12);"
+# Para USAR días, un plan que vence en 30: el que se compra vence a fin de
+# mes, y en los últimos días del mes no le queda ningún día hábil por delante.
+PLAN=ffffffff-0000-0000-0000-000000000004
+plan_de_la_casa () {
+  como_la_casa "insert into planes (id, cliente_id, perro_id, tipo, dias_totales, vence_en, precio, cerrado_en)
+     values ('$PLAN', '$ANA_CLI', '$LOLA', 'dias', 12, current_date + 30, 168000, ${1:-null});"
+}
+# Usar un día de ese plan.
+usar_dia () {
+  echo "select agendar_dia_con_plan('$PLAN',
+     $1, ($1 + time '12:00') at time zone 'America/Santiago',
+     ($1 + time '19:00') at time zone 'America/Santiago', $COTIZACION_PLAN);"
+}
+
+intento "compra 12 días: precio por tramo, cobro pendiente" "12 168000 pendiente 168000" \
+  "$COMPRAR_12
+   select p.dias_totales || ' ' || p.precio || ' ' || g.estado || ' ' || g.monto
+     from planes p join pagos g on g.referencia_id = p.id where p.perro_id = '$LOLA';"
+intento "el pase libre cubre los días hábiles del mes" "ok" \
+  "select comprar_plan_de_jardin('$LOLA', 'pase_libre', null);
+   select case when precio = 220000 and dias_totales = (
+       select count(*) from generate_series(current_date,
+         (date_trunc('month', current_date) + interval '1 month - 1 day')::date,
+         interval '1 day') d where extract(isodow from d) < 6)
+     then 'ok' else dias_totales || ' ' || precio end
+     from planes where perro_id = '$LOLA';"
+intento "comprar otro cierra el anterior" "1 cerrado, 1 vigente" \
+  "$COMPRAR_12 select comprar_plan_de_jardin('$LOLA', 'dias', 5);
+   select count(*) filter (where cerrado_en is not null) || ' cerrado, '
+       || count(*) filter (where cerrado_en is null) || ' vigente'
+     from planes where perro_id = '$LOLA';"
+intento "usa un día: se agenda y se descuenta" "1 plan" \
+  "$(plan_de_la_casa) $(usar_dia "$HABIL")
+   select p.dias_usados || ' ' || e.origen from planes p
+     join estadias_jardin e on e.plan_id = p.id where p.perro_id = '$LOLA';"
+intento "y cancelarlo a tiempo lo devuelve" "0" \
+  "$(plan_de_la_casa) $(usar_dia "$HABIL")
+   select cancelar_dia_de_jardin((select id from estadias_jardin where origen = 'plan' and perro_id = '$LOLA'));
+   select dias_usados from planes where perro_id = '$LOLA';"
+
+echo "▸ y lo que no se hace con un plan"
+intento "se baja los días usados a cero" "se compran y se usan desde la app" \
+  "$(plan_de_la_casa) update planes set dias_usados = 0 where perro_id = '$LOLA';"
+intento "se arma un plan sin pasar por caja" "se compran y se usan desde la app" \
+  "insert into planes (cliente_id, perro_id, tipo, dias_totales, vence_en, precio)
+     values ('$ANA_CLI', '$LOLA', 'dias', 99, current_date + 30, 0);"
+intento "inventa un día con plan para devolverlo" "se agenda desde la app" \
+  "$(plan_de_la_casa) insert into estadias_jardin (cliente_id, perro_id, fecha, inicio_programado, fin_programado, origen, plan_id, estado)
+     values ('$ANA_CLI', '$LOLA', current_date + 3, now() + interval '3 days', now() + interval '3 days 8 hours', 'plan',
+             '$PLAN', 'esperada');"
+intento "usa el plan en sábado" "de lunes a viernes" \
+  "$(plan_de_la_casa) $(usar_dia "$SABADO")"
+intento "usa dos veces el mismo día" "ya tiene el día agendado" \
+  "$(plan_de_la_casa) $(usar_dia "$HABIL") $(usar_dia "$HABIL")"
+intento "usa un plan ya cerrado" "ya no cubre ese día" \
+  "$(plan_de_la_casa 'now()') $(usar_dia "$HABIL")"
+intento "le compra un plan al perro de otro" "No existe ese perro" \
+  "select comprar_plan_de_jardin('dddddddd-0000-0000-0000-000000000002', 'dias', 5);"
+intento_como "$STAFF" "el cuidador vende un plan (es plata)" "No existe ese perro" \
+  "select comprar_plan_de_jardin('$LOLA', 'dias', 5);"
+
+echo "▸ el día de prueba"
+# Mañana a mediodía de Santiago: seis horas, como manda la casa.
+MANANA="((current_date + 2) + time '12:00') at time zone 'America/Santiago'"
+agendar_prueba () {
+  echo "select agendar_dia_de_prueba('$LOLA', current_date + 2, $MANANA, $MANANA + interval '$1', '{\"total\": $2}'::jsonb);"
+}
+
+intento "agenda su día de prueba y le nace el cobro" "agendado pendiente 10000" \
+  "$(agendar_prueba '6 hours' 10000)
+   select f.dia_de_prueba->>'estado' || ' ' || g.estado || ' ' || g.monto
+     from perros f join estadias_jardin e on e.perro_id = f.id and e.origen = 'dia_de_prueba'
+     join pagos g on g.referencia_id = e.id where f.id = '$LOLA';"
+intento "se marca aprobado sin venir" "lo agenda la app y lo cierra la casa" \
+  "update perros set dia_de_prueba = jsonb_build_object('estado', 'aprobado') where id = '$LOLA';"
+intento "se marca agendado sin pagar" "lo agenda la app y lo cierra la casa" \
+  "update perros set dia_de_prueba = jsonb_build_object('estado', 'agendado') where id = '$LOLA';"
+intento "inscribe un perro que nace aprobado" "lo agenda la app y lo cierra la casa" \
+  "insert into perros (cliente_id, nombre, raza, peso_kg, sexo, esterilizado, dia_de_prueba)
+     values ('$ANA_CLI', 'Colado', 'Mestizo', 5, 'hembra', true, jsonb_build_object('estado', 'aprobado'));"
+intento "inventa un día de prueba sin cobro" "se agenda desde la app" \
+  "insert into estadias_jardin (cliente_id, perro_id, fecha, inicio_programado, fin_programado, origen, estado)
+     values ('$ANA_CLI', '$LOLA', current_date + 3, now() + interval '3 days', now() + interval '3 days 6 hours', 'dia_de_prueba', 'esperada');"
+intento "agenda la prueba dos veces" "ya tiene su día de prueba tomado" \
+  "$(agendar_prueba '6 hours' 10000) $(agendar_prueba '6 hours' 10000)"
+intento "una prueba de doce horas" "no sirve para el día de prueba" \
+  "$(agendar_prueba '12 hours' 10000)"
+intento "una prueba que dice costar cero" "no calza" \
+  "$(agendar_prueba '6 hours' 0)"
+intento "sigue corrigiendo el resto de su ficha" "8.00" \
+  "update perros set peso_kg = 8 where id = '$LOLA'; select peso_kg from perros where id = '$LOLA';"
+intento_como "$ADMIN" "Administración sí lo aprueba" "aprobado" \
+  "update perros set dia_de_prueba = jsonb_build_object('estado', 'aprobado') where id = '$LOLA';
+   select dia_de_prueba->>'estado' from perros where id = '$LOLA';"
+
+echo "▸ lo que el dueño todavía agenda directo"
+intento "un día suelto, por confirmar el cobro" "1" \
+  "insert into estadias_jardin (cliente_id, perro_id, fecha, inicio_programado, fin_programado, origen, estado)
+     values ('$ANA_CLI', '$LOLA', current_date + 3, now() + interval '3 days', now() + interval '3 days 8 hours', 'dia_suelto', 'esperada');
+   select count(*) from estadias_jardin where origen = 'dia_suelto' and fecha = current_date + 3;"
+intento "una reserva de hotel por confirmar" "pendiente" \
+  "insert into reservas_hotel (cliente_id, perro_id, inicio_programado, fin_programado, estado, cotizacion)
+     values ('$ANA_CLI', '$LOLA', now() + interval '5 days', now() + interval '7 days', 'pendiente', '{}');
+   select estado from reservas_hotel where cliente_id = '$ANA_CLI';"
+intento "pero no una que nace confirmada" "la confirma la casa" \
+  "insert into reservas_hotel (cliente_id, perro_id, inicio_programado, fin_programado, estado, cotizacion, abono_pagado)
+     values ('$ANA_CLI', '$LOLA', now() + interval '5 days', now() + interval '7 days', 'confirmada', '{}', true);"
+
 echo "▸ repetir un archivo suelto no rompe los demás"
 psql -h "$D" -U postgres -v ON_ERROR_STOP=1 -q \
   -f "$raiz/supabase/migrations/20261014120100_permisos.sql" >/dev/null 2>&1
