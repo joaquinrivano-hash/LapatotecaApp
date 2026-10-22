@@ -1826,10 +1826,22 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
    - **Site URL** = `https://www.lapatoteca.cl`. Es adonde vuelve el correo
      de **confirmación** al registrarse; Supabase trae `localhost:3000` por
      defecto, y con eso el enlace no abre.
-   - **Redirect URLs** con `https://www.lapatoteca.cl/**`,
-     `https://lapatoteca.cl/**` y `https://*.vercel.app/**`. Sin eso
-     **"olvidé mi contraseña"** deja a la persona en la portada en vez de
-     `/ingresar/clave`, y no puede elegir una nueva.
+   - **Redirect URLs** con `https://www.lapatoteca.cl/**` y
+     `https://lapatoteca.cl/**`, **y nada de `*.vercel.app`**. Sin las dos
+     primeras **"olvidé mi contraseña"** deja a la persona en la portada en
+     vez de `/ingresar/clave`, y no puede elegir una nueva.
+
+     Una versión anterior de este archivo pedía también
+     `https://*.vercel.app/**`, y **es un agujero**: ese comodín acepta
+     cualquier sitio publicado en Vercel, también el de un atacante. Con la
+     llave pública —que está en la página— pide "olvidé mi contraseña" para
+     el correo de un cliente con su sitio como destino; al cliente le llega
+     un correo legítimo de La Patoteca y, si lo abre, el enlace con el que
+     se toma la cuenta termina en manos del atacante. Acotarlo a
+     `*-<equipo>.vercel.app` no lo cierra del todo: un proyecto ajeno puede
+     llamarse igual. Si está, se borra. Lo único que se pierde es probar
+     "olvidé mi contraseña" desde una vista previa; entrar con contraseña
+     ahí funciona igual, porque no usa la dirección de vuelta.
 5. Confirmar que el **tope de correos por hora** de Supabase se subió en
    Authentication → Rate Limits (ver más arriba: Resend solo no lo sube).
    Cada cliente nuevo recibe un correo de confirmación: con el tope bajo,
