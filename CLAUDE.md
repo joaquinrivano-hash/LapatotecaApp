@@ -202,24 +202,32 @@ funciona normal y se integra sin conflictos.
 app/
   (portal)/    landing · reservar (hotel, jardín, planes, servicios)
                dia-de-prueba · tienda · mi-cuenta
-  ingresar/    login mock con selector de rol
+  crear-cuenta/  alta del dueño · equipo/ (alta del personal)
+               · equipo/bienvenida/ (donde llega el correo de invitación)
+  ingresar/    login (correo y contraseña, o el selector en el prototipo)
+               · clave/ (contraseña nueva desde el correo)
   staff/       Hoy · buscar · reportes · incidentes
   admin/       KPIs · calendario · clientes · pagos · planes · inventario
-               reglas (qué se le exige a una ficha) · datos
+               configuracion (qué se le pide a una ficha, listas, WhatsApp
+               y cuenta de la casa) · equipo (turnos y accesos) · datos
   offline/     pantalla de caída del service worker
   api/integraciones/whatsapp/   enviar · webhook
+  api/equipo/invitaciones/      el correo de invitación (llave de servicio)
+proxy.ts       quién entra a cada cara, decidido en el servidor
 components/
   ui/          shadcn escrito a mano
   shared/      PrecioCLP, PerroAvatar, EstadoBadge, LogoPatoteca, PWA
-               FormularioPerro (el alta, igual en las tres caras)…
-  staff/ admin/
+               FormularioPerro (el alta, igual en las tres caras),
+               ContactoCasa, ComoPagar, DatosTransferencia…
+  staff/ admin/ portal/ ingresar/
 lib/
   config/      precios.ts · negocio.ts   ← única fuente de constantes
   types.ts
   rules/       funciones puras + *.test.ts colocados
   servicios/   reglas + repositorio (asistencia, reservas, panel, cobranza…)
-  repo/        interfaces + impl local + factory
-  integraciones/  mensajería (plantillas, canales, bandeja)
+  repo/        interfaces + impl local + impl Supabase + factory
+  auth/        identidad: mock o Supabase, puertas, enlaces de correo
+  integraciones/  mensajería · direcciones (Google) · equipo (invitaciones)
   data/        seed determinista
   store/       zustand + persist
   hooks/       useConsulta · useAccion · useMontado
@@ -992,9 +1000,12 @@ la fecha va en dos líneas ("lun" sobre "28") y el mes vive en el encabezado.
 
 ### La nube: las reglas viven pegadas a los datos
 
-`supabase/migrations/`. Dos archivos que se pegan en el editor SQL de
-Supabase, en orden, y que se pueden correr de nuevo sin hacer daño: el de
-`_esquema` crea las tablas y el de `_permisos` define quién ve qué.
+`supabase/migrations/`. Archivos que se pegan en el editor SQL de Supabase,
+en orden, y que se pueden correr de nuevo sin hacer daño. Los dos primeros
+son la base: `_esquema` crea las tablas y `_permisos` define quién ve qué;
+los demás agregan lo que fue apareciendo. **Cuáles ya corrieron en
+producción** no se puede saber leyendo el repo: está anotado en "Dónde vive
+cada cosa".
 
 La carpeta se llama `migrations` y los archivos llevan **marca de tiempo**
 (`20261014120000_esquema.sql`) aunque el resto del repo esté en español: es
@@ -1341,6 +1352,7 @@ usando en su celular:
 | `main` | **Producción.** Solo entra lo que ya se probó. | Despliegue de producción |
 | `pruebas` | **Integración.** Acá se junta y se prueba lo que viene. | Vista previa fija |
 | `prueba/<algo>` | Una funcionalidad en curso, sale de `pruebas` y vuelve ahí. | Vista previa por rama |
+| `claude/<nombre>` | Lo mismo que `prueba/<algo>`, pero creada por una sesión de Claude en la nube: cada sesión trae la suya asignada y no la elige. | Vista previa por rama |
 | `v0.01` | Foto congelada del prototipo terminado (las 5 etapas). No se le commitea. | Vista previa fija |
 
 El flujo es `prueba/<algo>` → `pruebas` → `main`. Nada llega a `main` sin haber
@@ -1384,6 +1396,99 @@ Para saber si una variable `NEXT_PUBLIC_` entró, se busca su valor en los
 `.js` de la página publicada: si quedó `process.env.NOMBRE` sin reemplazar,
 no estaba al construir.
 
+Y una que **no** es `NEXT_PUBLIC_`: `SUPABASE_SERVICE_ROLE_KEY`. Se salta RLS
+entera, así que va como **Secret**, nunca en el repo, y solo la lee el
+servidor. La usa una sola ruta, `/api/equipo/invitaciones`, para mandar el
+correo de invitación al equipo. Sin ella invitar anota el correo pero no sale
+nada, y `/admin/equipo` lo dice. **Al 22-10-2026 está pendiente de cargar.**
+
+#### Lo que vive en la base y se edita desde la app
+
+No está en el código ni en Vercel: está en la tabla `configuracion` de
+Supabase y se cambia en `/admin/configuracion`. Una sesión nueva no lo ve.
+
+| Qué | Para qué | Estado al 22-10-2026 |
+|---|---|---|
+| WhatsApp de la casa | Lo que ve el dueño cuando algo "se conversa" (un perro con sobrepeso, un link de pago). | Sin confirmar si se cargó |
+| Cuenta para transferir | Lo que se abre al tocar "transferencia" en los cobros, el abono y el día suelto. | Sin confirmar si se cargó |
+| Campos obligatorios, vacunas, listas | Qué se le pide a una ficha nueva y qué ofrecen los desplegables. | Los de fábrica, salvo que alguien los haya cambiado |
+
+Vacíos no rompen nada: la app dice "te escribimos nosotros" o "te mandamos
+los datos por WhatsApp", que es lo único que se puede cumplir.
+
+#### Qué migraciones corrieron en producción
+
+Producción corre sobre Supabase y las migraciones se pegan **a mano** en el
+editor SQL. Entonces el código de `main` puede estar leyendo una columna que
+la base todavía no tiene, y eso no lo detecta ningún test ni el build: se ve
+cuando alguien abre la pantalla.
+
+Ya pasó: `main` tiene el código de las dos migraciones del 21-10 sin que
+nadie haya confirmado que corrieron. Si no corrieron, `/admin/configuracion`
+**se cae** (los datos de transferencia llegan vacíos) y habilitar a un perro
+con sobrepeso falla. Parte del motivo es que en Supabase
+`configuracion.obtener()` no completa con los valores de fábrica los campos
+que la fila no trae, como sí hace `normalizarDatos()` en el modo local.
+
+| Migración | Qué agrega | ¿Corrió en producción? |
+|---|---|---|
+| `20261014…` (las ocho primeras) | Esquema, permisos, escrituras, cuidador, devoluciones, invitaciones, hora marcada | Se asumen corridas: son de antes del 21-10 y producción funciona sobre ellas. Falta que alguien lo marque |
+| `20261021120000_ficha_que_decide_la_casa` | `perros.excepcion_peso`, `configuracion.whatsapp_de_contacto` y el disparador que no deja al dueño cambiar sexo, castración ni la excepción de peso | **Sin confirmar** |
+| `20261021130000_datos_de_transferencia` | `configuracion.transferencia` | **Sin confirmar** |
+| `20261021140000_alta_de_cuenta` | `clientes.perfil_id` toma solo el usuario que crea la ficha: sin eso, el alta del dueño falla | **Sin confirmar** |
+| `20261022120000_turnos` | La tabla `turnos`, sus permisos y el disparador que protege el turno planificado | **Sin confirmar** |
+
+La regla de acá en adelante:
+
+- **Quien agrega una migración la anota en esta tabla como sin confirmar.**
+- **Quien la corre en Supabase la marca con la fecha.** Una sesión no ve la
+  base: lo que no está marcado se trata como que no corrió.
+- **Antes de pasar `pruebas` a `main`, se revisa esta tabla.** Código que
+  depende de una migración sin correr no debería llegar a producción.
+
+La prueba de aislamiento (`supabase/pruebas/aislamiento.sh`) ya corrió en
+verde con las once primeras, en la sesión que juntó las ramas (`39f7663`).
+La de turnos no tiene esa constancia.
+
+#### Lo que falta hacer afuera, y lo que falta decidir
+
+Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
+
+**Afuera del código** (lo hace la dueña o quien tenga acceso a los paneles):
+
+1. Correr en Supabase las migraciones **sin confirmar** de la tabla de
+   arriba, en orden, y marcarlas.
+2. Cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel, proyecto **`lapatoteca`**,
+   Production y Preview, como Secret. Después **Redeploy** sin caché.
+3. Revisar las **Redirect URLs** de Supabase (Authentication → URL
+   Configuration): tienen que estar `https://www.lapatoteca.cl/**`,
+   `https://lapatoteca.cl/**` y `https://*.vercel.app/**`. Si falta, el
+   correo de invitación deja a la persona en la portada.
+4. Confirmar que el **tope de correos por hora** de Supabase se subió en
+   Authentication → Rate Limits (ver más arriba: Resend solo no lo sube).
+5. En `/admin/configuracion`: cargar el WhatsApp de la casa y la cuenta para
+   transferir.
+6. Volver a invitar a `pxeclt@gmail.com` **con su nombre**: su invitación se
+   anotó antes de que existiera el correo, y mandarla sin nombre lo deja
+   firmando los reportes con el correo.
+7. Probar en la vista previa de `pruebas` **del proyecto `lapatoteca`** —no
+   en `lapatoteca-app-git-pruebas-…`, que es el proyecto viejo— y recién
+   entonces pasar `pruebas` a `main`.
+
+**Decisiones de producto abiertas:**
+
+- **Planes y tienda nacen pagados** (con un "webpay" que no existe), mientras
+  que el hotel, el día de prueba y el día suelto nacen pendientes hasta que
+  Administración concilia la transferencia. ¿Se igualan?
+- **El sexo quedó fijo para el dueño**, igual que la castración, porque
+  decide si a un macho se le exige. Lo decidió una sesión; falta que la dueña
+  lo confirme.
+- **Un macho sin castrar sigue sin poder crear la cuenta**, mientras que el
+  sobrepeso sí la deja crear y espera la habilitación. ¿Debería conversarse
+  igual que el peso?
+- **Fotos de productos**: el modelo tiene `imagenUrl`, pero ni el admin ni
+  la tienda la usan.
+
 #### Varias sesiones a la vez
 
 Cada sesión en la nube tiene su propia copia del repo y su propia
@@ -1391,6 +1496,55 @@ conversación; entre ellas solo se ven a través de GitHub. Por eso: traer
 `main` y `pruebas` **al empezar y antes de subir**, subir apenas algo
 termina, y anotar acá lo que cambie afuera del código (Vercel, Supabase,
 Google). Otra sesión no se va a enterar de otra manera.
+
+El 21 y 22 de octubre trabajaron **tres sesiones a la vez** y cada una de
+estas reglas sale de algo que pasó:
+
+- **`pruebas` se mueve mientras uno trabaja.** Justo antes de abrir el PR se
+  vuelve a traer, y si avanzó se fusiona en la rama propia y se corre de
+  nuevo `build`, `lint` y `test`. Los turnos entraron mientras se hacía el
+  correo de invitación y chocaron en `/admin/equipo`: se resolvió dejando las
+  pestañas de una y el contenido de la otra, no eligiendo un lado.
+- **Las marcas de tiempo de las migraciones no se pueden repetir.** El CLI de
+  Supabase las lee como número de versión y dos iguales lo hacen fallar. Dos
+  sesiones eligieron `20261021120000` por separado. Después de traer, se mira
+  la última y se usa una posterior.
+- **Una regla cambiada en una rama rompe tests de otra.** El peso dejó de
+  bloquear el alta en una sesión, y un test de la otra que usaba un perro de
+  30 kg para probar "la ficha se revisa antes" quedó en rojo al juntarlas.
+  Por eso los tests se corren **después** de fusionar, no solo antes.
+- **Dos sesiones escribiendo la misma parte de este archivo se juntan, no se
+  pisan.** Pasó con el correo: una escribió la invitación y otra la
+  confirmación con Resend, y quedaron las dos.
+- **Si algo entra directo a `main`, se trae a `pruebas` apenas se vea.** Pasó
+  con el día de prueba en palabras: mientras más tiempo divergen, más difícil
+  es saber qué hay en producción.
+- **Lo que una sesión no puede verificar se escribe "sin confirmar", nunca
+  como hecho.** Ninguna ve Vercel ni Supabase. Y al terminar, a la dueña se
+  le dice qué pasos le tocan a ella: van en "Lo que falta hacer afuera".
+
+#### Lo que entró después de las 5 etapas
+
+Para que una sesión nueva sepa qué existe sin leer el historial entero. Cada
+tema tiene su explicación más arriba en este archivo.
+
+- **La nube**: repositorio sobre Supabase detrás de `NEXT_PUBLIC_ORIGEN_DATOS`,
+  login real con correo y contraseña, puertas en el servidor (`proxy.ts`), el
+  alta que crea la cuenta de acceso, y la app con la base vacía.
+- **El equipo**: alta del personal por invitación, el correo de invitación
+  que sale de verdad (PR #4 y #5), y la planilla de turnos con el fichaje
+  desde `/staff`.
+- **El alta y la ficha** (PR #1): sexo y castración fijos para el dueño, el
+  sobrepeso que se conversa y Administración habilita, el antiparasitario
+  vencido que avisa, el día de prueba que dice qué falta antes de elegir hora,
+  la dirección con sugerencias de Google, el ojo de la contraseña y la foto
+  que no se deforma.
+- **La plata** (PR #2): cómo pagar dicho donde se paga, con los datos de
+  transferencia editables, y el hotel por confirmar hasta que llega el abono.
+- **La tienda** (PR #3): editar y agregar productos desde el admin, que se
+  ocultan en vez de borrarse.
+- **El día de prueba en palabras**: "el próximo jueves 29 de octubre a las
+  09:00", y en verde en Mi cuenta.
 
 ## 6. Comandos
 
