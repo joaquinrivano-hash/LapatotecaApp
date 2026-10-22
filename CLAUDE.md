@@ -1414,6 +1414,14 @@ Tres cosas que no son obvias:
   pantalla dice por qué no salió el correo y ofrece el enlace a
   `/crear-cuenta/equipo` por WhatsApp, que sigue funcionando como antes.
 
+**En producción no hay llave, a propósito** (ver "Dónde vive cada cosa"), así
+que WhatsApp es el camino normal y la pantalla lo trata así: sin aviso
+amarillo, sin intentar un correo que no va a salir, y con "Por WhatsApp" como
+botón principal. Al anotar, el aviso trae el botón para mandarlo — un
+`window.open` después de un `await` lo bloquea el celular, y el toque nuevo
+no. El nombre no se pide al invitar: lo escribe la persona al crear su
+cuenta, y con ese firma los reportes.
+
 Para que el correo llegue hacen falta dos cosas en el panel de Supabase: un
 **SMTP propio** —ya está, es Resend, ver "Dónde vive cada cosa"— y el dominio
 de la app en las **Redirect URLs**.
@@ -1697,11 +1705,22 @@ Para saber si una variable `NEXT_PUBLIC_` entró, se busca su valor en los
 `.js` de la página publicada: si quedó `process.env.NOMBRE` sin reemplazar,
 no estaba al construir.
 
-Y una que **no** es `NEXT_PUBLIC_`: `SUPABASE_SERVICE_ROLE_KEY`. Se salta RLS
-entera, así que va como **Secret**, nunca en el repo, y solo la lee el
-servidor. La usa una sola ruta, `/api/equipo/invitaciones`, para mandar el
-correo de invitación al equipo. Sin ella invitar anota el correo pero no sale
-nada, y `/admin/equipo` lo dice. **Al 22-10-2026 está pendiente de cargar.**
+Y una que **no** es `NEXT_PUBLIC_` y **se decidió no cargar**:
+`SUPABASE_SERVICE_ROLE_KEY`. La usaría una sola ruta,
+`/api/equipo/invitaciones`, para mandar el correo de invitación al equipo.
+El 22-10-2026 la dueña eligió invitar a mano por WhatsApp: se invita poca
+gente al año, y una llave que se salta RLS entera —quien la tenga lee y
+cambia toda la base— no vale ese ahorro. Sin ella `/admin/equipo` funciona
+en "modo WhatsApp" (ver "Cómo entra alguien del equipo").
+
+Si algún día se carga, con tres cuidados: la **Secret key nueva**
+(`sb_secret_…`, Project Settings → API Keys), que se revoca sola sin tocar
+nada más —revocar la `service_role` antigua obliga a cambiar también la llave
+pública y cierra todas las sesiones—; **solo en Production**, no en Preview,
+porque las vistas previas corren código de cualquier rama sin pasar por
+`pruebas`; y marcada **Sensitive**. La versión de `supabase-js` acepta la
+llave nueva, pero no se probó con la invitación: si al invitar sale un error
+de llave, se cambia por la antigua.
 
 #### Lo que vive en la base y se edita desde la app
 
@@ -1800,19 +1819,27 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
      avisó a tiempo, o en $5.000 si no.
    - planes sin cobro: `select p.* from planes p left join pagos g on
      g.referencia_id = p.id and g.concepto = 'plan' where g.id is null;`.
-3. Cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel, proyecto **`lapatoteca`**,
-   Production y Preview, como Secret. Después **Redeploy** sin caché.
-4. Revisar las **Redirect URLs** de Supabase (Authentication → URL
-   Configuration): tienen que estar `https://www.lapatoteca.cl/**`,
-   `https://lapatoteca.cl/**` y `https://*.vercel.app/**`. Si falta, el
-   correo de invitación deja a la persona en la portada.
+3. ~~Cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel~~ — **decidido no
+   cargarla** (22-10-2026): las invitaciones al equipo van por WhatsApp.
+   Los cuidados por si algún día se carga están en "Dónde vive cada cosa".
+4. Revisar en Supabase → Authentication → URL Configuration:
+   - **Site URL** = `https://www.lapatoteca.cl`. Es adonde vuelve el correo
+     de **confirmación** al registrarse; Supabase trae `localhost:3000` por
+     defecto, y con eso el enlace no abre.
+   - **Redirect URLs** con `https://www.lapatoteca.cl/**`,
+     `https://lapatoteca.cl/**` y `https://*.vercel.app/**`. Sin eso
+     **"olvidé mi contraseña"** deja a la persona en la portada en vez de
+     `/ingresar/clave`, y no puede elegir una nueva.
 5. Confirmar que el **tope de correos por hora** de Supabase se subió en
    Authentication → Rate Limits (ver más arriba: Resend solo no lo sube).
+   Cada cliente nuevo recibe un correo de confirmación: con el tope bajo,
+   un día con varias altas deja a alguien sin poder crear su cuenta.
 6. En `/admin/configuracion`: cargar el WhatsApp de la casa y la cuenta para
    transferir.
-7. Volver a invitar a `pxeclt@gmail.com` **con su nombre**: su invitación se
-   anotó antes de que existiera el correo, y mandarla sin nombre lo deja
-   firmando los reportes con el correo.
+7. Mandarle a `pxeclt@gmail.com` el enlace por WhatsApp desde
+   `/admin/equipo`, si su invitación sigue en la lista. Al crear su cuenta en
+   `/crear-cuenta/equipo` con ese mismo correo escribe su nombre, que es con
+   el que firma los reportes, y queda con el rol de la invitación.
 8. Probar en la vista previa de `pruebas` **del proyecto `lapatoteca`** —no
    en `lapatoteca-app-git-pruebas-…`, que es el proyecto viejo— y recién
    entonces pasar `pruebas` a `main`.
