@@ -93,13 +93,37 @@ interface RangoEnMs {
   fin: number;
 }
 
+/**
+ * Los rangos en milisegundos, con el final arreglado si viene al revés.
+ *
+ * Un rango que termina antes de empezar es un dato corrupto: pasa cuando un
+ * retiro después de medianoche queda guardado en el día de la llegada. Y
+ * hasta que alguien lo note, el perro **desaparece de la ocupación**: no cae
+ * en ninguna franja, el pico del día da 0 y el calendario muestra la casa
+ * vacía mientras el perro está adentro.
+ *
+ * Se trata como "llegó y no sabemos cuándo se fue": ocupa hasta el final de
+ * su día. Es lo único cierto que queda —el perro demostrablemente llegó— y
+ * es el lado seguro para equivocarse: contar de menos deja sobrevender un
+ * cupo, contar de más a lo sumo bloquea una reserva que alguien puede
+ * revisar.
+ */
 function aMs(ocupantes: OcupanteRango[]): RangoEnMs[] {
-  return ocupantes.map((o) => ({
-    perroId: o.perroId,
-    linea: o.linea,
-    inicio: new Date(o.inicio).getTime(),
-    fin: new Date(o.fin).getTime(),
-  }));
+  return ocupantes.map((o) => {
+    const inicio = new Date(o.inicio).getTime();
+    const fin = new Date(o.fin).getTime();
+    return {
+      perroId: o.perroId,
+      linea: o.linea,
+      inicio,
+      fin: fin > inicio ? fin : finDelDiaDe(o.inicio),
+    };
+  });
+}
+
+/** La medianoche siguiente al día de Santiago en que cae ese instante. */
+function finDelDiaDe(instante: InstanteISO): number {
+  return new Date(instanteEn(sumarDias(fechaISO(instante), 1), 0)).getTime();
 }
 
 /**

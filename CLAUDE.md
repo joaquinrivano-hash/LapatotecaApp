@@ -904,6 +904,26 @@ cobrarle dos veces al cliente, así que si el periodo ya existe no se vuelve a
 emitir. Los cobros sueltos que entran en una cuenta quedan marcados con
 `cuentaMensualId` y dejan de ser cobrables por separado.
 
+### Un rango que termina antes de empezar
+
+`aMs`, en `lib/rules/capacidad.ts`. Pasa cuando un retiro después de
+medianoche queda guardado en el día de la llegada: la jornada queda con el
+fin antes que el inicio.
+
+Lo que hacía antes era desaparecer. El rango invertido no cae en ninguna
+franja, así que el pico del día daba **0** y el calendario mostraba la casa
+vacía con el perro adentro — mientras la lista de "quién está ese día" sí lo
+mostraba, porque esa no mira las franjas. Se vio en producción justo así: el
+número grande en 0 y el perro listado abajo.
+
+Ahora se trata como "llegó y no sabemos cuándo se fue": ocupa hasta el final
+de su día. Es lo único cierto que queda, y es el lado seguro para
+equivocarse — contar de menos deja sobrevender un cupo, contar de más a lo
+sumo bloquea una reserva que alguien puede revisar.
+
+Ojo que esto es una **red**, no el arreglo: si aparece, hay un dato mal
+guardado en alguna parte y conviene encontrar quién lo escribió.
+
 ### Gráficos de barras apiladas: el error que ya se cometió dos veces
 
 El alto de un segmento se mide contra **la barra**, no contra el techo de la

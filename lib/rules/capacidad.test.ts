@@ -258,3 +258,61 @@ describe("conversión desde el dominio", () => {
     expect(ocupantesDeEstadias(estadias)[0].linea).toBe("jardin");
   });
 });
+
+describe("un rango que viene al revés", () => {
+  const estadia = (inicioReal: string, finReal: string) =>
+    ocupantesDeEstadias([
+      {
+        id: "e1",
+        clienteId: "c1",
+        perroId: "p1",
+        fecha: "2026-10-22",
+        origen: "dia_de_prueba",
+        estado: "finalizada",
+        inicioProgramado: "2026-10-22T12:00:00.000Z",
+        finProgramado: "2026-10-22T18:00:00.000Z",
+        inicioReal,
+        finReal,
+        creadaEn: "2026-10-01T12:00:00.000Z",
+      },
+    ]);
+
+  const enSantiago = (dia: string, hora: string) =>
+    new Date(`${dia}T${hora}:00-03:00`).toISOString();
+
+  // Lo normal cuando el retiro es pasada la medianoche: el fin cae al día
+  // siguiente y la jornada ocupa la última franja de su día.
+  it("cruzar la medianoche de verdad sí ocupa", () => {
+    const o = calcularOcupacionDia(
+      "2026-10-22",
+      estadia(enSantiago("2026-10-22", "23:40"), enSantiago("2026-10-23", "00:08")),
+    );
+    expect(o.pico).toBe(1);
+    expect(o.picoMinutoDelDia).toBe(23 * 60 + 30);
+  });
+
+  /*
+   * Y el dato corrupto: el mismo retiro guardado en el día de la llegada.
+   *
+   * Antes esto daba pico 0 — el perro desaparecía de la ocupación y el
+   * calendario mostraba la casa vacía con el perro adentro. Se vio en
+   * producción: la jornada aparecía en "quién está ese día" y el número
+   * grande decía 0.
+   */
+  it("un fin anterior al inicio ocupa hasta el final del día, no cero", () => {
+    const o = calcularOcupacionDia(
+      "2026-10-22",
+      estadia(enSantiago("2026-10-22", "23:40"), enSantiago("2026-10-22", "00:08")),
+    );
+    expect(o.pico).toBe(1);
+    expect(o.picoMinutoDelDia).toBe(23 * 60 + 30);
+  });
+
+  it("y se cuenta como un perro distinto, no como ninguno", () => {
+    const o = calcularOcupacionDia(
+      "2026-10-22",
+      estadia(enSantiago("2026-10-22", "23:40"), enSantiago("2026-10-22", "00:08")),
+    );
+    expect(o.perrosDistintos).toBe(1);
+  });
+});
