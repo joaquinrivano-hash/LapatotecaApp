@@ -773,6 +773,31 @@ Las contraseñas llevan **el ojo para verlas** (`InputClave`): en el celular se
 escribe con el pulgar, y una mal tecleada se descubre recién cuando el login
 la rechaza. Parte oculta, por si hay alguien mirando.
 
+### "Olvidé mi contraseña": la sesión tiene que ser la del enlace
+
+`/ingresar/clave`. La primera versión dejaba cambiar la contraseña con
+**cualquier sesión abierta** en ese navegador. Y el enlace casi siempre se
+abre en otro aparato que el que lo pidió: se pide en el computador y se abre
+desde el correo del teléfono. Ahí Supabase no lo puede usar —le falta la
+mitad (`code_verifier`) que quedó guardada donde se pidió— y, a propósito,
+**no borra la sesión que había**. La pantalla veía esa sesión, mostraba el
+formulario y le cambiaba la contraseña a la cuenta abierta en ese navegador,
+no a la del correo. **Pasó probándolo el 22-10**: se pidió para la cuenta de
+prueba, la pantalla dijo que el cambio había salido bien, la contraseña nueva
+no entraba y la antigua sí — el cambio cayó en la cuenta abierta en el
+navegador donde se abrió el enlace. Con el arreglo publicado se repitió la
+prueba en un solo navegador y funcionó.
+
+Ahora pregunta `sesionDelEnlaceDeClave`, que solo acepta la sesión si la
+librería **usó** el enlace. La señal es que, al usarlo, la librería borra el
+`code` de la barra; si sigue ahí, no se pudo usar y la sesión es ajena. Por
+eso la pantalla lee la dirección en el render, antes de que nada la limpie.
+Y dice **de qué cuenta** es la contraseña antes de guardarla.
+
+Si el enlace se abre en otro aparato, la pantalla dice que se abre solo
+donde se pidió. Es el límite del flujo con `code_verifier` (PKCE), no un
+error: es justamente lo que impide que un enlace reenviado le sirva a otro.
+
 ### El día de prueba
 
 Es **media jornada** de un día de jardín normal —6 horas, la mitad de las 12
@@ -1468,6 +1493,14 @@ Tres cosas que no son obvias:
   pantalla dice por qué no salió el correo y ofrece el enlace a
   `/crear-cuenta/equipo` por WhatsApp, que sigue funcionando como antes.
 
+**En producción no hay llave, a propósito** (ver "Dónde vive cada cosa"), así
+que WhatsApp es el camino normal y la pantalla lo trata así: sin aviso
+amarillo, sin intentar un correo que no va a salir, y con "Por WhatsApp" como
+botón principal. Al anotar, el aviso trae el botón para mandarlo — un
+`window.open` después de un `await` lo bloquea el celular, y el toque nuevo
+no. El nombre no se pide al invitar: lo escribe la persona al crear su
+cuenta, y con ese firma los reportes.
+
 Para que el correo llegue hacen falta dos cosas en el panel de Supabase: un
 **SMTP propio** —ya está, es Resend, ver "Dónde vive cada cosa"— y el dominio
 de la app en las **Redirect URLs**.
@@ -1751,11 +1784,22 @@ Para saber si una variable `NEXT_PUBLIC_` entró, se busca su valor en los
 `.js` de la página publicada: si quedó `process.env.NOMBRE` sin reemplazar,
 no estaba al construir.
 
-Y una que **no** es `NEXT_PUBLIC_`: `SUPABASE_SERVICE_ROLE_KEY`. Se salta RLS
-entera, así que va como **Secret**, nunca en el repo, y solo la lee el
-servidor. La usa una sola ruta, `/api/equipo/invitaciones`, para mandar el
-correo de invitación al equipo. Sin ella invitar anota el correo pero no sale
-nada, y `/admin/equipo` lo dice. **Al 22-10-2026 está pendiente de cargar.**
+Y una que **no** es `NEXT_PUBLIC_` y **se decidió no cargar**:
+`SUPABASE_SERVICE_ROLE_KEY`. La usaría una sola ruta,
+`/api/equipo/invitaciones`, para mandar el correo de invitación al equipo.
+El 22-10-2026 la dueña eligió invitar a mano por WhatsApp: se invita poca
+gente al año, y una llave que se salta RLS entera —quien la tenga lee y
+cambia toda la base— no vale ese ahorro. Sin ella `/admin/equipo` funciona
+en "modo WhatsApp" (ver "Cómo entra alguien del equipo").
+
+Si algún día se carga, con tres cuidados: la **Secret key nueva**
+(`sb_secret_…`, Project Settings → API Keys), que se revoca sola sin tocar
+nada más —revocar la `service_role` antigua obliga a cambiar también la llave
+pública y cierra todas las sesiones—; **solo en Production**, no en Preview,
+porque las vistas previas corren código de cualquier rama sin pasar por
+`pruebas`; y marcada **Sensitive**. La versión de `supabase-js` acepta la
+llave nueva, pero no se probó con la invitación: si al invitar sale un error
+de llave, se cambia por la antigua.
 
 #### Lo que vive en la base y se edita desde la app
 
@@ -1854,19 +1898,47 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
      avisó a tiempo, o en $5.000 si no.
    - planes sin cobro: `select p.* from planes p left join pagos g on
      g.referencia_id = p.id and g.concepto = 'plan' where g.id is null;`.
-3. Cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel, proyecto **`lapatoteca`**,
-   Production y Preview, como Secret. Después **Redeploy** sin caché.
-4. Revisar las **Redirect URLs** de Supabase (Authentication → URL
-   Configuration): tienen que estar `https://www.lapatoteca.cl/**`,
-   `https://lapatoteca.cl/**` y `https://*.vercel.app/**`. Si falta, el
-   correo de invitación deja a la persona en la portada.
-5. Confirmar que el **tope de correos por hora** de Supabase se subió en
-   Authentication → Rate Limits (ver más arriba: Resend solo no lo sube).
+3. ~~Cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel~~ — **decidido no
+   cargarla** (22-10-2026): las invitaciones al equipo van por WhatsApp.
+   Los cuidados por si algún día se carga están en "Dónde vive cada cosa".
+4. ~~Revisar en Supabase → Authentication → URL Configuration~~ —
+   **revisado el 22-10-2026**: Site URL `https://lapatoteca.cl` (sirve: Vercel la manda a
+   `www` conservando el enlace) y solo las dos Redirect URLs de abajo, sin
+   `vercel.app`. La prueba de "olvidé mi contraseña" destapó un error de la
+   pantalla de contraseña nueva, que se arregló y se volvió a probar con
+   éxito el mismo día (ver "Olvidé mi contraseña: la sesión tiene que ser la
+   del enlace"). **Hecho.**
+   - **Site URL** = `https://www.lapatoteca.cl`. Es adonde vuelve el correo
+     de **confirmación** al registrarse; Supabase trae `localhost:3000` por
+     defecto, y con eso el enlace no abre.
+   - **Redirect URLs** con `https://www.lapatoteca.cl/**` y
+     `https://lapatoteca.cl/**`, **y nada de `*.vercel.app`**. Sin las dos
+     primeras **"olvidé mi contraseña"** deja a la persona en la portada en
+     vez de `/ingresar/clave`, y no puede elegir una nueva.
+
+     Una versión anterior de este archivo pedía también
+     `https://*.vercel.app/**`, y **es un agujero**: ese comodín acepta
+     cualquier sitio publicado en Vercel, también el de un atacante. Con la
+     llave pública —que está en la página— pide "olvidé mi contraseña" para
+     el correo de un cliente con su sitio como destino; al cliente le llega
+     un correo legítimo de La Patoteca y, si lo abre, el enlace con el que
+     se toma la cuenta termina en manos del atacante. Acotarlo a
+     `*-<equipo>.vercel.app` no lo cierra del todo: un proyecto ajeno puede
+     llamarse igual. Si está, se borra. Lo único que se pierde es probar
+     "olvidé mi contraseña" desde una vista previa; entrar con contraseña
+     ahí funciona igual, porque no usa la dirección de vuelta.
+5. ~~Confirmar que el **tope de correos por hora** de Supabase se subió en
+   Authentication → Rate Limits~~ — **revisado el 22-10-2026: está en 100
+   por hora**, de sobra para el volumen de la casa (ver más arriba: Resend
+   solo no lo sube).
+   Cada cliente nuevo recibe un correo de confirmación: con el tope bajo,
+   un día con varias altas deja a alguien sin poder crear su cuenta.
 6. En `/admin/configuracion`: cargar el WhatsApp de la casa y la cuenta para
    transferir.
-7. Volver a invitar a `pxeclt@gmail.com` **con su nombre**: su invitación se
-   anotó antes de que existiera el correo, y mandarla sin nombre lo deja
-   firmando los reportes con el correo.
+7. Mandarle a `pxeclt@gmail.com` el enlace por WhatsApp desde
+   `/admin/equipo`, si su invitación sigue en la lista. Al crear su cuenta en
+   `/crear-cuenta/equipo` con ese mismo correo escribe su nombre, que es con
+   el que firma los reportes, y queda con el rol de la invitación.
 8. Probar en la vista previa de `pruebas` **del proyecto `lapatoteca`** —no
    en `lapatoteca-app-git-pruebas-…`, que es el proyecto viejo— y recién
    entonces pasar `pruebas` a `main`.

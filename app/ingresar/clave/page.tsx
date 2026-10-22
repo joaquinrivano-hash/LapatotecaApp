@@ -27,6 +27,15 @@ const LARGO_MINIMO = 6;
  * Hay que esperar a que esa detección termine antes de dibujar el
  * formulario: si se pregunta demasiado pronto no hay sesión todavía y la
  * pantalla diría que el enlace no sirve justo cuando sí sirve.
+ *
+ * **Y la sesión tiene que ser la del enlace, no cualquiera.** La primera
+ * versión aceptaba la que hubiera abierta. Pero el enlace casi siempre se
+ * abre en otro aparato que el que lo pidió —se pide en el computador, se
+ * abre desde el correo del teléfono—, ahí Supabase no lo puede usar y deja
+ * la sesión que había: la pantalla mostraba el formulario igual y le cambiaba
+ * la contraseña a la cuenta abierta en ese navegador, no a la del correo.
+ * Se vio probándolo. Por eso se pregunta `sesionDelEnlaceDeClave`, y la
+ * pantalla dice de qué cuenta es la contraseña antes de guardarla.
  */
 export default function CambiarClave() {
   const router = useRouter();
@@ -39,6 +48,12 @@ export default function CambiarClave() {
   const [estado, setEstado] = useState<"revisando" | "lista" | "sin_sesion">(
     hayAuthReal() ? "revisando" : "sin_sesion",
   );
+  // La dirección tal como llegó, leída en el render: la librería le borra
+  // el `code` apenas lo usa, y es justamente lo que dice si lo pudo usar.
+  const [direccionAlLlegar] = useState(() =>
+    typeof window === "undefined" ? "" : window.location.href,
+  );
+  const [cuenta, setCuenta] = useState<string | null>(null);
   const [clave, setClave] = useState("");
   const [repetida, setRepetida] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -46,35 +61,29 @@ export default function CambiarClave() {
   const [listo, setListo] = useState(false);
 
   useEffect(() => {
-    if (!hayAuthReal()) return;
+    if (!hayAuthReal() || !direccionAlLlegar) return;
 
-    const auth = autenticacion();
     let vigente = true;
-
-    const revisar = () => {
-      auth.actual().then(
+    // Espera a que la librería termine de leer el enlace: no hace falta
+    // escuchar cambios, y escucharlos era lo que dejaba pasar una sesión
+    // ajena.
+    autenticacion()
+      .sesionDelEnlaceDeClave(direccionAlLlegar)
+      .then(
         (identidad) => {
-          if (vigente) setEstado(identidad ? "lista" : "sin_sesion");
+          if (!vigente) return;
+          setCuenta(identidad?.email ?? null);
+          setEstado(identidad ? "lista" : "sin_sesion");
         },
         () => {
           if (vigente) setEstado("sin_sesion");
         },
       );
-    };
-
-    revisar();
-    // El enlace del correo se procesa al cargar y avisa por acá cuando
-    // terminó. Sin escuchar, una detección que tarda un poco dejaría la
-    // pantalla diciendo que el enlace venció.
-    const dejarDeEscuchar = auth.alCambiar((identidad) => {
-      if (vigente && identidad) setEstado("lista");
-    });
 
     return () => {
       vigente = false;
-      dejarDeEscuchar();
     };
-  }, []);
+  }, [direccionAlLlegar]);
 
   async function guardar(evento: React.FormEvent) {
     evento.preventDefault();
@@ -131,9 +140,10 @@ export default function CambiarClave() {
         <Card className="space-y-3 p-5 text-center">
           <p className="font-semibold">Este enlace ya no sirve.</p>
           <p className="text-muted-foreground text-sm text-pretty">
-            Los enlaces duran un rato y se usan una sola vez. Pide otro desde
-            la pantalla de ingreso — y ábrelo en este mismo teléfono o
-            computador, porque el enlace se abre donde lo pediste.
+            El enlace se abre solo en el mismo teléfono o computador, y en el
+            mismo navegador, donde lo pediste. También dura un rato y se usa
+            una sola vez. Pide otro desde la pantalla de ingreso y ábrelo
+            ahí mismo.
           </p>
           <Button asChild size="lg" className="w-full">
             <Link href="/ingresar">Volver a ingresar</Link>
@@ -150,6 +160,13 @@ export default function CambiarClave() {
             </p>
           ) : (
             <form onSubmit={guardar} className="space-y-4">
+              {cuenta && (
+                <p className="bg-secondary/50 rounded-xl px-3 py-2 text-sm text-pretty">
+                  Es la contraseña de{" "}
+                  <span className="font-semibold break-all">{cuenta}</span>.
+                </p>
+              )}
+
               <div className="space-y-1.5">
                 <Label htmlFor={idClave}>Contraseña nueva</Label>
                 <InputClave
