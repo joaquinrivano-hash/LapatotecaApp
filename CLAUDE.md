@@ -949,6 +949,71 @@ veces.
 Las condiciones se muestran **antes de pagar**, no detrás de un enlace.
 Enterarse después es la manera segura de que se sientan letra chica.
 
+#### Y el que ya era cliente no lo hace
+
+`aprobarSinDiaDePrueba`, en `lib/servicios/evaluacion.ts`. Hay clientes que
+vienen hace años y entran a la app por primera vez: el alta les crea el perro
+con el día de prueba pendiente, como a cualquiera, y pedirle una evaluación
+—y $10.000— a un perro que la casa conoce de memoria es tratarlo como a un
+desconocido.
+
+Administración lo aprueba **sin que venga y sin cobrarle**. El perro queda
+`aprobado` con `yaEraCliente: true`, y eso es lo único que cambia: la
+castración, las vacunas y el peso se siguen revisando al reservar, igual que
+para todos. Saltarse el día de prueba no es saltarse la admisión.
+
+**Es decisión de la casa, no del dueño.** El alta sigue naciendo pendiente
+para todos, y en Supabase el dueño no puede tocar `dia_de_prueba`
+(`proteger_el_dia_de_prueba`). Administración pasa los disparadores, así que
+esto **no necesitó migración**.
+
+Si el cliente de antes **alcanzó a agendar** su día de prueba, se cancela y
+sus cobros se perdonan enteros (`perdonarCobrosDelDiaDePrueba`): lo
+pendiente se anula —reembolsado en cero— y lo pagado queda reembolsado con
+su monto, en "Por devolver". **Sin política de aviso**, aunque el día sea
+mañana: no canceló él, la casa decidió que no le hacía falta. Por lo mismo
+también se perdona el cargo por haberlo movido tarde.
+
+Antes de confirmar, el panel dice qué va a pasar: si hay un día que se
+cancela y si queda plata por devolver. Enterarse de eso después, en Pagos,
+es enterarse tarde.
+
+Tres cosas que no se dejan:
+
+- **Saltarse un rechazo.** La casa ya lo miró y dijo que no; si fue un
+  error, se corrige a mano en la ficha.
+- **Saltarse un día que ya pasó.** Si ya vino, lo que falta es el
+  veredicto, no saltárselo. Y si está en la casa ahora, también.
+- **Aprobar dos veces.**
+
+Se puede **repetir sin hacer daño**, y por eso el orden: primero los cobros,
+después el día, al final el perro. En Supabase son llamadas separadas; si
+algo falla a mitad de camino, volver a tocar el botón termina lo que faltó
+sin volver a tocar lo ya hecho.
+
+**Dónde está el botón.** En la tarjeta de días de prueba del tablero hay una
+sección nueva, **"inscritos sin día de prueba"**, que es donde aparece el
+cliente de antes apenas crea su cuenta: así no hay que ir a buscarlo a
+Clientes. Muestra cinco, los más recientes primero, y al aprobar uno sube el
+siguiente. Sirve también para ver al cliente nuevo que se inscribió y no
+agendó, que es alguien a quien escribirle. En los agendados va como enlace
+discreto ("¿Ya era cliente?") y no como botón en cada fila, porque casi
+todos los que agendan son clientes nuevos. Y en la ficha del cliente, junto
+a la habilitación por peso.
+
+En la fila del tablero el botón va **debajo** del texto, no al lado: al lado
+cortaba el nombre del dueño, que es justo como se reconoce a un cliente de
+antes. Se vio así al abrirlo en un celular.
+
+**El dueño se entera** por el mismo `<YaPuedeReservar />` de siempre, pero
+sin felicitarlo por pasar una prueba que no hizo: "¡Todo listo para Pituca!
+Como ya nos conocemos, no necesita día de prueba".
+
+Y un arreglo que vino con esto: la ficha del admin guardaba el estado del
+día de prueba que tenía **al abrirse**, así que aprobar con el botón y
+después editar la ficha lo devolvía a pendiente. Ahora se recarga al
+empezar a editar, y cambiarlo a mano le quita el `yaEraCliente`.
+
 ### El dueño corrige su ficha, y Administración se entera
 
 `lib/servicios/perros.ts`. El dueño puede cambiar los datos de su perro sin
@@ -2250,6 +2315,9 @@ tema tiene su explicación más arriba en este archivo.
 - **Lo pagado del día de prueba se devuelve** al cancelar (22-10): aparece en
   "Por devolver", y la pantalla pide la cuenta antes de confirmar, con el
   mismo formulario que el día de jardín.
+- **El que ya era cliente no hace día de prueba** (22-10): Administración
+  lo aprueba sin que venga y sin cobrarle, desde el tablero o la ficha del
+  cliente (ver "Y el que ya era cliente no lo hace").
 
 ## 6. Comandos
 
