@@ -327,7 +327,7 @@ Entonces, cuándo nace cada cobro:
 
 | | Cuándo se paga |
 |---|---|
-| Plan de jardín | Al comprarlo, por adelantado |
+| Plan de jardín | Al comprarlo, por adelantado (nace pendiente: no hay pasarela) |
 | Día suelto reservado | Al agendarlo, por adelantado |
 | Día de prueba | Al agendarlo |
 | Hotel | **50% al reservar**, saldo al retiro según la salida real |
@@ -1084,12 +1084,17 @@ Tres alcances:
 | Admin | Todo. |
 
 **El dueño no solo mira: agenda y compra.** Puede crear sus reservas, sus
-estadías, sus planes, sus servicios y sus órdenes, y cancelarlos o
-reprogramarlos — siempre con su propio `cliente_id`, que es lo que verifica
-el `with check`. Agendar además le crea el cobro, y ahí hay dos condiciones
-que no son decorativas: nace **pendiente** y **sin fecha de pago**. Nadie se
-da por pagado solo; eso sigue siendo de Administración, que es quien mira la
-transferencia.
+estadías, sus servicios y sus órdenes —siempre con su propio `cliente_id`,
+que es lo que verifica el `with check`—. Agendar además le crea el cobro, y
+ahí hay dos condiciones que no son decorativas: nace **pendiente** y **sin
+fecha de pago**. Nadie se da por pagado solo; eso sigue siendo de
+Administración, que es quien mira la transferencia.
+
+Lo que toca plata o el saldo del pack **no lo escribe directo**: comprar un
+plan, usar un día del plan, agendar el día de prueba, cancelar y mover pasan
+por funciones de la base (ver "Cancelar sin poder tocar el cobro" y "El saldo
+del plan y el día de prueba"). Directo agenda solo un día suelto o una reserva
+de hotel por confirmar.
 
 La frontera del equipo se corrigió una vez. "El equipo no ve la plata" era
 una buena idea en abstracto y choca con la operación real: el check-out del
@@ -1207,6 +1212,58 @@ Por lo mismo, el aviso de una cancelación sale con `dejarAviso`
 (`lib/servicios/avisos.ts`), que no tranca: la cancelación ya quedó hecha en
 la base, y si un aviso que no sale hiciera decir "no pudimos cancelar", el
 dueño lo intentaría de nuevo sobre algo que sí se canceló.
+
+#### El saldo del plan y el día de prueba
+
+`20261022160000_planes_y_dia_de_prueba.sql`. Dos agujeros más de la misma
+familia, y uno de ellos ya estaba pasando:
+
+- **Comprar un plan desde el portal no funcionaba en la nube.** El cobro
+  nacía "pagado" por Webpay —que no existe—, la base lo rechazaba porque el
+  dueño solo crea cobros pendientes, y para entonces el plan **ya estaba
+  creado y se podía usar sin cobro**. Ahora nace pendiente, como el abono
+  del hotel: el dueño transfiere y Administración lo marca pagado.
+- **El dueño podía escribir `planes` y el día de prueba de su perro.** Con
+  eso se bajaba `dias_usados` a cero, se armaba un plan de 99 días por $0 o
+  se marcaba el día de prueba como aprobado sin venir.
+
+Bloquear el `update` no alcanzaba: el dueño también podía **insertar** un
+plan, un perro que naciera aprobado, un día "con plan" que nunca se
+descontó —para cancelarlo a tiempo y que el pack le devolviera un día— o un
+día de prueba sin cobro para después "moverlo" y quedar agendado gratis.
+Así que:
+
+- **Comprar, usar un día del plan y agendar el día de prueba** son
+  funciones (`comprar_plan_de_jardin`, `agendar_dia_con_plan`,
+  `agendar_dia_de_prueba`), y llegan por `repo.agenda` igual que las
+  cancelaciones. Días, precio y vencimiento del plan los calcula la base:
+  si los mandara la app, un plan de 99 días por $0 sería una línea de
+  consola. El día de prueba tiene que durar la media jornada exacta y su
+  cotización tiene que calzar con el precio.
+- **`proteger_los_planes`** no deja al dueño ni crear ni tocar un plan.
+- **`proteger_el_dia_de_prueba`** no deja al dueño cambiar `dia_de_prueba`
+  ni inscribir un perro que no nazca pendiente. Va aparte de
+  `proteger_ficha_de_la_casa` a propósito: redefinir aquella función en una
+  migración posterior haría que volver a correr su archivo suelto se llevara
+  esta regla sin avisar. Aprobar o rechazar (`resolverDiaDePrueba`) lo hace
+  Administración, que pasa. `actualizarPerroComoDueno` además descarta el
+  campo, igual que el sexo y la castración.
+- **`lo_que_agenda_el_dueno`** acota lo que el dueño inserta directo: un
+  día suelto esperado, sin plan y sin horas reales, o una reserva de hotel
+  pendiente y sin abono. Todo lo demás tiene su función.
+
+Que haya cupo y que el perro cumpla la admisión sigue en la app, como con
+todo lo que se agenda: es una pregunta de capacidad, no de plata. Lo que se
+evita es que alguien se regale días o se salte la evaluación.
+
+Las constantes nuevas (precio y duración del día de prueba, tramos y pase
+libre, mínimo de días, solo días hábiles) llevan su anotación y entran en
+`reglas-en-la-base.test.ts`, que además verifica que los tramos sigan siendo
+**dos y contiguos**, que es lo único que la función sabe calcular.
+
+Un detalle de los tests: agendar un día que ya pasó ahora se rechaza, en la
+base y en el prototipo. Varios tests agendaban días de junio con la hora
+real; ahora pasan un `ahora` de antes, como ya hacían los del día de prueba.
 
 Dos decisiones que se explican solas una vez escritas:
 
@@ -1553,6 +1610,7 @@ que la fila no trae, como sí hace `normalizarDatos()` en el modo local.
 | `20261022120000_turnos` | La tabla `turnos`, sus permisos y el disparador que protege el turno planificado | **Sin confirmar** |
 | `20261022140000_marcado_por` | Quién marcó cada llegada y salida, firmado por la base (`firmar_la_marca`) | **Sin confirmar** |
 | `20261022150000_cambios_de_agenda` | Cancelar y mover lo agendado con su cobro, en la base; el disparador que no deja al dueño reescribir estadías ni reservas. **Sin ella, cancelar desde el portal falla** (antes de este cambio quedaba a medias) | **Sin confirmar** |
+| `20261022160000_planes_y_dia_de_prueba` | Comprar y usar un plan y agendar el día de prueba, en la base; los disparadores que no dejan al dueño tocar planes, aprobarse el día de prueba ni insertar días o reservas por fuera. **Va junto con su código**: con una sin la otra, agendar el día de prueba y usar el plan fallan (ver abajo) | **Sin confirmar** |
 
 La regla de acá en adelante:
 
@@ -1562,10 +1620,18 @@ La regla de acá en adelante:
 - **Antes de pasar `pruebas` a `main`, se revisa esta tabla.** Código que
   depende de una migración sin correr no debería llegar a producción.
 
+`planes_y_dia_de_prueba` es la primera que **no se puede correr antes**
+sin romper lo publicado: el código viejo agenda el día de prueba y usa el
+plan escribiendo directo, justo lo que la migración bloquea; y el código
+nuevo llama funciones que sin ella no existen. Las dos fallan limpio —no
+dejan nada a medias—, pero durante el intervalo nadie puede agendar el día
+de prueba ni usar su plan. Se corre la migración y se publica `main` en
+seguida, minutos y no días.
+
 La prueba de aislamiento (`supabase/pruebas/aislamiento.sh`) ya corrió en
 verde con las once primeras, en la sesión que juntó las ramas (`39f7663`),
-y con las catorce (hasta `cambios_de_agenda`) el 22-10-2026, en la sesión que
-arregló las cancelaciones. Eso dice que las migraciones hacen lo que dicen en
+y con las quince (hasta `planes_y_dia_de_prueba`) el 22-10-2026, en la
+sesión que arregló las cancelaciones y cerró los planes y el día de prueba. Eso dice que las migraciones hacen lo que dicen en
 un Postgres limpio; si corrieron en producción lo dice la tabla.
 
 #### Lo que falta hacer afuera, y lo que falta decidir
