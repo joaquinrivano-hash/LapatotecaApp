@@ -11,6 +11,7 @@
  * que las pantallas no tienen que saber en cuál de los dos mundos están.
  */
 
+import type { EnlaceDeCorreo } from "@/lib/auth/enlace";
 import type { ID, Rol } from "@/lib/types";
 
 export interface Identidad {
@@ -66,6 +67,14 @@ export interface Autenticacion {
    * autoriza el cambio es la sesión que creó ese enlace.
    */
   cambiarClave(nueva: string): Promise<void>;
+  /**
+   * Abre la sesión que trae el enlace de un correo (la invitación al equipo).
+   *
+   * Recibe el enlace ya leído por `leerEnlaceDeCorreo` y no la URL, para que
+   * la pantalla decida cuándo leerla y la pueda borrar de la barra antes de
+   * que el token quede en el historial.
+   */
+  abrirDesdeEnlace(enlace: EnlaceDeCorreo): Promise<Identidad>;
   /**
    * Avisa cuando la sesión cambia: entró, salió, se venció el token, o
    * alguien entró en otra pestaña. Devuelve cómo desuscribirse.
