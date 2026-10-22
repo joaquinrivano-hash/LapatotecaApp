@@ -800,6 +800,17 @@ devolver, hay un cobro que dejar de existir. Y no se borra, se marca
 reembolsado en cero: un cobro que desaparece no deja rastro de que existió, y
 la cobranza del mes tiene que poder explicarse.
 
+**Cada aviso tardío se cobra por su cuenta.** El cargo por mover el día
+encima de la hora es un cobro aparte, y cancelar después a tiempo anula el
+cobro DEL DÍA —el primero que se emitió— pero no ese cargo: el cupo que se
+perdió con el cambio ya se perdió. Moverlo tarde y cancelarlo tarde son dos
+cupos perdidos y dos cargos. La primera versión los juntaba en uno, y un
+cambio tardío seguido de una cancelación a tiempo salía gratis.
+
+Cancelar y mover le dejan un aviso a Administración, igual que el día de
+jardín: el día, con cuánta anticipación avisó y en qué quedó el cobro. Al
+mover, el día va con su antes y su después, porque eso sí cambió.
+
 Las condiciones se muestran **antes de pagar**, no detrás de un enlace.
 Enterarse después es la manera segura de que se sientan letra chica.
 
@@ -1114,6 +1125,62 @@ Por eso `descontar_stock()`, una función `security definer` que se salta RLS
 sobre `productos` y lo único que sabe hacer es **restar**, nunca bajo cero.
 Es la misma regla que `ajustarStock` ya tenía en el repositorio local,
 puesta donde no se puede evitar.
+
+#### Cancelar sin poder tocar el cobro
+
+Cancelar un día toca dos cosas: el día y su cobro. El dueño podía escribir el
+día y **no el cobro** —en `pagos` solo crea—, así que en producción la
+cancelación quedaba **a medias**: el día cancelado (y fuera del calendario de
+admin y staff), el cobro todavía pendiente y, en el día de prueba, el perro
+marcado "agendado" para un día que ya no existía, sin poder tomar otro. En el
+prototipo no se veía porque el repositorio local no tiene RLS.
+
+Darle `update` sobre `pagos` habría sido el mismo error que darle `update`
+sobre `productos`: se dejaría cualquier cobro en $0 desde la consola. Así que
+se hizo como `descontar_stock()`: tres funciones `security definer`
+(`20261022150000_cambios_de_agenda.sql`) que hacen el cambio **entero y en
+una transacción** —el día, el cobro, el pack, el perro—:
+`cancelar_dia_de_prueba`, `reprogramar_dia_de_prueba` y
+`cancelar_dia_de_jardin`. La app llega a ellas por `repo.agenda`, que en el
+prototipo es `lib/repo/agenda-local.ts`, la misma secuencia escrita sobre las
+colecciones. **Si cambias una, cambia la otra.**
+
+Cuatro cosas que no son obvias:
+
+- **El aviso se mide con el reloj de la base**, no con el del navegador. Si
+  contara la hora del teléfono, atrasarlo sería cancelar gratis. `ahora` en
+  `repo.agenda` solo existe para el prototipo y los tests.
+- **Las reglas están escritas dos veces**: el corte de 24 h y los $5.000
+  viven en `lib/config` y también en el SQL. Cada constante SQL lleva arriba
+  el nombre de su gemela (`-- NEGOCIO.jardin.horasParaCancelarSinCosto`) y
+  `lib/repo/supabase/reglas-en-la-base.test.ts` las compara. Cambiar una sin
+  la otra hace caer `npm test`.
+- **Lo agendado no se reescribe por fuera.** RLS acota filas, no columnas, y
+  la política "el equipo opera" dejaba al dueño actualizar cualquier columna
+  de sus estadías y reservas: podía correr la hora de llegada para que una
+  cancelación tardía pareciera a tiempo, o darse por confirmada una reserva
+  de hotel. El disparador `proteger_lo_agendado` rechaza todo `update`
+  directo del dueño; las funciones pasan porque corren como su dueña y no
+  como `authenticated`, y el equipo pasa porque marcar llegadas es su
+  trabajo. La app ya no le pide al dueño ningún `update` sobre esas tablas.
+- **El `coalesce` de la verificación de dueño no es decorativo.** Para el
+  cuidador `mi_cliente_id()` es nulo, `not (nulo)` también, y un `if` nulo no
+  entra: la primera versión dejaba al cuidador cancelar el día de cualquiera.
+  Lo pilló la prueba de aislamiento.
+
+Y otro agujero de la misma familia, en los avisos: el dueño puede
+**insertar** en `notificaciones` pero no leerlas, y `crear` del repositorio
+pedía la fila de vuelta (`.select()`, que es `insert … returning`). Postgres
+exige la política de **lectura** para devolverla, así que el insert permitido
+fallaba: el dueño corregía la ficha de su perro, se guardaba, y le salía un
+error. `NotificacionesSupabase.crear` inserta sin pedirla, con el id puesto
+por el navegador — elegir la llave de una fila que uno mismo no puede ver no
+sirve de nada.
+
+Por lo mismo, el aviso de una cancelación sale con `dejarAviso`
+(`lib/servicios/avisos.ts`), que no tranca: la cancelación ya quedó hecha en
+la base, y si un aviso que no sale hiciera decir "no pudimos cancelar", el
+dueño lo intentaría de nuevo sobre algo que sí se canceló.
 
 Dos decisiones que se explican solas una vez escritas:
 
@@ -1458,6 +1525,8 @@ que la fila no trae, como sí hace `normalizarDatos()` en el modo local.
 | `20261021130000_datos_de_transferencia` | `configuracion.transferencia` | **Sin confirmar** |
 | `20261021140000_alta_de_cuenta` | `clientes.perfil_id` toma solo el usuario que crea la ficha: sin eso, el alta del dueño falla | **Sin confirmar** |
 | `20261022120000_turnos` | La tabla `turnos`, sus permisos y el disparador que protege el turno planificado | **Sin confirmar** |
+| `20261022140000_marcado_por` | Quién marcó cada llegada y salida, firmado por la base (`firmar_la_marca`) | **Sin confirmar** |
+| `20261022150000_cambios_de_agenda` | Cancelar y mover lo agendado con su cobro, en la base; el disparador que no deja al dueño reescribir estadías ni reservas. **Sin ella, cancelar desde el portal falla** (antes de este cambio quedaba a medias) | **Sin confirmar** |
 
 La regla de acá en adelante:
 
@@ -1468,8 +1537,10 @@ La regla de acá en adelante:
   depende de una migración sin correr no debería llegar a producción.
 
 La prueba de aislamiento (`supabase/pruebas/aislamiento.sh`) ya corrió en
-verde con las once primeras, en la sesión que juntó las ramas (`39f7663`).
-La de turnos no tiene esa constancia.
+verde con las once primeras, en la sesión que juntó las ramas (`39f7663`),
+y con las catorce (hasta `cambios_de_agenda`) el 22-10-2026, en la sesión que
+arregló las cancelaciones. Eso dice que las migraciones hacen lo que dicen en
+un Postgres limpio; si corrieron en producción lo dice la tabla.
 
 #### Lo que falta hacer afuera, y lo que falta decidir
 
