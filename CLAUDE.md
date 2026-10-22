@@ -1621,7 +1621,7 @@ afuera, y se actualiza cuando cambia:
 | Hosting | Proyecto de Vercel **`lapatoteca`**: tiene el dominio y publica `main` como Production. |
 | Proyecto viejo | **`lapatoteca-app`** en Vercel quedó sin el dominio y está por borrarse. Ahí vive `lapatoteca-apppruebas.vercel.app`, que apuntaba a `prueba/vista-dueno`. **No se cargan variables ahí.** |
 | Base y login | Supabase, proyecto `kcxzoesspkggpchvqlnw`, plan Pro (US$25 + IVA al mes, el servidor Micro lo cubre el crédito). |
-| Migraciones corridas | **Las 13**, al 22 de octubre de 2026 — hasta `20261022140000_marcado_por`. **Faltan dos** cuyo código ya está en `main`: `20261022150000_cambios_de_agenda` y `20261022160000_planes_y_dia_de_prueba` (verificado desde afuera el 22-10: sus funciones no existían). Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
+| Migraciones corridas | **Las 15**, al 22 de octubre de 2026 — hasta `20261022160000_planes_y_dia_de_prueba`. Las dos últimas se verificaron desde afuera después de correrlas: sus seis funciones existen y dan `401` sin sesión. Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
 | Confirmación de correo | **Encendida.** Quien se registra recibe un enlace y hasta que no lo abre no tiene sesión. Se apaga en Authentication → Sign In → Email si alguna vez estorba. |
 | Correo saliente | **Resend**, dominio `lapatoteca.cl` verificado (región Brasil). Los tres registros DNS los puso Resend solo, con el *Auto configure* de Vercel. La API key vive en Supabase → Authentication → SMTP, con usuario `resend` y remitente `hola@lapatoteca.cl`. |
 | Buscador de direcciones | Llave de Google Cloud con el correo de la empresa, restringida a los dominios de `lapatoteca.cl`, `*.vercel.app` y `localhost:3000`, y a Maps JavaScript API + Places API (New). |
@@ -1681,9 +1681,9 @@ Supabase `configuracion.obtener()` no completa con los valores de fábrica los
 campos que la fila no trae, como sí hace `normalizarDatos()` en el modo
 local.
 
-Y pasa ahora, a propósito, con `cambios_de_agenda` y
-`planes_y_dia_de_prueba` (ver más abajo por qué esas dos no tienen un orden
-que no rompa nada).
+Y pasó a propósito con `cambios_de_agenda` y `planes_y_dia_de_prueba`, que
+no tienen un orden que no rompa nada (ver más abajo): el código llegó a
+`main` y las dos se corrieron apenas quedó publicado, el mismo 22-10.
 
 | Migración | Qué agrega | ¿Corrió en producción? |
 |---|---|---|
@@ -1693,8 +1693,8 @@ que no rompa nada).
 | `20261021140000_alta_de_cuenta` | `clientes.perfil_id` toma solo el usuario que crea la ficha: sin eso, el alta del dueño falla | Corrida (al 22-10-2026) |
 | `20261022120000_turnos` | La tabla `turnos`, sus permisos y el disparador que protege el turno planificado | Corrida (al 22-10-2026) |
 | `20261022140000_marcado_por` | Quién marcó cada llegada y salida, firmado por la base (`firmar_la_marca`) | Corrida (al 22-10-2026) |
-| `20261022150000_cambios_de_agenda` | Cancelar y mover lo agendado con su cobro, en la base; el disparador que no deja al dueño reescribir estadías ni reservas. **Sin ella, cancelar desde el portal falla** (antes de este cambio quedaba a medias) | **No corrida** — verificado desde afuera el 22-10-2026. Su código está en `main` |
-| `20261022160000_planes_y_dia_de_prueba` | Comprar y usar un plan y agendar el día de prueba, en la base; los disparadores que no dejan al dueño tocar planes, aprobarse el día de prueba ni insertar días o reservas por fuera. **Va junto con su código**: con una sin la otra, agendar el día de prueba y usar el plan fallan (ver abajo) | **No corrida** — verificado desde afuera el 22-10-2026. Su código está en `main` |
+| `20261022150000_cambios_de_agenda` | Cancelar y mover lo agendado con su cobro, en la base; el disparador que no deja al dueño reescribir estadías ni reservas. **Sin ella, cancelar desde el portal falla** (antes de este cambio quedaba a medias) | Corrida el 22-10-2026, verificada desde afuera |
+| `20261022160000_planes_y_dia_de_prueba` | Comprar y usar un plan y agendar el día de prueba, en la base; los disparadores que no dejan al dueño tocar planes, aprobarse el día de prueba ni insertar días o reservas por fuera. **Va junto con su código**: con una sin la otra, agendar el día de prueba y usar el plan fallan (ver abajo) | Corrida el 22-10-2026, verificada desde afuera |
 
 La regla de acá en adelante:
 
@@ -1714,12 +1714,10 @@ seguida, minutos y no días.
 
 Se publicó el 22-10-2026 con el código primero, que es el orden que deja el
 intervalo más corto: Vercel tarda un par de minutos en construir y mientras
-tanto sigue sirviendo la versión anterior. **Las dos migraciones se corren
-apenas el despliegue de `main` aparece como Ready**, en orden
-(`cambios_de_agenda` y después `planes_y_dia_de_prueba`), y se marcan acá
-con la fecha. Para comprobar que quedaron, ver "Saber si una migración ya
-corrió, desde afuera": con las funciones creadas, `cancelar_dia_de_prueba` y
-`comprar_plan_de_jardin` dejan de dar `404`.
+tanto sigue sirviendo la versión anterior. Las dos migraciones se corrieron
+apenas quedó publicado, en orden, y se verificaron desde afuera (ver "Saber
+si una migración ya corrió, desde afuera": las seis funciones pasaron de
+`404` a `401`). La próxima migración que venga acoplada así se publica igual.
 
 La prueba de aislamiento (`supabase/pruebas/aislamiento.sh`) ya corrió en
 verde con las once primeras, en la sesión que juntó las ramas (`39f7663`),
@@ -1733,12 +1731,10 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
 
 **Afuera del código** (lo hace la dueña o quien tenga acceso a los paneles):
 
-1. **Urgente:** correr en Supabase `20261022150000_cambios_de_agenda` y
-   `20261022160000_planes_y_dia_de_prueba`, en ese orden, apenas el
-   despliegue de `main` del 22-10 quede listo. Hasta entonces agendar el día
-   de prueba, usar o comprar un plan y cancelar desde el portal fallan.
-   Marcarlas en la tabla.
-2. Después de correrlas, **ordenar lo que dejaron a medias los bugs que
+1. ~~Correr en Supabase `20261022150000_cambios_de_agenda` y
+   `20261022160000_planes_y_dia_de_prueba`~~ — hecho el 22-10-2026,
+   verificado desde afuera.
+2. Ahora que corrieron, **ordenar lo que dejaron a medias los bugs que
    arreglan**:
    - Los días de prueba cancelados a medias: la estadía `cancelada`, el
      perro todavía `agendado` y el cobro pendiente. Pasó al menos con
