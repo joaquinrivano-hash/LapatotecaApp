@@ -5,9 +5,13 @@ import { toast } from "sonner";
 import {
   Copy,
   Mail,
+  MailCheck,
   MessageCircle,
+  RotateCw,
+  Send,
   ShieldCheck,
   Trash2,
+  TriangleAlert,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -20,6 +24,10 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { hayAuthReal } from "@/lib/auth";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
+import {
+  estadoDeCorreos,
+  mandarCorreoDeInvitacion,
+} from "@/lib/integraciones/equipo/cliente";
 import { useSesion } from "@/lib/store/sesion";
 import type { Rol } from "@/lib/types";
 import { formatearFechaCorta } from "@/lib/utils/fecha";
@@ -42,15 +50,21 @@ const NOMBRE_DEL_ROL: Record<Rol, string> = {
  * persona se registre. Quien llegue por su cuenta, sin estar anotado, nace
  * dueño.
  *
- * **La app no manda ningún correo.** Mandarlo desde acá exigiría la llave
- * `service_role` de Supabase viviendo en un servidor, que es justo lo que este
- * diseño evita. Por eso, en vez de prometer un correo que no sale, la pantalla
- * deja el mensaje con el enlace listo para que Administración lo mande por
- * WhatsApp o desde su propio correo. Una invitación que nadie recibe es una
- * persona esperando algo que no va a llegar.
+ * **El correo lo manda Supabase**, desde `/api/equipo/invitaciones`, que
+ * usa la llave `service_role` y por eso revisa antes que quien pide sea
+ * Administración. La persona recibe un enlace que la lleva a elegir su
+ * contraseña (`/crear-cuenta/equipo/bienvenida`).
+ *
+ * Si el correo no sale —falta la llave, o el remitente de Supabase no
+ * alcanza— la invitación queda anotada igual y la pantalla lo dice, con el
+ * enlace para crear la cuenta listo para mandarlo por WhatsApp. Una
+ * invitación que nadie recibe es una persona esperando algo que no llega.
  */
 
-/** Dónde se registra el equipo: el alta normal del portal pide un perro. */
+/**
+ * Dónde se registra el equipo, para cuando el correo no sale y hay que
+ * mandar el enlace a mano. El alta normal del portal pide un perro.
+ */
 function enlaceDeRegistro(): string {
   return `${window.location.origin}/crear-cuenta/equipo`;
 }
@@ -72,12 +86,6 @@ function mandarPorWhatsapp(rol: Rol, email: string) {
   );
 }
 
-function mandarPorCorreo(rol: Rol, email: string) {
-  const asunto = encodeURIComponent("Tu cuenta en La Patoteca");
-  const cuerpo = encodeURIComponent(mensajeDeInvitacion(rol, email));
-  window.location.href = `mailto:${email}?subject=${asunto}&body=${cuerpo}`;
-}
-
 async function copiarEnlace() {
   try {
     await navigator.clipboard.writeText(enlaceDeRegistro());
@@ -92,10 +100,19 @@ export default function Equipo() {
   const { ocupado, ejecutar } = useAccion();
 
   const [correo, setCorreo] = useState("");
+  const [nombre, setNombre] = useState("");
   const [rol, setRol] = useState<Rol>("staff");
+  const [mandando, setMandando] = useState<string | null>(null);
+  // Los correos no son del repositorio: se vuelven a preguntar a mano
+  // después de mandar uno.
+  const [vuelta, setVuelta] = useState(0);
 
   const miembros = useConsulta((repo) => repo.equipo.miembros(), []);
   const invitaciones = useConsulta((repo) => repo.equipo.invitaciones(), []);
+  const correos = useConsulta(
+    () => (hayAuthReal() ? estadoDeCorreos() : Promise.resolve(null)),
+    [vuelta],
+  );
 
   if (!hayAuthReal()) {
     return (
@@ -106,20 +123,43 @@ export default function Equipo() {
     );
   }
 
+  /** Manda (o reenvía) el correo y dice cómo le fue. */
+  async function mandarCorreo(email: string, suNombre?: string) {
+    setMandando(email);
+    const resultado = await mandarCorreoDeInvitacion(email, suNombre);
+    setMandando(null);
+    setVuelta((v) => v + 1);
+
+    if (resultado.ok) {
+      toast.success(`Le mandamos el correo a ${email}`, {
+        description:
+          "Tiene que abrirlo para elegir su contraseña. Si no lo ve, que revise spam.",
+      });
+    } else {
+      toast.error("El correo no salió", {
+        description: `${resultado.motivo} Mientras, puedes mandarle el enlace por WhatsApp.`,
+        duration: 12_000,
+      });
+    }
+    return resultado.ok;
+  }
+
   async function invitar(evento: React.FormEvent) {
     evento.preventDefault();
+    const email = correo.trim().toLowerCase();
     try {
-      await ejecutar((repo) => repo.equipo.invitar(correo, rol));
-      toast.success(`Anotamos a ${correo.trim().toLowerCase()}`, {
-        description:
-          "Ahora mándale el enlace para crear su cuenta: está abajo, en Invitaciones sin usar.",
-      });
-      setCorreo("");
+      // Primero se anota: el rol lo pone la base leyendo esta fila cuando
+      // el correo crea la cuenta, así que tiene que existir antes.
+      await ejecutar((repo) => repo.equipo.invitar(email, rol));
     } catch (problema) {
       toast.error(
         problema instanceof Error ? problema.message : "No pudimos invitar.",
       );
+      return;
     }
+    setCorreo("");
+    setNombre("");
+    await mandarCorreo(email, nombre.trim() || undefined);
   }
 
   async function cancelar(email: string) {
@@ -147,6 +187,10 @@ export default function Equipo() {
   }
 
   const sinUsar = (invitaciones.datos ?? []).filter((i) => !i.usadaEn);
+  const porAbrir = new Set(correos.datos?.esperando ?? []);
+  const esperando = (invitaciones.datos ?? []).filter(
+    (i) => i.usadaEn && porAbrir.has(i.email),
+  );
   const delEquipo = (miembros.datos ?? []).filter((m) => m.rol !== "cliente");
 
   return (
@@ -154,9 +198,8 @@ export default function Equipo() {
       <div className="space-y-1">
         <h1 className="font-display text-2xl font-bold">Equipo</h1>
         <p className="text-muted-foreground text-sm text-pretty">
-          Anota el correo de quien va a trabajar contigo y mándale el enlace
-          para crear su cuenta. Cuando se registre con ese mismo correo, su
-          cuenta nace con el rol que le pusiste.
+          Invita a quien va a trabajar contigo: le llega un correo para elegir
+          su contraseña, y su cuenta nace con el rol que le pusiste.
         </p>
       </div>
 
@@ -167,7 +210,32 @@ export default function Equipo() {
             Invitar
           </h2>
 
+          {correos.datos && !correos.datos.activos && (
+            <p className="bg-warning/12 text-warning flex items-start gap-2 rounded-xl p-3 text-sm text-pretty">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+              <span>
+                {correos.datos.motivo} Mientras tanto la invitación queda
+                anotada y le puedes mandar el enlace por WhatsApp.
+              </span>
+            </p>
+          )}
+
           <form onSubmit={invitar} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor={`${idCorreo}-nombre`}>Su nombre</Label>
+              <Input
+                id={`${idCorreo}-nombre`}
+                autoComplete="off"
+                required
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                placeholder="María"
+              />
+              <p className="text-muted-foreground text-xs text-pretty">
+                Con este nombre firma los reportes que les llegan a los dueños.
+              </p>
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor={idCorreo}>Su correo</Label>
               <Input
@@ -182,9 +250,8 @@ export default function Equipo() {
                 placeholder="maria@lapatoteca.cl"
               />
               <p className="text-muted-foreground text-xs text-pretty">
-                Tiene que ser el mismo con el que se va a registrar. No le
-                llega ningún correo nuestro: después de anotarlo te dejamos el
-                mensaje con el enlace listo para que se lo mandes.
+                Ahí le llega la invitación. Es también el correo con el que va a
+                entrar.
               </p>
             </div>
 
@@ -206,9 +273,14 @@ export default function Equipo() {
               </select>
             </div>
 
-            <Button type="submit" size="lg" className="w-full" disabled={ocupado}>
-              <UserPlus />
-              Anotar invitación
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full"
+              disabled={ocupado || mandando !== null}
+            >
+              <Send />
+              {mandando ? "Mandando…" : "Invitar y mandar el correo"}
             </Button>
           </form>
         </CardContent>
@@ -218,76 +290,104 @@ export default function Equipo() {
         <CardContent className="space-y-3 p-5">
           <h2 className="font-display flex items-center gap-2 text-lg font-bold">
             <Mail className="size-5" />
-            Invitaciones sin usar
+            Invitaciones
           </h2>
 
           {invitaciones.cargando ? (
             <Skeleton className="h-16 w-full" />
-          ) : sinUsar.length === 0 ? (
+          ) : sinUsar.length === 0 && esperando.length === 0 ? (
             <p className="text-muted-foreground text-sm">
               No hay ninguna esperando.
             </p>
           ) : (
-            <>
-              <p className="text-muted-foreground text-sm text-pretty">
-                Mándale el enlace a cada persona para que cree su cuenta. Puedes
-                volver a mandarlo las veces que haga falta.
-              </p>
-              <ul className="space-y-2">
-                {sinUsar.map((invitacion) => (
-                  <li
-                    key={invitacion.email}
-                    className="bg-secondary/40 space-y-3 rounded-xl p-3"
+            <ul className="space-y-2">
+              {/* Correo mandado: la cuenta ya existe con su rol y falta que
+                  la persona abra el enlace. No se cancela desde acá, porque
+                  la cuenta ya nació: se le quita el rol en la lista de abajo. */}
+              {esperando.map((invitacion) => (
+                <li
+                  key={invitacion.email}
+                  className="bg-secondary/40 flex flex-wrap items-center gap-3 rounded-xl p-3"
+                >
+                  <span className="min-w-40 flex-1">
+                    <span className="block truncate font-semibold">
+                      {invitacion.email}
+                    </span>
+                    <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
+                      <MailCheck className="size-3.5 shrink-0" />
+                      {NOMBRE_DEL_ROL[invitacion.rol]} · le llegó el correo,
+                      todavía no lo abre
+                    </span>
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={mandando !== null}
+                    onClick={() => mandarCorreo(invitacion.email)}
                   >
-                    <div className="flex items-center gap-3">
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-semibold">
-                          {invitacion.email}
-                        </span>
-                        <span className="text-muted-foreground block text-sm">
-                          {NOMBRE_DEL_ROL[invitacion.rol]} · anotada el{" "}
-                          {formatearFechaCorta(invitacion.creadaEn)}
-                        </span>
+                    <RotateCw />
+                    {mandando === invitacion.email ? "Mandando…" : "Reenviar"}
+                  </Button>
+                </li>
+              ))}
+
+              {/* Anotada pero sin correo: o se anotó antes de que existiera
+                  el envío, o el correo no salió. */}
+              {sinUsar.map((invitacion) => (
+                <li
+                  key={invitacion.email}
+                  className="bg-secondary/40 space-y-3 rounded-xl p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold">
+                        {invitacion.email}
                       </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Cancelar la invitación de ${invitacion.email}`}
-                        disabled={ocupado}
-                        onClick={() => cancelar(invitacion.email)}
-                      >
-                        <Trash2 />
-                      </Button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() =>
-                          mandarPorWhatsapp(invitacion.rol, invitacion.email)
-                        }
-                      >
-                        <MessageCircle />
-                        Mandar por WhatsApp
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          mandarPorCorreo(invitacion.rol, invitacion.email)
-                        }
-                      >
-                        <Mail />
-                        Por correo
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={copiarEnlace}>
-                        <Copy />
-                        Copiar enlace
-                      </Button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </>
+                      <span className="text-muted-foreground block text-sm">
+                        {NOMBRE_DEL_ROL[invitacion.rol]} · anotada el{" "}
+                        {formatearFechaCorta(invitacion.creadaEn)}, todavía no le
+                        llega nada
+                      </span>
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Cancelar la invitación de ${invitacion.email}`}
+                      disabled={ocupado}
+                      onClick={() => cancelar(invitacion.email)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      disabled={mandando !== null}
+                      onClick={() => mandarCorreo(invitacion.email)}
+                    >
+                      <Send />
+                      {mandando === invitacion.email
+                        ? "Mandando…"
+                        : "Mandar el correo"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        mandarPorWhatsapp(invitacion.rol, invitacion.email)
+                      }
+                    >
+                      <MessageCircle />
+                      Por WhatsApp
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={copiarEnlace}>
+                      <Copy />
+                      Copiar enlace
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </CardContent>
       </Card>

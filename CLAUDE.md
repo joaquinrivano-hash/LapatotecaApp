@@ -1052,26 +1052,43 @@ Tres detalles que son la diferencia entre que funcione y que sea un agujero:
   persona para todo el mundo menos para una comparación de texto.
 - **La invitación se gasta al usarse.** Una que sirve para siempre es una que
   alguien reutiliza.
-- **Nada de esto necesita la `service_role` key.** La decisión la toma el
-  disparador dentro de la base, no una llave viviendo en un servidor. Invitar
-  por la API de administración de Supabase habría exigido esa llave; esto no.
+- **El rol lo decide la base, no la llave.** Lo pone el disparador leyendo
+  la invitación. La `service_role` key que usa el correo (ver abajo) solo
+  crea la cuenta y manda el enlace: no elige el rol.
 
 El **primer admin** sí se asciende a mano, una vez, desde el editor SQL: no hay
 ningún admin todavía que pueda invitarlo. De ahí en adelante invita él.
 
-**Invitar no manda ningún correo**, y la pantalla lo dice. Mandarlo desde la
-app exigiría justamente la `service_role` key. Así que después de anotar el
-correo, `/admin/equipo` deja el mensaje con el enlace a
-`/crear-cuenta/equipo` listo para mandarlo por WhatsApp, por correo (abre el
-del propio admin) o copiarlo. La primera versión decía "Invitamos a…" y la
-persona se quedó esperando un correo que nunca iba a salir.
+**Invitar manda un correo de verdad**, y para eso usa la `service_role` key,
+que es justo lo que la primera versión evitaba. Se cambió porque una
+invitación que hay que reenviar a mano por WhatsApp no es una invitación. La
+llave vive solo en el servidor, detrás de `/api/equipo/invitaciones`, y esa
+ruta revisa **primero** que quien pide sea Administración: con la llave,
+cualquiera que llegara a la URL podría crear cuentas. La decisión está en
+`lib/integraciones/equipo/servidor.ts`, separada de Supabase para probarla
+sin red.
 
-El único correo que sí manda el sistema es la **confirmación de Supabase** al
-registrarse. Con el servidor de correo que trae Supabase por defecto, ese
-correo solo llega a direcciones del equipo del proyecto en Supabase y con un
-tope de pocos envíos por hora. Para que llegue a cualquiera hay que
-configurar un SMTP propio en Supabase (Authentication → SMTP) o apagar la
-confirmación de correo.
+Tres cosas que no son obvias:
+
+- **Invitar crea la cuenta en ese momento.** `inviteUserByEmail` inserta en
+  `auth.users`, el disparador corre ahí mismo, lee la invitación y le pone el
+  rol. Por eso el correo se anota ANTES de mandar, y por eso después la
+  invitación aparece usada aunque la persona no haya abierto nada: lo que dice
+  si ya entró es si **confirmó**, y eso lo responde el GET de la ruta.
+- **El cliente PKCE no lee el enlace de invitación.** Llega con la sesión en
+  el fragmento (`#access_token=…`) y `createBrowserClient` lo descarta. La
+  página de llegada, `/crear-cuenta/equipo/bienvenida`, lo lee a mano
+  (`leerEnlaceDeCorreo`), lo borra de la barra y abre la sesión con
+  `setSession`. Ahí solo se pide la contraseña: el nombre lo escribió
+  Administración al invitar y viaja en los metadatos.
+- **Sin la llave o sin SMTP la invitación no se pierde.** Queda anotada, la
+  pantalla dice por qué no salió el correo y ofrece el enlace a
+  `/crear-cuenta/equipo` por WhatsApp, que sigue funcionando como antes.
+
+Para que el correo llegue hacen falta dos cosas en el panel de Supabase,
+explicadas en `.env.example`: un **SMTP propio** (el remitente incluido solo
+escribe a los miembros del equipo del proyecto en Supabase, y pocos por hora)
+y el dominio de la app en las **Redirect URLs**.
 
 #### Grants y políticas son dos cosas
 
