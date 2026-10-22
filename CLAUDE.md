@@ -1,9 +1,10 @@
 # La Patoteca — Prototipo navegable
 
-Hotel y jardín canino en Providencia, Santiago de Chile. Este repo es un
-**prototipo navegable** para validar flujos y pantallas antes de conectar un
-backend real. No hay servidor: los datos son mock y las acciones persisten en
-localStorage.
+Hotel y jardín canino en Providencia, Santiago de Chile. Empezó como un
+**prototipo navegable** con datos mock en localStorage, y ese modo sigue
+existiendo para demos y desarrollo. **En producción (`lapatoteca.cl`) corre
+sobre Supabase**, con login real: el interruptor es
+`NEXT_PUBLIC_ORIGEN_DATOS` (ver "La nube" y "Dónde vive cada cosa").
 
 ---
 
@@ -168,7 +169,9 @@ en la renovación.
 | `/staff` | Staff | Celular, botones grandes, check-in/out de un toque |
 | `/admin` | Admin | Backoffice: clientes, calendario, pagos, planes, KPIs |
 
-El rol se elige en un **login mock** con selector; no hay auth real.
+Con `NEXT_PUBLIC_ORIGEN_DATOS=supabase` (producción) se entra con correo y
+contraseña, y el rol lo decide la base. Con `local` (el prototipo) el rol se
+elige en un **login mock** con selector, que en producción no aparece.
 
 ### Capa de repositorio — la regla que no se rompe
 
@@ -766,6 +769,17 @@ la pantalla de pagos.
 Se agenda como una `EstadiaJardin` con `origen: "dia_de_prueba"` y deja al
 perro en `diaDePrueba.estado = "agendado"`.
 
+**Se anuncia en palabras y con la hora**: "Día de prueba el próximo jueves 29
+de octubre a las 09:00". `describirDia` (en `lib/utils/fecha.ts`) dice "hoy",
+"mañana", "el próximo…" dentro de la semana que viene y "el jueves 5 de
+noviembre" más allá; "2026-10-22" obliga al dueño a hacer la cuenta. La hora
+no está en el perro sino en la estadía, así que `alertasDePerro` la recibe
+de quien la tenga a mano.
+
+En Mi cuenta el día agendado **no es una alerta**: es lo que se esperaba que
+hiciera. Va en verde, sin triángulo, y cierra con "¡Te esperamos!". En el
+backoffice sí sigue siendo alerta, porque el perro todavía no es cliente.
+
 **Cancelar y reprogramar**, con 24 horas de corte:
 
 | | Cancelar | Cambiar la fecha |
@@ -1251,6 +1265,47 @@ pasado por `pruebas` y sin `build`, `lint` y `test` verdes.
 Ojo con el nombre: la rama de una funcionalidad es `prueba/` en **singular**.
 Git no deja que exista `pruebas` y `pruebas/whatsapp` a la vez —una referencia
 no puede ser archivo y carpeta al mismo tiempo— y el error que tira no dice eso.
+
+### Dónde vive cada cosa
+
+Lo que no está en el código no lo ve ninguna sesión nueva. Esto es lo que hay
+afuera, y se actualiza cuando cambia:
+
+| Qué | Dónde |
+|---|---|
+| Dominio `lapatoteca.cl` | Comprado en **NIC Chile**, delegado a `ns1/ns2.vercel-dns.com`. `lapatoteca.cl` redirige a `www`. |
+| Hosting | Proyecto de Vercel **`lapatoteca`**: tiene el dominio y publica `main` como Production. |
+| Proyecto viejo | **`lapatoteca-app`** en Vercel quedó sin el dominio y está por borrarse. Ahí vive `lapatoteca-apppruebas.vercel.app`, que apuntaba a `prueba/vista-dueno`. **No se cargan variables ahí.** |
+| Base y login | Supabase, proyecto `kcxzoesspkggpchvqlnw`, plan Pro (US$25 + IVA al mes, el servidor Micro lo cubre el crédito). |
+| Buscador de direcciones | Llave de Google Cloud con el correo de la empresa, restringida a los dominios de `lapatoteca.cl`, `*.vercel.app` y `localhost:3000`, y a Maps JavaScript API + Places API (New). |
+
+Variables en Vercel (proyecto `lapatoteca`, Production y Preview):
+`NEXT_PUBLIC_ORIGEN_DATOS=supabase`, `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` y `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`. Las
+`NEXT_PUBLIC_` van como tipo **Config**, no Secret: terminan en el navegador
+igual, y Vercel no deja marcarlas secretas. Lo que las protege son las
+políticas de RLS y las restricciones de la llave. Tres trampas que ya costaron
+una tarde:
+
+- **Vercel las mete al construir.** Cargar o corregir una variable no cambia
+  lo publicado: hay que hacer **Redeploy**, sin caché.
+- **El nombre tiene que ser exacto.** Una `Z` de más al final
+  (`…_API_KEYZ`) dejó el buscador apagado sin ningún error a la vista.
+- **Hay que cargarlas en el proyecto que tiene el dominio.** Con dos
+  proyectos conectados al mismo repo, las dos publicaciones salen bien y
+  solo una se ve.
+
+Para saber si una variable `NEXT_PUBLIC_` entró, se busca su valor en los
+`.js` de la página publicada: si quedó `process.env.NOMBRE` sin reemplazar,
+no estaba al construir.
+
+#### Varias sesiones a la vez
+
+Cada sesión en la nube tiene su propia copia del repo y su propia
+conversación; entre ellas solo se ven a través de GitHub. Por eso: traer
+`main` y `pruebas` **al empezar y antes de subir**, subir apenas algo
+termina, y anotar acá lo que cambie afuera del código (Vercel, Supabase,
+Google). Otra sesión no se va a enterar de otra manera.
 
 ## 6. Comandos
 
