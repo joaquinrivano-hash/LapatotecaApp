@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Pencil, Save, Scale, Trash2, TriangleAlert } from "lucide-react";
+import { BadgeCheck, Pencil, Save, Scale, Trash2, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { AprobarSinDiaDePrueba } from "@/components/admin/aprobar-sin-dia-de-prueba";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import {
   aBorrador,
@@ -214,13 +215,17 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
   const [ficha, setFicha] = useState<EstadoPerro>(() => estadoDesde(perro));
   const [estadoPrueba, setEstadoPrueba] = useState(perro.diaDePrueba.estado);
   const [faltantes, setFaltantes] = useState<FaltanteDeAlta[]>([]);
+  const [aprobandoSinPrueba, setAprobandoSinPrueba] = useState(false);
 
   const configuracion = useConsulta((repo) => repo.configuracion.obtener(), []);
   const alertas = alertasDePerro(perro, hoy);
 
   function empezarAEditar() {
     // Se recarga desde el perro para no arrastrar una edición abandonada.
+    // El estado del día de prueba también: si se aprobó con "Ya era
+    // cliente", guardar con el de antes lo dejaría pendiente otra vez.
     setFicha(estadoDesde(perro));
+    setEstadoPrueba(perro.diaDePrueba.estado);
     setFaltantes([]);
     setEditando(true);
   }
@@ -241,7 +246,11 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
     await ejecutar((repo) =>
       repo.perros.actualizar(perro.id, {
         ...cambiosDePerro(ficha, reglas),
-        diaDePrueba: { ...perro.diaDePrueba, estado: estadoPrueba },
+        diaDePrueba:
+          estadoPrueba === perro.diaDePrueba.estado
+            ? perro.diaDePrueba
+            : // Cambiado a mano ya no es "aprobado sin venir".
+              { ...perro.diaDePrueba, estado: estadoPrueba, yaEraCliente: undefined },
       }),
     );
     setEditando(false);
@@ -326,6 +335,30 @@ function EditorPerro({ perro, hoy }: { perro: Perro; hoy: string }) {
             : "Quitar la habilitación por peso"}
         </Button>
       )}
+
+      {/* El cliente que viene hace años y recién entra a la app: la casa lo
+          conoce y no le pide día de prueba. */}
+      {(perro.diaDePrueba.estado === "pendiente" ||
+        perro.diaDePrueba.estado === "agendado") &&
+        (aprobandoSinPrueba ? (
+          <div className="mt-2">
+            <AprobarSinDiaDePrueba
+              perro={perro}
+              hoy={hoy}
+              onCerrar={() => setAprobandoSinPrueba(false)}
+            />
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 w-full"
+            onClick={() => setAprobandoSinPrueba(true)}
+          >
+            <BadgeCheck />
+            Ya era cliente: aprobar sin día de prueba
+          </Button>
+        ))}
 
       {abierto && (
         <div className="mt-3 space-y-3 border-t border-border/60 pt-3">

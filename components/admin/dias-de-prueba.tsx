@@ -2,8 +2,9 @@
 
 import { useId, useState } from "react";
 import { toast } from "sonner";
-import { CalendarClock, Check, PawPrint, X } from "lucide-react";
+import { BadgeCheck, CalendarClock, Check, PawPrint, X } from "lucide-react";
 
+import { AprobarSinDiaDePrueba } from "@/components/admin/aprobar-sin-dia-de-prueba";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,9 +15,11 @@ import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import {
   diasDePruebaPorEvaluar,
   diasDePruebaQueVienen,
+  inscritosSinDiaDePrueba,
   resolverDiaDePrueba,
   type DiaDePruebaPorEvaluar,
   type DiaDePruebaQueViene,
+  type InscritoSinDiaDePrueba,
 } from "@/lib/servicios/evaluacion";
 import { formatearDiaMes, formatearHora } from "@/lib/utils/fecha";
 
@@ -33,6 +36,9 @@ import { formatearDiaMes, formatearHora } from "@/lib/utils/fecha";
  * El veredicto va arriba porque es lo que tranca a un cliente: hasta que no
  * se dé, ese perro no puede reservar.
  *
+ * En medio, los inscritos que no han agendado. Ahí aparece el cliente que
+ * viene hace años apenas crea su cuenta, para aprobarlo sin que venga.
+ *
  * Se esconde sola cuando no hay nada de ninguna de las dos: un negocio al
  * día no necesita mirar una tarjeta vacía.
  */
@@ -45,13 +51,19 @@ export function DiasDePrueba({ hoy }: { hoy: string }) {
     (repo) => diasDePruebaQueVienen(repo, hoy),
     [hoy],
   );
+  const sinAgendar = useConsulta(
+    (repo) => inscritosSinDiaDePrueba(repo, hoy),
+    [hoy],
+  );
 
-  if (porEvaluar.cargando || queVienen.cargando)
+  if (porEvaluar.cargando || queVienen.cargando || sinAgendar.cargando)
     return <Skeleton className="h-28 w-full rounded-2xl" />;
 
   const cola = porEvaluar.datos ?? [];
   const vienen = queVienen.datos ?? [];
-  if (cola.length === 0 && vienen.length === 0) return null;
+  const inscritos = sinAgendar.datos ?? [];
+  if (cola.length === 0 && vienen.length === 0 && inscritos.length === 0)
+    return null;
 
   return (
     <Card>
@@ -80,21 +92,109 @@ export function DiasDePrueba({ hoy }: { hoy: string }) {
           </div>
         )}
 
+        {inscritos.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-muted-foreground text-xs font-semibold uppercase">
+              {inscritos.length === 1
+                ? "Uno inscrito sin día de prueba"
+                : `${inscritos.length} inscritos sin día de prueba`}
+            </h3>
+            <p className="text-muted-foreground text-sm text-pretty">
+              Si ya era cliente antes de la app, apruébalo sin que venga.
+            </p>
+            {/* Cinco y el resto resumido: el día que se inscriban muchos
+                clientes de antes juntos, una lista de veinte no se lee. Al
+                aprobar uno, sube el siguiente. */}
+            {inscritos.slice(0, MOSTRAR_INSCRITOS).map((entrada) => (
+              <Inscrito key={entrada.perro.id} entrada={entrada} hoy={hoy} />
+            ))}
+            {inscritos.length > MOSTRAR_INSCRITOS && (
+              <p className="text-muted-foreground text-sm">
+                Y {inscritos.length - MOSTRAR_INSCRITOS} más: aparecen a
+                medida que apruebes estos, o búscalos en Clientes.
+              </p>
+            )}
+          </div>
+        )}
+
         {vienen.length > 0 && (
           <div className="space-y-2">
             <h3 className="text-muted-foreground text-xs font-semibold uppercase">
               {vienen.length === 1 ? "Uno agendado" : `${vienen.length} agendados`}
             </h3>
-            {/* Sin botones: todavía no pasó nada que decidir. Lo que esto
-                contesta es "¿quién viene a conocer la casa?", que antes no
-                se podía contestar en ninguna pantalla. */}
+            {/* Lo que esto contesta es "¿quién viene a conocer la casa?",
+                que antes no se podía contestar en ninguna pantalla. El único
+                botón es para el cliente de antes que alcanzó a agendar: el
+                veredicto espera a que venga. */}
             {vienen.map((entrada) => (
-              <Agendado key={entrada.estadia.id} entrada={entrada} />
+              <Agendado key={entrada.estadia.id} entrada={entrada} hoy={hoy} />
             ))}
           </div>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+const MOSTRAR_INSCRITOS = 5;
+
+/** Cuándo se inscribió, en palabras: "hoy", "ayer", "hace 3 días". */
+function cuandoSeInscribio(dias: number): string {
+  if (dias === 0) return "se inscribió hoy";
+  if (dias === 1) return "se inscribió ayer";
+  return `se inscribió hace ${dias} días`;
+}
+
+function Inscrito({
+  entrada,
+  hoy,
+}: {
+  entrada: InscritoSinDiaDePrueba;
+  hoy: string;
+}) {
+  const { perro, cliente, diasInscrito } = entrada;
+  const [aprobando, setAprobando] = useState(false);
+
+  return (
+    <div className="bg-secondary/40 space-y-3 rounded-xl p-3">
+      <div className="flex items-start gap-3">
+        <PerroAvatar
+          id={perro.id}
+          nombre={perro.nombre}
+          fotoUrl={perro.fotoUrl}
+          tamano="sm"
+        />
+        {/* El botón va abajo y no al lado: al lado cortaba el nombre del
+            dueño, que es justo como se reconoce a un cliente de antes. */}
+        <div className="min-w-0 flex-1 space-y-2">
+          <div>
+            <p className="font-semibold text-pretty">
+              {perro.nombre}
+              <span className="text-muted-foreground font-normal">
+                {" "}
+                · {cliente ? `${cliente.nombre} ${cliente.apellido}` : "sin dueño"}
+              </span>
+            </p>
+            <p className="text-muted-foreground text-sm">
+              {cuandoSeInscribio(diasInscrito)}
+            </p>
+          </div>
+          {!aprobando && (
+            <Button variant="outline" size="sm" onClick={() => setAprobando(true)}>
+              <BadgeCheck />
+              Ya era cliente
+            </Button>
+          )}
+        </div>
+      </div>
+      {aprobando && (
+        <AprobarSinDiaDePrueba
+          perro={perro}
+          hoy={hoy}
+          onCerrar={() => setAprobando(false)}
+        />
+      )}
+    </div>
   );
 }
 
@@ -105,34 +205,61 @@ function cuandoLlega(dias: number): string {
   return `en ${dias} días`;
 }
 
-function Agendado({ entrada }: { entrada: DiaDePruebaQueViene }) {
+function Agendado({
+  entrada,
+  hoy,
+}: {
+  entrada: DiaDePruebaQueViene;
+  hoy: string;
+}) {
   const { perro, cliente, estadia, fecha, diasParaQueLlegue } = entrada;
+  const [aprobando, setAprobando] = useState(false);
 
   return (
-    <div className="bg-secondary/40 flex items-center gap-3 rounded-xl p-3">
-      <PerroAvatar
-        id={perro.id}
-        nombre={perro.nombre}
-        fotoUrl={perro.fotoUrl}
-        tamano="sm"
-      />
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-semibold">
-          {perro.nombre}
-          <span className="text-muted-foreground font-normal">
-            {" "}
-            · {cliente ? `${cliente.nombre} ${cliente.apellido}` : "sin dueño"}
-          </span>
-        </p>
-        <p className="text-muted-foreground text-sm">
-          {formatearDiaMes(`${fecha}T12:00:00Z`)}
-          {" · "}
-          {formatearHora(estadia.inicioProgramado)}
-          {" · "}
-          {cuandoLlega(diasParaQueLlegue)}
-        </p>
+    <div className="bg-secondary/40 space-y-3 rounded-xl p-3">
+      <div className="flex items-start gap-3">
+        <PerroAvatar
+          id={perro.id}
+          nombre={perro.nombre}
+          fotoUrl={perro.fotoUrl}
+          tamano="sm"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-semibold">
+            {perro.nombre}
+            <span className="text-muted-foreground font-normal">
+              {" "}
+              · {cliente ? `${cliente.nombre} ${cliente.apellido}` : "sin dueño"}
+            </span>
+          </p>
+          <p className="text-muted-foreground text-sm">
+            {formatearDiaMes(`${fecha}T12:00:00Z`)}
+            {" · "}
+            {formatearHora(estadia.inicioProgramado)}
+            {" · "}
+            {cuandoLlega(diasParaQueLlegue)}
+          </p>
+          {/* Casi todos los que agendan son clientes nuevos: la pregunta va
+              como enlace y no como un botón en cada fila. */}
+          {!aprobando && (
+            <button
+              type="button"
+              onClick={() => setAprobando(true)}
+              className="text-muted-foreground mt-1 text-sm underline underline-offset-2"
+            >
+              ¿Ya era cliente?
+            </button>
+          )}
+        </div>
+        <CalendarClock className="text-muted-foreground size-5 shrink-0" />
       </div>
-      <CalendarClock className="text-muted-foreground size-5 shrink-0" />
+      {aprobando && (
+        <AprobarSinDiaDePrueba
+          perro={perro}
+          hoy={hoy}
+          onCerrar={() => setAprobando(false)}
+        />
+      )}
     </div>
   );
 }

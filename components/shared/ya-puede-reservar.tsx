@@ -36,17 +36,26 @@ export function YaPuedeReservar({ clienteId }: { clienteId: string | undefined }
       ? nombres[0]
       : `${nombres.slice(0, -1).join(", ")} y ${nombres[nombres.length - 1]}`;
   const varios = nombres.length > 1;
+  // Al que la casa aprobó sin venir no se le felicita por pasar una prueba
+  // que no hizo: se le da la bienvenida a la app. Cada frase se dice solo
+  // si es cierta para todos los nombrados: con hermanos mezclados, ni "pasó
+  // el día de prueba" ni "no necesita día de prueba" lo son.
+  const algunoSinPrueba = listos.some((p) => p.diaDePrueba.yaEraCliente);
+  const todosSinPrueba = listos.every((p) => p.diaDePrueba.yaEraCliente);
 
   return (
     <Card className="border-success/40 bg-success/5">
       <CardContent className="space-y-3 p-5 text-center">
         <PartyPopper className="text-success mx-auto size-10" />
         <p className="font-display text-xl font-bold text-balance">
-          ¡{quienes} {varios ? "pasaron" : "pasó"} el día de prueba!
+          {algunoSinPrueba
+            ? `¡Todo listo para ${quienes}!`
+            : `¡${quienes} ${varios ? "pasaron" : "pasó"} el día de prueba!`}
         </p>
         <p className="text-muted-foreground text-pretty">
-          Ya {varios ? "pueden" : "puede"} quedarse con nosotros. Reserva su
-          primer día de jardín o su primera noche de hotel cuando quieras.
+          {todosSinPrueba
+            ? `Como ya nos conocemos, no ${varios ? "necesitan" : "necesita"} día de prueba. Reserva su próximo día de jardín o su próxima noche de hotel cuando quieras.`
+            : `Ya ${varios ? "pueden" : "puede"} quedarse con nosotros. Reserva su primer día de jardín o su primera noche de hotel cuando quieras.`}
         </p>
         <Button asChild size="xl" className="w-full">
           <Link href="/reservar">Reservar</Link>
