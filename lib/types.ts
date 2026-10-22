@@ -276,7 +276,11 @@ export interface ReservaHotel {
   finReal?: InstanteISO;
   /** Cuándo se apretó el botón. Ver `EstadiaJardin.inicioMarcadoEn`. */
   inicioMarcadoEn?: InstanteISO;
+  /** Quién apretó el botón. Lo firma la base, no el navegador. */
+  inicioMarcadoPor?: ID;
   finMarcadoEn?: InstanteISO;
+  /** Quién apretó el botón. Lo firma la base, no el navegador. */
+  finMarcadoPor?: ID;
   /** Cantidad de paseos contratados durante la estadía, a $4.000 cada uno. */
   paseosContratados: number;
   estado: EstadoReserva;
@@ -325,7 +329,11 @@ export interface EstadiaJardin {
    * sobre la operación y no sobre el perro.
    */
   inicioMarcadoEn?: InstanteISO;
+  /** Quién apretó el botón. Lo firma la base, no el navegador. */
+  inicioMarcadoPor?: ID;
   finMarcadoEn?: InstanteISO;
+  /** Quién apretó el botón. Lo firma la base, no el navegador. */
+  finMarcadoPor?: ID;
   origen: OrigenEstadia;
   planId?: ID;
   estado: EstadoEstadia;

@@ -5,12 +5,15 @@
  * ocupación de cada día —para saber si un hueco de cobertura importaba— y
  * los rastros que dejó cada persona.
  *
- * Sobre los rastros: hoy son los **reportes y los incidentes**, que son
- * los únicos registros que llevan el nombre de quien los hizo. Marcar una
- * llegada no guarda quién apretó el botón, así que el trabajo más
- * frecuente del turno no deja rastro atribuible. Eso se arregla agregando
- * una columna `marcado_por`, y hasta entonces conviene no olvidarlo: un
- * turno sin rastros puede ser un turno tranquilo, no un turno ausente.
+ * Sobre los rastros: son las **marcas de asistencia** —cada llegada y cada
+ * salida que esa persona apretó— más los **reportes e incidentes**. Las
+ * primeras son el grueso: marcar llegadas es lo que más se hace en un turno.
+ *
+ * Se juntan por dos llaves distintas, y no es por gusto. Las marcas llevan
+ * el id de la cuenta (`marcado_por`, firmado por la base), así que calzan
+ * exacto. Los reportes y los incidentes solo llevan `autorStaff`, que es el
+ * NOMBRE con el que se firmó: eso es frágil —dos personas que se llamen
+ * igual se mezclan— y es lo que hay hasta que esos registros guarden el id.
  */
 
 import { NEGOCIO } from "@/lib/config/negocio";
@@ -88,6 +91,37 @@ function indexarRastros(
   return mapa;
 }
 
+/** Una marca de asistencia: quién la apretó y cuándo. */
+interface Marcada {
+  inicioMarcadoEn?: string;
+  inicioMarcadoPor?: ID;
+  finMarcadoEn?: string;
+  finMarcadoPor?: ID;
+}
+
+/**
+ * Las marcas de asistencia, indexadas por CUENTA.
+ *
+ * El día del rastro es el de `marcadoEn` y no el de la estadía: si alguien
+ * cierra a las 00:20 la jornada del día anterior, ese trabajo lo hizo
+ * durante su turno de la noche, no durante el día que cerró.
+ */
+function indexarMarcas(filas: Marcada[]): Map<string, Rastro[]> {
+  const mapa = new Map<string, Rastro[]>();
+
+  const anotar = (cuando: string | undefined, quien: ID | undefined, que: string) => {
+    if (!cuando || !quien) return;
+    const clave = `${fechaISO(cuando)}|${quien}`;
+    mapa.set(clave, [...(mapa.get(clave) ?? []), { instante: cuando, que }]);
+  };
+
+  for (const f of filas) {
+    anotar(f.inicioMarcadoEn, f.inicioMarcadoPor, "una llegada");
+    anotar(f.finMarcadoEn, f.finMarcadoPor, "una salida");
+  }
+  return mapa;
+}
+
 export async function semanaDeTurnos(
   repo: RepositorioPatoteca,
   desde: FechaISO,
@@ -108,10 +142,11 @@ export async function semanaDeTurnos(
     ...ocupantesDeReservas(reservas),
     ...ocupantesDeEstadias(estadias),
   ];
-  const rastros = indexarRastros(
+  const porNombre = indexarRastros(
     reportes.filter((r) => r.fecha >= desde && r.fecha <= hasta),
     incidentes,
   );
+  const porCuenta = indexarMarcas([...reservas, ...estadias]);
 
   return rangoFechas(desde, hasta).map((fecha) => {
     const ocupacion = calcularOcupacionDia(fecha, ocupantes);
@@ -140,10 +175,16 @@ export async function semanaDeTurnos(
       turnos: delDia
         .map((turno) => {
           const persona = gente.get(turno.perfilId) ?? null;
-          const suyos = persona
-            ? (rastros.get(`${fecha}|${persona.nombre.trim().toLowerCase()}`) ??
-              [])
-            : [];
+          // Las marcas calzan por cuenta; los reportes e incidentes, solo
+          // por el nombre con el que se firmaron.
+          const suyos = [
+            ...(porCuenta.get(`${fecha}|${turno.perfilId}`) ?? []),
+            ...(persona
+              ? (porNombre.get(
+                  `${fecha}|${persona.nombre.trim().toLowerCase()}`,
+                ) ?? [])
+              : []),
+          ];
           return {
             turno,
             persona,

@@ -94,6 +94,66 @@ describe("semanaDeTurnos", () => {
     expect(dia.huecos).toEqual([]);
   });
 
+  // El grueso del trabajo de un turno son las marcas de asistencia, y
+  // ahora llevan la firma de quien las hizo. Sin esto, un turno tranquilo
+  // se veía igual que uno ausente.
+  it("las marcas de asistencia cuentan como rastros del turno", async () => {
+    montar({
+      turnos: [turno()],
+      estadiasJardin: [
+        {
+          ...estadia("e1", "08:00", "18:00"),
+          inicioMarcadoEn: instanteEnHora(DIA, "08:05"),
+          inicioMarcadoPor: "p-maria",
+          finMarcadoEn: instanteEnHora(DIA, "17:58"),
+          finMarcadoPor: "p-maria",
+        },
+      ],
+    });
+
+    const [dia] = await semanaDeTurnos(repo, DIA, DIA);
+    const { comparacion, rastros } = dia.turnos[0];
+    expect(rastros).toHaveLength(2);
+    expect(comparacion.entrada).toEqual({
+      instante: instanteEnHora(DIA, "08:05"),
+      fuente: "rastro",
+    });
+    expect(comparacion.salida.instante).toBe(instanteEnHora(DIA, "17:58"));
+  });
+
+  it("una marca de otra persona no es rastro de este turno", async () => {
+    montar({
+      turnos: [turno()],
+      estadiasJardin: [
+        {
+          ...estadia("e1", "08:00", "18:00"),
+          inicioMarcadoEn: instanteEnHora(DIA, "08:05"),
+          inicioMarcadoPor: "p-otra",
+        },
+      ],
+    });
+
+    const [dia] = await semanaDeTurnos(repo, DIA, DIA);
+    expect(dia.turnos[0].rastros).toEqual([]);
+  });
+
+  // Sin firma no se le atribuye a nadie: es el caso de las jornadas
+  // marcadas antes de que la columna existiera.
+  it("una marca sin firma no se le cuelga a nadie", async () => {
+    montar({
+      turnos: [turno()],
+      estadiasJardin: [
+        {
+          ...estadia("e1", "08:00", "18:00"),
+          inicioMarcadoEn: instanteEnHora(DIA, "08:05"),
+        },
+      ],
+    });
+
+    const [dia] = await semanaDeTurnos(repo, DIA, DIA);
+    expect(dia.turnos[0].rastros).toEqual([]);
+  });
+
   it("un turno de alguien que ya no está en el equipo igual se muestra", async () => {
     montar({ turnos: [turno({ perfilId: "p-borrada" })] });
     const [dia] = await semanaDeTurnos(repo, DIA, DIA);

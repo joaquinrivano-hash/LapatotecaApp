@@ -114,6 +114,8 @@ export async function registrarLlegadaJardin(
   estadiaId: ID,
   ahora: InstanteISO = new Date().toISOString(),
   horaReal: InstanteISO = ahora,
+  /** Quién apretó el botón. La base lo vuelve a firmar con la sesión. */
+  marcadoPor?: ID,
 ): Promise<EstadiaJardin> {
   const estadia = await repo.estadiasJardin.obtener(estadiaId);
 
@@ -127,6 +129,9 @@ export async function registrarLlegadaJardin(
   return repo.estadiasJardin.actualizar(estadiaId, {
     inicioReal: horaReal,
     inicioMarcadoEn: esPrimeraMarca ? ahora : estadia?.inicioMarcadoEn,
+    // Va con la hora de marca y por el mismo motivo: corregir un dato no
+    // es marcar de nuevo, así que la firma se queda con la de la primera vez.
+    inicioMarcadoPor: esPrimeraMarca ? marcadoPor : estadia?.inicioMarcadoPor,
     estado: "presente",
   });
 }
@@ -148,6 +153,8 @@ export async function registrarSalidaJardin(
   ahora: InstanteISO = new Date().toISOString(),
   /** La hora a la que se fue de verdad, si no es el momento de marcarlo. */
   horaReal: InstanteISO = ahora,
+  /** Quién apretó el botón. La base lo vuelve a firmar con la sesión. */
+  marcadoPor?: ID,
 ): Promise<ResultadoSalida> {
   const estadia = await repo.estadiasJardin.obtener(estadiaId);
   if (!estadia) throw new Error(`No existe la estadía ${estadiaId}`);
@@ -166,6 +173,7 @@ export async function registrarSalidaJardin(
   const actualizada = await repo.estadiasJardin.actualizar(estadiaId, {
     finReal: horaReal,
     finMarcadoEn: estadia.finReal ? estadia.finMarcadoEn : ahora,
+    finMarcadoPor: estadia.finReal ? estadia.finMarcadoPor : marcadoPor,
     estado: "finalizada",
     cotizacion,
   });
@@ -195,12 +203,17 @@ export async function registrarLlegadaHotel(
   reservaId: ID,
   ahora: InstanteISO = new Date().toISOString(),
   horaReal: InstanteISO = ahora,
+  /** Quién apretó el botón. La base lo vuelve a firmar con la sesión. */
+  marcadoPor?: ID,
 ): Promise<ReservaHotel> {
   const reserva = await repo.reservasHotel.obtener(reservaId);
 
   return repo.reservasHotel.actualizar(reservaId, {
     inicioReal: horaReal,
     inicioMarcadoEn: reserva?.inicioReal ? reserva.inicioMarcadoEn : ahora,
+    inicioMarcadoPor: reserva?.inicioReal
+      ? reserva.inicioMarcadoPor
+      : marcadoPor,
     estado: "en_curso",
   });
 }
@@ -222,6 +235,8 @@ export async function registrarSalidaHotel(
   ahora: InstanteISO = new Date().toISOString(),
   /** La hora a la que se lo llevaron de verdad. */
   horaReal: InstanteISO = ahora,
+  /** Quién apretó el botón. La base lo vuelve a firmar con la sesión. */
+  marcadoPor?: ID,
 ): Promise<ResultadoSalidaHotel> {
   const reserva = await repo.reservasHotel.obtener(reservaId);
   if (!reserva) throw new Error(`No existe la reserva ${reservaId}`);
@@ -238,6 +253,7 @@ export async function registrarSalidaHotel(
   const actualizada = await repo.reservasHotel.actualizar(reservaId, {
     finReal: horaReal,
     finMarcadoEn: reserva.finReal ? reserva.finMarcadoEn : ahora,
+    finMarcadoPor: reserva.finReal ? reserva.finMarcadoPor : marcadoPor,
     estado: "finalizada",
     cotizacion,
   });

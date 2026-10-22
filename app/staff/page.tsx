@@ -16,6 +16,7 @@ import {
   type ItemAsistencia,
 } from "@/components/staff/fila-asistencia";
 import { FicharTurno } from "@/components/staff/fichar-turno";
+import { useSesion } from "@/lib/store/sesion";
 import { AgregarPerro } from "@/components/staff/agregar-perro";
 import { FichaPerro } from "@/components/staff/ficha-perro";
 import { itemsDelDia } from "@/components/staff/items";
@@ -34,6 +35,9 @@ import { hhmmDesdeMinutos } from "@/lib/utils/fecha";
 
 export default function Hoy() {
   const hoy = hoyDelStaff();
+  // Quién está marcando. Firma cada llegada y cada salida, y es lo que
+  // después deja ver en la planilla que el turno tuvo actividad.
+  const yo = useSesion((s) => s.usuarioId);
   const dia = useConsulta((repo) => cargarDiaDeStaff(repo, hoy), [hoy]);
   const { ocupado, ejecutar } = useAccion();
   /** Qué perro tiene la ficha abierta. Se guarda el id, no el item: después
@@ -54,17 +58,24 @@ export default function Hoy() {
   );
 
   async function llego(item: ItemAsistencia) {
+    const ahora = new Date().toISOString();
     await ejecutar(async (repo) => {
-      if (item.linea === "hotel") await registrarLlegadaHotel(repo, item.id);
-      else await registrarLlegadaJardin(repo, item.id);
+      // `yo` firma la marca. En el prototipo no hay cuentas, así que va sin
+      // firma y la planilla lo muestra como "no se sabe" — que es la verdad.
+      if (item.linea === "hotel") {
+        await registrarLlegadaHotel(repo, item.id, ahora, ahora, yo);
+      } else {
+        await registrarLlegadaJardin(repo, item.id, ahora, ahora, yo);
+      }
     });
     toast.success(`Llegó ${item.perro.nombre}`);
   }
 
   async function seFue(item: ItemAsistencia) {
     if (item.linea === "hotel") {
+      const ahora = new Date().toISOString();
       const resultado = await ejecutar((repo) =>
-        registrarSalidaHotel(repo, item.id),
+        registrarSalidaHotel(repo, item.id, ahora, ahora, yo),
       );
       toast.success(`Se fue ${item.perro.nombre}`, {
         description:
@@ -75,8 +86,9 @@ export default function Hoy() {
       return;
     }
 
+    const ahora = new Date().toISOString();
     const resultado = await ejecutar((repo) =>
-      registrarSalidaJardin(repo, item.id),
+      registrarSalidaJardin(repo, item.id, ahora, ahora, yo),
     );
 
     // El atraso se avisa en el momento, porque es lo que hay que conversar
