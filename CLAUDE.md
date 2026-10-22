@@ -722,6 +722,30 @@ sobrepeso la cuenta se crea igual, el botón dice "Crear cuenta" y no "Crear
 cuenta y agendar", y en vez del calendario va a su cuenta, que explica que lo
 conversamos.
 
+### La dirección se elige, no se escribe
+
+`components/shared/campo-direccion.tsx` y `lib/integraciones/direcciones/`.
+El alta pide la **dirección** con sugerencias de Google Places, limitadas a
+Chile y priorizando lo que queda cerca de la casa (`NEGOCIO.ubicacion`). La
+**comuna sale de lo que eligió**: no se le pregunta aparte.
+
+- Es válida recién cuando se **elige de la lista** y trae **número**. Un
+  texto escrito a mano puede no existir, y eso se descubre el día del
+  traslado. Editar después de elegir la deja sin confirmar.
+- La comuna es `administrative_area_level_3`, no `locality`: en el centro
+  Google dice "Santiago" para direcciones de comunas vecinas.
+- Se usa la API de datos y no el widget de Google, que dibuja su caja en un
+  shadow DOM sin los estilos de la marca. Sugerencias y detalle van con el
+  mismo token de sesión, que Google cobra como una sola búsqueda.
+- **Sin `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`, o si el script no carga**, el campo
+  vuelve a ser dirección y comuna escritas. El alta nunca se tranca por
+  nosotros. La llave es pública y se protege con restricción de dominio y de
+  API en Google Cloud (ver `.env.example`).
+
+Las contraseñas llevan **el ojo para verlas** (`InputClave`): en el celular se
+escribe con el pulgar, y una mal tecleada se descubre recién cuando el login
+la rechaza. Parte oculta, por si hay alguien mirando.
+
 ### El día de prueba
 
 Es **media jornada** de un día de jardín normal —6 horas, la mitad de las 12
