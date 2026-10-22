@@ -1205,7 +1205,16 @@ planificó es pedirle que invente el dato.
 El seed no inventa turnos. Sesenta días de planilla que nadie escribió es
 llenar la pantalla de datos falsos.
 
-**En el prototipo el equipo son los cuatro del selector de ingreso.** Antes
+**En el turno puede estar cualquiera menos un cliente.** Staff y
+Administración por igual: la dueña vive en la casa y cubre horas como
+cualquiera —de hecho es la que más cubre—. Dejarla fuera haría que sus horas
+salieran en rojo como "sin nadie" todos los días, que es la manera segura de
+que el rojo se deje de mirar. El rol dice qué PUEDE hacer en la app, no
+quién está con los perros.
+
+**En el prototipo el equipo son los cuatro del selector de ingreso**, más
+Administración (`ADMIN_DEL_PROTOTIPO`), para que la demo diga lo mismo que
+producción. Antes
 `equipo.miembros()` devolvía una lista vacía y con eso la planilla no se
 podía usar en modo demo: no había a quién asignarle un turno, así que la
 pantalla existía y no se podía probar. Listar a los que YA entran por el

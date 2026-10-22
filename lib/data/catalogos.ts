@@ -237,3 +237,16 @@ export const STAFF = ["Cata", "Nico", "Jorge", "Pili"] as const;
 export function idDeStaff(nombre: string): string {
   return `staff:${nombre.trim().toLowerCase()}`;
 }
+
+/**
+ * Administración, que en el prototipo también es alguien del equipo.
+ *
+ * La dueña vive en la casa y cubre horas como cualquiera — de hecho es la
+ * que más cubre—. Dejarla fuera de la planilla haría que sus horas salieran
+ * en rojo como "sin nadie" todos los días, que es la manera segura de que
+ * el rojo se deje de mirar.
+ */
+export const ADMIN_DEL_PROTOTIPO = {
+  id: "admin:casa",
+  nombre: "Administración",
+} as const;

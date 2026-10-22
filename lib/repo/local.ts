@@ -9,7 +9,11 @@
  * resto de la app no se entera.
  */
 
-import { STAFF, idDeStaff } from "@/lib/data/catalogos";
+import {
+  ADMIN_DEL_PROTOTIPO,
+  STAFF,
+  idDeStaff,
+} from "@/lib/data/catalogos";
 import { generarSeed, type DatosPatoteca } from "@/lib/data/seed";
 import { crearAgendaLocal } from "@/lib/repo/agenda-local";
 import { crearAlmacenLocal, type Almacen } from "@/lib/repo/almacen";
@@ -658,12 +662,17 @@ export function crearRepositorioLocal(
      * tiene una cuenta con la que no podría entrar—.
      */
     async miembros() {
-      return STAFF.map((nombre) => ({
-        id: idDeStaff(nombre),
-        nombre,
-        rol: "staff" as const,
-        creadoEn: `${ctx.datos().hoy}T12:00:00.000Z`,
-      }));
+      const creadoEn = `${ctx.datos().hoy}T12:00:00.000Z`;
+      return [
+        ...STAFF.map((nombre) => ({
+          id: idDeStaff(nombre),
+          nombre,
+          rol: "staff" as const,
+          creadoEn,
+        })),
+        // Administración también cubre turnos: ver ADMIN_DEL_PROTOTIPO.
+        { ...ADMIN_DEL_PROTOTIPO, rol: "admin" as const, creadoEn },
+      ];
     },
     async invitaciones() {
       return [];
