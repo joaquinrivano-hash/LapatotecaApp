@@ -153,7 +153,9 @@ export default function DiaDePrueba() {
         });
         return;
       }
-      toast.error("No pudimos agendar ese día.");
+      toast.error("No pudimos agendar ese día.", {
+        description: problema instanceof Error ? problema.message : undefined,
+      });
     }
   }
 
@@ -169,8 +171,16 @@ export default function DiaDePrueba() {
           : `Avisaste con menos de ${NEGOCIO.diaDePrueba.horasParaCancelarSinCosto} horas, así que queda el cargo por cancelación tardía.`,
       });
       router.push("/mi-cuenta");
-    } catch {
-      toast.error("No pudimos cancelar ese día.");
+    } catch (problema: unknown) {
+      if (problema instanceof RegistroRechazado) {
+        toast.error(problema.message, {
+          description: problema.motivos.join(" "),
+        });
+        return;
+      }
+      toast.error("No pudimos cancelar ese día.", {
+        description: problema instanceof Error ? problema.message : undefined,
+      });
     }
   }
 

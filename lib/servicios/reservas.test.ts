@@ -537,6 +537,23 @@ describe("cancelar un día de jardín", () => {
       cancelarDiaDeJardin(repo, estadia.id, en("09:00", "2026-06-14")),
     ).rejects.toThrow(ReservaRechazada);
   });
+
+  it("un día que ya terminó no se cancela, y dice eso y no otra cosa", async () => {
+    // Pasó en producción: un ingreso sin reserva ya cerrado aparecía en
+    // "Lo que viene", y al intentar cancelarlo el motivo decía que el perro
+    // estaba en la casa.
+    const { estadia } = await reservarDiaJardin(repo, {
+      perroId: "perro-001",
+      fecha: MANANA,
+    }, ANTES);
+    await repo.estadiasJardin.actualizar(estadia.id, { estado: "finalizada" });
+
+    const intento = cancelarDiaDeJardin(repo, estadia.id, en("08:00", "2026-06-14"));
+    await expect(intento).rejects.toThrow(ReservaRechazada);
+    await expect(intento).rejects.toMatchObject({
+      motivos: ["Ese día ya terminó."],
+    });
+  });
 });
 
 describe("devolver la plata cuando ya estaba pagada", () => {
