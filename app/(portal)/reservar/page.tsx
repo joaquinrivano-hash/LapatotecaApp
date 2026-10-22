@@ -45,6 +45,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   formatearDiaMesCorto,
+  formatearFecha,
   formatearFechaLarga,
   instanteEnHora,
   sumarDias,
@@ -368,7 +369,7 @@ function ComprarPlan({ perro }: { perro: Perro }) {
         }),
       );
       toast.success("Plan activado", {
-        description: `Vence el ${plan.venceEn}. Los días se usan de lunes a viernes.`,
+        description: `Vence el ${formatearFecha(plan.venceEn)} y los días se usan de lunes a viernes. Te dejamos el cobro en tu cuenta para que lo transfieras.`,
       });
     } catch (error) {
       avisarError(error);

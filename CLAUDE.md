@@ -327,7 +327,7 @@ Entonces, cuándo nace cada cobro:
 
 | | Cuándo se paga |
 |---|---|
-| Plan de jardín | Al comprarlo, por adelantado |
+| Plan de jardín | Al comprarlo, por adelantado (nace pendiente: no hay pasarela) |
 | Día suelto reservado | Al agendarlo, por adelantado |
 | Día de prueba | Al agendarlo |
 | Hotel | **50% al reservar**, saldo al retiro según la salida real |
@@ -800,6 +800,17 @@ devolver, hay un cobro que dejar de existir. Y no se borra, se marca
 reembolsado en cero: un cobro que desaparece no deja rastro de que existió, y
 la cobranza del mes tiene que poder explicarse.
 
+**Cada aviso tardío se cobra por su cuenta.** El cargo por mover el día
+encima de la hora es un cobro aparte, y cancelar después a tiempo anula el
+cobro DEL DÍA —el primero que se emitió— pero no ese cargo: el cupo que se
+perdió con el cambio ya se perdió. Moverlo tarde y cancelarlo tarde son dos
+cupos perdidos y dos cargos. La primera versión los juntaba en uno, y un
+cambio tardío seguido de una cancelación a tiempo salía gratis.
+
+Cancelar y mover le dejan un aviso a Administración, igual que el día de
+jardín: el día, con cuánta anticipación avisó y en qué quedó el cobro. Al
+mover, el día va con su antes y su después, porque eso sí cambió.
+
 #### Y alguien tiene que cerrarlo
 
 `lib/servicios/evaluacion.ts` y la tarjeta de `/admin`. El día de prueba es
@@ -1090,12 +1101,17 @@ Tres alcances:
 | Admin | Todo. |
 
 **El dueño no solo mira: agenda y compra.** Puede crear sus reservas, sus
-estadías, sus planes, sus servicios y sus órdenes, y cancelarlos o
-reprogramarlos — siempre con su propio `cliente_id`, que es lo que verifica
-el `with check`. Agendar además le crea el cobro, y ahí hay dos condiciones
-que no son decorativas: nace **pendiente** y **sin fecha de pago**. Nadie se
-da por pagado solo; eso sigue siendo de Administración, que es quien mira la
-transferencia.
+estadías, sus servicios y sus órdenes —siempre con su propio `cliente_id`,
+que es lo que verifica el `with check`—. Agendar además le crea el cobro, y
+ahí hay dos condiciones que no son decorativas: nace **pendiente** y **sin
+fecha de pago**. Nadie se da por pagado solo; eso sigue siendo de
+Administración, que es quien mira la transferencia.
+
+Lo que toca plata o el saldo del pack **no lo escribe directo**: comprar un
+plan, usar un día del plan, agendar el día de prueba, cancelar y mover pasan
+por funciones de la base (ver "Cancelar sin poder tocar el cobro" y "El saldo
+del plan y el día de prueba"). Directo agenda solo un día suelto o una reserva
+de hotel por confirmar.
 
 La frontera del equipo se corrigió una vez. "El equipo no ve la plata" era
 una buena idea en abstracto y choca con la operación real: el check-out del
@@ -1157,6 +1173,114 @@ Por eso `descontar_stock()`, una función `security definer` que se salta RLS
 sobre `productos` y lo único que sabe hacer es **restar**, nunca bajo cero.
 Es la misma regla que `ajustarStock` ya tenía en el repositorio local,
 puesta donde no se puede evitar.
+
+#### Cancelar sin poder tocar el cobro
+
+Cancelar un día toca dos cosas: el día y su cobro. El dueño podía escribir el
+día y **no el cobro** —en `pagos` solo crea—, así que en producción la
+cancelación quedaba **a medias**: el día cancelado (y fuera del calendario de
+admin y staff), el cobro todavía pendiente y, en el día de prueba, el perro
+marcado "agendado" para un día que ya no existía, sin poder tomar otro. En el
+prototipo no se veía porque el repositorio local no tiene RLS.
+
+Darle `update` sobre `pagos` habría sido el mismo error que darle `update`
+sobre `productos`: se dejaría cualquier cobro en $0 desde la consola. Así que
+se hizo como `descontar_stock()`: tres funciones `security definer`
+(`20261022150000_cambios_de_agenda.sql`) que hacen el cambio **entero y en
+una transacción** —el día, el cobro, el pack, el perro—:
+`cancelar_dia_de_prueba`, `reprogramar_dia_de_prueba` y
+`cancelar_dia_de_jardin`. La app llega a ellas por `repo.agenda`, que en el
+prototipo es `lib/repo/agenda-local.ts`, la misma secuencia escrita sobre las
+colecciones. **Si cambias una, cambia la otra.**
+
+Cuatro cosas que no son obvias:
+
+- **El aviso se mide con el reloj de la base**, no con el del navegador. Si
+  contara la hora del teléfono, atrasarlo sería cancelar gratis. `ahora` en
+  `repo.agenda` solo existe para el prototipo y los tests.
+- **Las reglas están escritas dos veces**: el corte de 24 h y los $5.000
+  viven en `lib/config` y también en el SQL. Cada constante SQL lleva arriba
+  el nombre de su gemela (`-- NEGOCIO.jardin.horasParaCancelarSinCosto`) y
+  `lib/repo/supabase/reglas-en-la-base.test.ts` las compara. Cambiar una sin
+  la otra hace caer `npm test`.
+- **Lo agendado no se reescribe por fuera.** RLS acota filas, no columnas, y
+  la política "el equipo opera" dejaba al dueño actualizar cualquier columna
+  de sus estadías y reservas: podía correr la hora de llegada para que una
+  cancelación tardía pareciera a tiempo, o darse por confirmada una reserva
+  de hotel. El disparador `proteger_lo_agendado` rechaza todo `update`
+  directo del dueño; las funciones pasan porque corren como su dueña y no
+  como `authenticated`, y el equipo pasa porque marcar llegadas es su
+  trabajo. La app ya no le pide al dueño ningún `update` sobre esas tablas.
+- **El `coalesce` de la verificación de dueño no es decorativo.** Para el
+  cuidador `mi_cliente_id()` es nulo, `not (nulo)` también, y un `if` nulo no
+  entra: la primera versión dejaba al cuidador cancelar el día de cualquiera.
+  Lo pilló la prueba de aislamiento.
+
+Y otro agujero de la misma familia, en los avisos: el dueño puede
+**insertar** en `notificaciones` pero no leerlas, y `crear` del repositorio
+pedía la fila de vuelta (`.select()`, que es `insert … returning`). Postgres
+exige la política de **lectura** para devolverla, así que el insert permitido
+fallaba: el dueño corregía la ficha de su perro, se guardaba, y le salía un
+error. `NotificacionesSupabase.crear` inserta sin pedirla, con el id puesto
+por el navegador — elegir la llave de una fila que uno mismo no puede ver no
+sirve de nada.
+
+Por lo mismo, el aviso de una cancelación sale con `dejarAviso`
+(`lib/servicios/avisos.ts`), que no tranca: la cancelación ya quedó hecha en
+la base, y si un aviso que no sale hiciera decir "no pudimos cancelar", el
+dueño lo intentaría de nuevo sobre algo que sí se canceló.
+
+#### El saldo del plan y el día de prueba
+
+`20261022160000_planes_y_dia_de_prueba.sql`. Dos agujeros más de la misma
+familia, y uno de ellos ya estaba pasando:
+
+- **Comprar un plan desde el portal no funcionaba en la nube.** El cobro
+  nacía "pagado" por Webpay —que no existe—, la base lo rechazaba porque el
+  dueño solo crea cobros pendientes, y para entonces el plan **ya estaba
+  creado y se podía usar sin cobro**. Ahora nace pendiente, como el abono
+  del hotel: el dueño transfiere y Administración lo marca pagado.
+- **El dueño podía escribir `planes` y el día de prueba de su perro.** Con
+  eso se bajaba `dias_usados` a cero, se armaba un plan de 99 días por $0 o
+  se marcaba el día de prueba como aprobado sin venir.
+
+Bloquear el `update` no alcanzaba: el dueño también podía **insertar** un
+plan, un perro que naciera aprobado, un día "con plan" que nunca se
+descontó —para cancelarlo a tiempo y que el pack le devolviera un día— o un
+día de prueba sin cobro para después "moverlo" y quedar agendado gratis.
+Así que:
+
+- **Comprar, usar un día del plan y agendar el día de prueba** son
+  funciones (`comprar_plan_de_jardin`, `agendar_dia_con_plan`,
+  `agendar_dia_de_prueba`), y llegan por `repo.agenda` igual que las
+  cancelaciones. Días, precio y vencimiento del plan los calcula la base:
+  si los mandara la app, un plan de 99 días por $0 sería una línea de
+  consola. El día de prueba tiene que durar la media jornada exacta y su
+  cotización tiene que calzar con el precio.
+- **`proteger_los_planes`** no deja al dueño ni crear ni tocar un plan.
+- **`proteger_el_dia_de_prueba`** no deja al dueño cambiar `dia_de_prueba`
+  ni inscribir un perro que no nazca pendiente. Va aparte de
+  `proteger_ficha_de_la_casa` a propósito: redefinir aquella función en una
+  migración posterior haría que volver a correr su archivo suelto se llevara
+  esta regla sin avisar. Aprobar o rechazar (`resolverDiaDePrueba`) lo hace
+  Administración, que pasa. `actualizarPerroComoDueno` además descarta el
+  campo, igual que el sexo y la castración.
+- **`lo_que_agenda_el_dueno`** acota lo que el dueño inserta directo: un
+  día suelto esperado, sin plan y sin horas reales, o una reserva de hotel
+  pendiente y sin abono. Todo lo demás tiene su función.
+
+Que haya cupo y que el perro cumpla la admisión sigue en la app, como con
+todo lo que se agenda: es una pregunta de capacidad, no de plata. Lo que se
+evita es que alguien se regale días o se salte la evaluación.
+
+Las constantes nuevas (precio y duración del día de prueba, tramos y pase
+libre, mínimo de días, solo días hábiles) llevan su anotación y entran en
+`reglas-en-la-base.test.ts`, que además verifica que los tramos sigan siendo
+**dos y contiguos**, que es lo único que la función sabe calcular.
+
+Un detalle de los tests: agendar un día que ya pasó ahora se rechaza, en la
+base y en el prototipo. Varios tests agendaban días de junio con la hora
+real; ahora pasan un `ahora` de antes, como ya hacían los del día de prueba.
 
 Dos decisiones que se explican solas una vez escritas:
 
@@ -1288,6 +1412,24 @@ que no existe, y `401` es que existe y está cerrada.
 **Siempre con un control al lado** —una columna inventada, o una tabla que
 se sabe que existe— porque un `401` aislado no distingue "existe" de
 "cualquier otro problema de permisos".
+
+Para una migración que agrega **funciones** y no columnas (como
+`cambios_de_agenda` o `planes_y_dia_de_prueba`), lo mismo con `rpc`:
+
+```
+GET /rest/v1/rpc/<funcion>?<parametro>=00000000-0000-0000-0000-000000000000
+```
+
+- `404` con `PGRST202` (`Searched for the function …`) → NO existe.
+- `401` con `permission denied for function` → existe y la clave anónima no
+  la puede llamar, que es lo esperado: todas llevan `revoke all … from
+  public`.
+
+Con `GET`, nunca `POST`: PostgREST corre el `GET` en una transacción de solo
+lectura, así que aunque la función se pudiera ejecutar no escribiría nada.
+Los nombres de los parámetros cuentan —el `404` lista los que buscó—. Los
+controles que se usaron el 22-10-2026: `funcion_que_no_existe` (da `404`) y
+`descontar_stock` con `producto` y `cantidad` (existe, da `401`).
 
 #### Las políticas se prueban, no se leen
 
@@ -1459,7 +1601,7 @@ afuera, y se actualiza cuando cambia:
 | Hosting | Proyecto de Vercel **`lapatoteca`**: tiene el dominio y publica `main` como Production. |
 | Proyecto viejo | **`lapatoteca-app`** en Vercel quedó sin el dominio y está por borrarse. Ahí vive `lapatoteca-apppruebas.vercel.app`, que apuntaba a `prueba/vista-dueno`. **No se cargan variables ahí.** |
 | Base y login | Supabase, proyecto `kcxzoesspkggpchvqlnw`, plan Pro (US$25 + IVA al mes, el servidor Micro lo cubre el crédito). |
-| Migraciones corridas | **Las 13**, al 22 de octubre de 2026 — hasta `20261022140000_marcado_por`. Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
+| Migraciones corridas | **Las 13**, al 22 de octubre de 2026 — hasta `20261022140000_marcado_por`. **Faltan dos** cuyo código ya está en `main`: `20261022150000_cambios_de_agenda` y `20261022160000_planes_y_dia_de_prueba` (verificado desde afuera el 22-10: sus funciones no existían). Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
 | Confirmación de correo | **Encendida.** Quien se registra recibe un enlace y hasta que no lo abre no tiene sesión. Se apaga en Authentication → Sign In → Email si alguna vez estorba. |
 | Correo saliente | **Resend**, dominio `lapatoteca.cl` verificado (región Brasil). Los tres registros DNS los puso Resend solo, con el *Auto configure* de Vercel. La API key vive en Supabase → Authentication → SMTP, con usuario `resend` y remitente `hola@lapatoteca.cl`. |
 | Buscador de direcciones | Llave de Google Cloud con el correo de la empresa, restringida a los dominios de `lapatoteca.cl`, `*.vercel.app` y `localhost:3000`, y a Maps JavaScript API + Places API (New). |
@@ -1511,20 +1653,28 @@ editor SQL. Entonces el código de `main` puede estar leyendo una columna que
 la base todavía no tiene, y eso no lo detecta ningún test ni el build: se ve
 cuando alguien abre la pantalla.
 
-Ya pasó: `main` tiene el código de las dos migraciones del 21-10 sin que
-nadie haya confirmado que corrieron. Si no corrieron, `/admin/configuracion`
-**se cae** (los datos de transferencia llegan vacíos) y habilitar a un perro
-con sobrepeso falla. Parte del motivo es que en Supabase
-`configuracion.obtener()` no completa con los valores de fábrica los campos
-que la fila no trae, como sí hace `normalizarDatos()` en el modo local.
+Ya pasó con las dos del 21-10: llegaron a `main` sin que nadie confirmara
+que corrieron (después se confirmó que sí). Si no hubieran corrido,
+`/admin/configuracion` **se caía** (los datos de transferencia llegan vacíos)
+y habilitar a un perro con sobrepeso fallaba. Parte del motivo es que en
+Supabase `configuracion.obtener()` no completa con los valores de fábrica los
+campos que la fila no trae, como sí hace `normalizarDatos()` en el modo
+local.
+
+Y pasa ahora, a propósito, con `cambios_de_agenda` y
+`planes_y_dia_de_prueba` (ver más abajo por qué esas dos no tienen un orden
+que no rompa nada).
 
 | Migración | Qué agrega | ¿Corrió en producción? |
 |---|---|---|
-| `20261014…` (las ocho primeras) | Esquema, permisos, escrituras, cuidador, devoluciones, invitaciones, hora marcada | Se asumen corridas: son de antes del 21-10 y producción funciona sobre ellas. Falta que alguien lo marque |
-| `20261021120000_ficha_que_decide_la_casa` | `perros.excepcion_peso`, `configuracion.whatsapp_de_contacto` y el disparador que no deja al dueño cambiar sexo, castración ni la excepción de peso | **Sin confirmar** |
-| `20261021130000_datos_de_transferencia` | `configuracion.transferencia` | **Sin confirmar** |
-| `20261021140000_alta_de_cuenta` | `clientes.perfil_id` toma solo el usuario que crea la ficha: sin eso, el alta del dueño falla | **Sin confirmar** |
-| `20261022120000_turnos` | La tabla `turnos`, sus permisos y el disparador que protege el turno planificado | **Sin confirmar** |
+| `20261014…` (las ocho primeras) | Esquema, permisos, escrituras, cuidador, devoluciones, invitaciones, hora marcada | Corridas (confirmado al 22-10-2026) |
+| `20261021120000_ficha_que_decide_la_casa` | `perros.excepcion_peso`, `configuracion.whatsapp_de_contacto` y el disparador que no deja al dueño cambiar sexo, castración ni la excepción de peso | Corrida (al 22-10-2026) |
+| `20261021130000_datos_de_transferencia` | `configuracion.transferencia` | Corrida (al 22-10-2026) |
+| `20261021140000_alta_de_cuenta` | `clientes.perfil_id` toma solo el usuario que crea la ficha: sin eso, el alta del dueño falla | Corrida (al 22-10-2026) |
+| `20261022120000_turnos` | La tabla `turnos`, sus permisos y el disparador que protege el turno planificado | Corrida (al 22-10-2026) |
+| `20261022140000_marcado_por` | Quién marcó cada llegada y salida, firmado por la base (`firmar_la_marca`) | Corrida (al 22-10-2026) |
+| `20261022150000_cambios_de_agenda` | Cancelar y mover lo agendado con su cobro, en la base; el disparador que no deja al dueño reescribir estadías ni reservas. **Sin ella, cancelar desde el portal falla** (antes de este cambio quedaba a medias) | **No corrida** — verificado desde afuera el 22-10-2026. Su código está en `main` |
+| `20261022160000_planes_y_dia_de_prueba` | Comprar y usar un plan y agendar el día de prueba, en la base; los disparadores que no dejan al dueño tocar planes, aprobarse el día de prueba ni insertar días o reservas por fuera. **Va junto con su código**: con una sin la otra, agendar el día de prueba y usar el plan fallan (ver abajo) | **No corrida** — verificado desde afuera el 22-10-2026. Su código está en `main` |
 
 La regla de acá en adelante:
 
@@ -1534,9 +1684,28 @@ La regla de acá en adelante:
 - **Antes de pasar `pruebas` a `main`, se revisa esta tabla.** Código que
   depende de una migración sin correr no debería llegar a producción.
 
+`planes_y_dia_de_prueba` es la primera que **no se puede correr antes**
+sin romper lo publicado: el código viejo agenda el día de prueba y usa el
+plan escribiendo directo, justo lo que la migración bloquea; y el código
+nuevo llama funciones que sin ella no existen. Las dos fallan limpio —no
+dejan nada a medias—, pero durante el intervalo nadie puede agendar el día
+de prueba ni usar su plan. Se corre la migración y se publica `main` en
+seguida, minutos y no días.
+
+Se publicó el 22-10-2026 con el código primero, que es el orden que deja el
+intervalo más corto: Vercel tarda un par de minutos en construir y mientras
+tanto sigue sirviendo la versión anterior. **Las dos migraciones se corren
+apenas el despliegue de `main` aparece como Ready**, en orden
+(`cambios_de_agenda` y después `planes_y_dia_de_prueba`), y se marcan acá
+con la fecha. Para comprobar que quedaron, ver "Saber si una migración ya
+corrió, desde afuera": con las funciones creadas, `cancelar_dia_de_prueba` y
+`comprar_plan_de_jardin` dejan de dar `404`.
+
 La prueba de aislamiento (`supabase/pruebas/aislamiento.sh`) ya corrió en
-verde con las once primeras, en la sesión que juntó las ramas (`39f7663`).
-La de turnos no tiene esa constancia.
+verde con las once primeras, en la sesión que juntó las ramas (`39f7663`),
+y con las quince (hasta `planes_y_dia_de_prueba`) el 22-10-2026, en la
+sesión que arregló las cancelaciones y cerró los planes y el día de prueba. Eso dice que las migraciones hacen lo que dicen en
+un Postgres limpio; si corrieron en producción lo dice la tabla.
 
 #### Lo que falta hacer afuera, y lo que falta decidir
 
@@ -1544,30 +1713,52 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
 
 **Afuera del código** (lo hace la dueña o quien tenga acceso a los paneles):
 
-1. Correr en Supabase las migraciones **sin confirmar** de la tabla de
-   arriba, en orden, y marcarlas.
-2. Cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel, proyecto **`lapatoteca`**,
+1. **Urgente:** correr en Supabase `20261022150000_cambios_de_agenda` y
+   `20261022160000_planes_y_dia_de_prueba`, en ese orden, apenas el
+   despliegue de `main` del 22-10 quede listo. Hasta entonces agendar el día
+   de prueba, usar o comprar un plan y cancelar desde el portal fallan.
+   Marcarlas en la tabla.
+2. Después de correrlas, **ordenar lo que dejaron a medias los bugs que
+   arreglan**:
+   - Los días de prueba cancelados a medias: la estadía `cancelada`, el
+     perro todavía `agendado` y el cobro pendiente. Pasó al menos con
+     **Emma** (cuenta de javi), agendada para el 22-10. Se encuentran con
+     `select f.id, f.nombre, e.id as estadia from perros f join
+     estadias_jardin e on e.perro_id = f.id and e.origen = 'dia_de_prueba'
+     where f.dia_de_prueba->>'estado' = 'agendado' and e.estado =
+     'cancelada' and not exists (select 1 from estadias_jardin v where
+     v.perro_id = f.id and v.origen = 'dia_de_prueba' and v.estado <>
+     'cancelada');` y se arreglan devolviendo el perro a
+     `{"estado": "pendiente"}` y dejando el cobro en lo que corresponda
+     (reembolsado en cero si avisó a tiempo, $5.000 si no).
+   - Los planes que se compraron sin cobro (la compra fallaba después de
+     crear el plan): `select p.* from planes p left join pagos g on
+     g.referencia_id = p.id and g.concepto = 'plan' where g.id is null;`.
+3. Cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel, proyecto **`lapatoteca`**,
    Production y Preview, como Secret. Después **Redeploy** sin caché.
-3. Revisar las **Redirect URLs** de Supabase (Authentication → URL
+4. Revisar las **Redirect URLs** de Supabase (Authentication → URL
    Configuration): tienen que estar `https://www.lapatoteca.cl/**`,
    `https://lapatoteca.cl/**` y `https://*.vercel.app/**`. Si falta, el
    correo de invitación deja a la persona en la portada.
-4. Confirmar que el **tope de correos por hora** de Supabase se subió en
+5. Confirmar que el **tope de correos por hora** de Supabase se subió en
    Authentication → Rate Limits (ver más arriba: Resend solo no lo sube).
-5. En `/admin/configuracion`: cargar el WhatsApp de la casa y la cuenta para
+6. En `/admin/configuracion`: cargar el WhatsApp de la casa y la cuenta para
    transferir.
-6. Volver a invitar a `pxeclt@gmail.com` **con su nombre**: su invitación se
+7. Volver a invitar a `pxeclt@gmail.com` **con su nombre**: su invitación se
    anotó antes de que existiera el correo, y mandarla sin nombre lo deja
    firmando los reportes con el correo.
-7. Probar en la vista previa de `pruebas` **del proyecto `lapatoteca`** —no
+8. Probar en la vista previa de `pruebas` **del proyecto `lapatoteca`** —no
    en `lapatoteca-app-git-pruebas-…`, que es el proyecto viejo— y recién
    entonces pasar `pruebas` a `main`.
 
 **Decisiones de producto abiertas:**
 
-- **Planes y tienda nacen pagados** (con un "webpay" que no existe), mientras
-  que el hotel, el día de prueba y el día suelto nacen pendientes hasta que
-  Administración concilia la transferencia. ¿Se igualan?
+- **La tienda nace pagada** (con un "webpay" que no existe), mientras que
+  todo lo demás nace pendiente hasta que Administración concilia la
+  transferencia. Los planes ya se igualaron (22-10): darlos por pagados
+  hacía fallar la compra en la nube. La tienda tiene el **mismo bug** —crea
+  la orden "pagada", descuenta stock y falla al crear el cobro—, así que
+  igualarla no es solo una decisión: hoy en la nube no funciona.
 - **El sexo quedó fijo para el dueño**, igual que la castración, porque
   decide si a un macho se le exige. Lo decidió una sesión; falta que la dueña
   lo confirme.

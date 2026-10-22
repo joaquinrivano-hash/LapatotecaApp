@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { NEGOCIO } from "@/lib/config/negocio";
+import { PRECIOS } from "@/lib/config/precios";
 import {
   bloquesDeEntrada,
   hayBloquesLibres,
   minutosDeEntrada,
+  politicaConAviso,
+  politicaDeCancelacion,
   rangoDelBloque,
 } from "@/lib/rules/dia-de-prueba";
 import type { OcupanteRango } from "@/lib/rules/capacidad";
@@ -108,5 +111,36 @@ describe("bloquesDeEntrada", () => {
     });
 
     expect(hayBloquesLibres(bloques)).toBe(false);
+  });
+});
+
+describe("politicaDeCancelacion", () => {
+  const CORTE = NEGOCIO.diaDePrueba.horasParaCancelarSinCosto;
+
+  it("justo en el corte todavía es sin costo: el umbral es inclusivo", () => {
+    expect(politicaConAviso(CORTE)).toEqual({
+      horasDeAviso: CORTE,
+      sinCosto: true,
+      costo: 0,
+    });
+  });
+
+  it("un minuto menos ya es cancelación tardía", () => {
+    const politica = politicaConAviso(CORTE - 1 / 60);
+    expect(politica.sinCosto).toBe(false);
+    expect(politica.costo).toBe(PRECIOS.cancelacionTardiaDiaDePrueba);
+  });
+
+  it("con el día ya empezado también es tardía", () => {
+    expect(politicaConAviso(-2).costo).toBe(PRECIOS.cancelacionTardiaDiaDePrueba);
+  });
+
+  it("desde las fechas, mide el aviso hasta la llegada", () => {
+    const politica = politicaDeCancelacion(
+      "2026-09-29T13:00:00.000Z",
+      "2026-09-28T13:00:00.000Z",
+    );
+    expect(politica.horasDeAviso).toBe(24);
+    expect(politica.sinCosto).toBe(true);
   });
 });
