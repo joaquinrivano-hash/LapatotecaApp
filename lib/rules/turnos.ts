@@ -124,7 +124,10 @@ export function huecosDeCobertura(
 function cerrar(h: { desde: number; hasta: number; perros: number }): HuecoDeCobertura {
   return {
     desde: hhmmDesdeMinutos(h.desde),
-    hasta: hhmmDesdeMinutos(h.hasta),
+    // El final del día es "24:00" y no "00:00". `hhmmDesdeMinutos(1440)`
+    // da la vuelta al reloj, y un hueco de un día entero terminaba
+    // escrito "de 00:00 a 00:00", que se lee como que no dura nada.
+    hasta: h.hasta >= 24 * 60 ? "24:00" : hhmmDesdeMinutos(h.hasta),
     perros: h.perros,
   };
 }

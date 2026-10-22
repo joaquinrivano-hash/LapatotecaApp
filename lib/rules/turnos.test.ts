@@ -127,6 +127,16 @@ describe("huecosDeCobertura", () => {
     expect(huecosDeCobertura([franja("05:00", 0, 0)])).toEqual([]);
   });
 
+  // "de 00:00 a 00:00" se lee como que no dura nada, y es justo el caso
+  // de un día entero sin nadie.
+  it("un hueco hasta el final del día termina en 24:00", () => {
+    const franjas = [];
+    for (let m = 23 * 60; m < 24 * 60; m += 30) {
+      franjas.push({ minutoDelDia: m, hora: "", gente: 0, perros: 4 });
+    }
+    expect(huecosDeCobertura(franjas)[0].hasta).toBe("24:00");
+  });
+
   it("con gente cubriendo no hay nada que avisar", () => {
     expect(huecosDeCobertura([franja("13:00", 1, 20)])).toEqual([]);
   });

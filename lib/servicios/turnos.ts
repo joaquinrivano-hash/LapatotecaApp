@@ -13,6 +13,7 @@
  * turno sin rastros puede ser un turno tranquilo, no un turno ausente.
  */
 
+import { NEGOCIO } from "@/lib/config/negocio";
 import {
   calcularOcupacionDia,
   ocupantesDeEstadias,
@@ -29,7 +30,12 @@ import {
   type Rastro,
 } from "@/lib/rules/turnos";
 import type { RepositorioPatoteca, MiembroDelEquipo } from "@/lib/repo/tipos";
-import { fechaISO, minutosDelDia, rangoFechas } from "@/lib/utils/fecha";
+import {
+  fechaISO,
+  minutosDesdeHHMM,
+  minutosDelDia,
+  rangoFechas,
+} from "@/lib/utils/fecha";
 import type { FechaISO, ID, OcupacionDia, Turno } from "@/lib/types";
 
 export interface TurnoConPersona {
@@ -74,7 +80,8 @@ function indexarRastros(
     mapa.set(clave, lista);
   };
 
-  for (const r of reportes) anotar(r.fecha, r.autorStaff, r.creadoEn, "un reporte");
+  for (const r of reportes)
+    anotar(r.fecha, r.autorStaff, r.creadoEn, "un reporte");
   for (const i of incidentes) {
     anotar(i.fecha, i.autorStaff, i.creadoEn, "un incidente");
   }
@@ -115,7 +122,15 @@ export async function semanaDeTurnos(
       ocupacion.slots.find((s) => s.minutoDelDia === minuto)?.total ?? 0;
 
     const delDia = turnos.filter((t) => t.fecha === fecha);
-    const franjas = coberturaDelDia(delDia, perrosEn);
+    // Solo las horas de atención: la noche con perros de hotel durmiendo
+    // no es una pregunta de planilla, y marcarla haría sonar el aviso los
+    // siete días hasta que se deje de mirar.
+    const franjas = coberturaDelDia(
+      delDia,
+      perrosEn,
+      minutosDesdeHHMM(NEGOCIO.turnos.horasQueSeCubren.desde),
+      minutosDesdeHHMM(NEGOCIO.turnos.horasQueSeCubren.hasta),
+    );
 
     return {
       fecha,
@@ -126,7 +141,8 @@ export async function semanaDeTurnos(
         .map((turno) => {
           const persona = gente.get(turno.perfilId) ?? null;
           const suyos = persona
-            ? (rastros.get(`${fecha}|${persona.nombre.trim().toLowerCase()}`) ?? [])
+            ? (rastros.get(`${fecha}|${persona.nombre.trim().toLowerCase()}`) ??
+              [])
             : [];
           return {
             turno,
@@ -172,7 +188,8 @@ export async function ficharTurno(
   const yaEsta = lado === "entrada" ? turno.entradaReal : turno.salidaReal;
   if (yaEsta) return turno;
 
-  return repo.turnos.actualizar(turnoId,
+  return repo.turnos.actualizar(
+    turnoId,
     lado === "entrada" ? { entradaReal: ahora } : { salidaReal: ahora },
   );
 }

@@ -33,7 +33,7 @@ const estadia = (id: string, desde: string, hasta: string): EstadiaJardin => ({
   fecha: DIA,
   inicioProgramado: instanteEnHora(DIA, desde),
   finProgramado: instanteEnHora(DIA, hasta),
-  origen: "reserva",
+  origen: "dia_suelto",
   estado: "finalizada",
   creadaEn: "2026-10-01T12:00:00.000Z",
 });

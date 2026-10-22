@@ -15,6 +15,7 @@ import {
   FilaAsistencia,
   type ItemAsistencia,
 } from "@/components/staff/fila-asistencia";
+import { FicharTurno } from "@/components/staff/fichar-turno";
 import { AgregarPerro } from "@/components/staff/agregar-perro";
 import { FichaPerro } from "@/components/staff/ficha-perro";
 import { itemsDelDia } from "@/components/staff/items";
@@ -177,6 +178,8 @@ export default function Hoy() {
           <OcupacionFranjas ocupacion={ocupacion} capacidad={capacidad} />
         </CardContent>
       </Card>
+
+      <FicharTurno />
 
       <AgregarPerro />
 

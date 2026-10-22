@@ -216,6 +216,22 @@ export const NEGOCIO = {
     /** Día del mes en que se emite la cuenta unificada. */
     diaDelMes: 1,
   },
+
+  /** La planilla de turnos. */
+  turnos: {
+    /**
+     * Las horas que la planilla tiene que cubrir.
+     *
+     * Son las de atención del folleto, no las 24 del día. La casa funciona
+     * 24/7 y de noche quedan los perros de hotel durmiendo, pero eso no es
+     * una pregunta de planilla: la dueña vive ahí. Marcar cada noche como
+     * descubierta haría que el aviso rojo apareciera los siete días y
+     * entonces se deja de mirar, justo cuando aparezca el que importa.
+     */
+    horasQueSeCubren: { desde: "07:00", hasta: "21:00" },
+    /** Fichar al minuto exacto no lo hace nadie. */
+    minutosDeTolerancia: 10,
+  },
 } as const;
 
 export type TipoVacuna = (typeof NEGOCIO.admision.vacunasObligatorias)[number];
