@@ -1859,7 +1859,7 @@ afuera, y se actualiza cuando cambia:
 | Hosting | Proyecto de Vercel **`lapatoteca`**: tiene el dominio y publica `main` como Production. |
 | Proyecto viejo | **`lapatoteca-app`** en Vercel quedó sin el dominio y está por borrarse. Ahí vive `lapatoteca-apppruebas.vercel.app`, que apuntaba a `prueba/vista-dueno`. **No se cargan variables ahí.** |
 | Base y login | Supabase, proyecto `kcxzoesspkggpchvqlnw`, plan Pro (US$25 + IVA al mes, el servidor Micro lo cubre el crédito). |
-| Migraciones corridas | **Las 15**, al 22 de octubre de 2026 — hasta `20261022160000_planes_y_dia_de_prueba`. Las dos últimas se verificaron desde afuera después de correrlas: sus seis funciones existen y dan `401` sin sesión. Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
+| Migraciones corridas | **Las 15**, al 22 de octubre de 2026 — hasta `20261022160000_planes_y_dia_de_prueba`. Las dos últimas se verificaron desde afuera después de correrlas: sus seis funciones existen y dan `401` sin sesión. La 16ª, `20261022170000_devolver_el_dia_de_prueba`, está publicada y **sin confirmar** que corrió (paso 9 de "Lo que falta hacer afuera"). Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
 | Confirmación de correo | **Encendida.** Quien se registra recibe un enlace y hasta que no lo abre no tiene sesión. Se apaga en Authentication → Sign In → Email si alguna vez estorba. |
 | Correo saliente | **Resend**, dominio `lapatoteca.cl` verificado (región Brasil). Los tres registros DNS los puso Resend solo, con el *Auto configure* de Vercel. La API key vive en Supabase → Authentication → SMTP, con usuario `resend` y remitente `hola@lapatoteca.cl`. |
 | Buscador de direcciones | Llave de Google Cloud con el correo de la empresa, restringida a los dominios de `lapatoteca.cl`, `*.vercel.app` y `localhost:3000`, y a Maps JavaScript API + Places API (New). |
@@ -1982,6 +1982,49 @@ con las quince (hasta `planes_y_dia_de_prueba`) el 22-10-2026, en la
 sesión que arregló las cancelaciones y cerró los planes y el día de prueba,
 y con las dieciséis (hasta `devolver_el_dia_de_prueba`) ese mismo día. Eso dice que las migraciones hacen lo que dicen en
 un Postgres limpio; si corrieron en producción lo dice la tabla.
+
+#### Dónde quedamos (cierre del 22-10-2026)
+
+Para retomar sin leer el historial. `main`, `pruebas` y la rama de la sesión
+quedaron en el mismo commit: todo el código de ese día está publicado en
+producción, con `build`, `lint`, `test` y la prueba de aislamiento en verde.
+
+**Lo que le toca a la dueña**, en este orden (el detalle de cada uno está en
+"Lo que falta hacer afuera"):
+
+1. **Paso 9**: correr `20261022170000_devolver_el_dia_de_prueba` en el editor
+   SQL y confirmar con la consulta de `pg_proc` (tiene que dar `true`).
+   Después se marca "Corrida" en la tabla de migraciones y en "Dónde vive
+   cada cosa". Hasta entonces, un día de prueba pagado y cancelado a tiempo
+   no aparece en "Por devolver".
+2. **Paso 7**: mandarle a `pxeclt@gmail.com` el enlace por WhatsApp desde
+   `/admin/equipo`.
+3. Decir **de quién es la cuenta para transferir** (empresa o personal): se
+   lee sin sesión (ver "Lo que vive en la base y se edita desde la app").
+4. Confirmar **la regla nueva del día de prueba pagado y cancelado tarde**:
+   se cobra el cargo de $5.000 y se devuelve el resto. La pantalla de
+   condiciones antes decía "no hay devolución" para el aviso tardío; se
+   cambió para que quien pagó antes no salga peor que quien no pagó (ver
+   "El día de prueba"). Si la dueña prefiere quedarse con todo, se revierte
+   en `aDevolverAlCancelar`, su gemela en SQL y el texto de
+   `components/shared/politicas-dia-de-prueba.tsx`.
+
+**Lo que sigue en código**, sugerido y sin empezar:
+
+- **La tienda no funciona en la nube**: la orden nace "pagada" con un webpay
+  que no existe y la base rechaza el cobro (ver "Decisiones de producto
+  abiertas"). Es lo más urgente: hoy un dueño no puede comprar.
+- **El tablero cuenta lo devuelto como ingreso.** `lib/servicios/panel.ts`
+  suma `pago.monto` sin mirar el estado, así que un cobro reembolsado con
+  monto —una devolución pendiente o ya hecha— infla el ingreso del día, el
+  ingreso por cupo y el reparto por línea. Viene de antes: el día de jardín
+  ya devolvía así. Lo correcto es probablemente no contar los `reembolsado`,
+  revisando antes que la cobranza y la cuenta del día 1 no dependan de eso.
+- Las **decisiones de producto abiertas** de abajo.
+
+**Cómo retomar**: traer `main` y `pruebas`, correr `npm test`, leer esta
+sección y "Lo que falta hacer afuera", y preguntarle a la dueña cuáles de
+los cuatro pasos de arriba ya hizo.
 
 #### Lo que falta hacer afuera, y lo que falta decidir
 
@@ -2119,6 +2162,10 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
   igual que el peso?
 - **Fotos de productos**: el modelo tiene `imagenUrl`, pero ni el admin ni
   la tienda la usan.
+- **Cancelar tarde un día de prueba ya pagado devuelve el resto** (22-10):
+  la casa se queda con los $5.000 del cargo, no con los $10.000. Lo decidió
+  una sesión para que pagar antes no salga más caro; falta que la dueña lo
+  confirme.
 
 #### Varias sesiones a la vez
 
@@ -2182,6 +2229,16 @@ tema tiene su explicación más arriba en este archivo.
   ocultan en vez de borrarse.
 - **El día de prueba en palabras**: "el próximo jueves 29 de octubre a las
   09:00", y en verde en Mi cuenta.
+- **Lo agendado se cambia en la base** (22-10): cancelar y mover el día de
+  prueba, cancelar el día de jardín, comprar y usar un plan y agendar el día
+  de prueba pasan por funciones de Supabase, con disparadores que no dejan
+  al dueño tocar cobros, planes ni su propio veredicto (ver "Cancelar sin
+  poder tocar el cobro" y "El saldo del plan y el día de prueba").
+- **"Olvidé mi contraseña"** cambia la de la cuenta del enlace y no la que
+  estaba abierta en el navegador (22-10).
+- **Lo pagado del día de prueba se devuelve** al cancelar (22-10): aparece en
+  "Por devolver", y la pantalla pide la cuenta antes de confirmar, con el
+  mismo formulario que el día de jardín.
 
 ## 6. Comandos
 
