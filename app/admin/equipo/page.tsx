@@ -11,7 +11,6 @@ import {
   Send,
   ShieldCheck,
   Trash2,
-  TriangleAlert,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -61,6 +60,13 @@ const NOMBRE_DEL_ROL: Record<Rol, string> = {
  * alcanza— la invitación queda anotada igual y la pantalla lo dice, con el
  * enlace para crear la cuenta listo para mandarlo por WhatsApp. Una
  * invitación que nadie recibe es una persona esperando algo que no llega.
+ *
+ * **Sin la llave, WhatsApp es el camino normal, no una falla.** En
+ * producción se decidió no cargarla: se invita poca gente al año, y una
+ * llave que se salta toda la seguridad de la base no vale ese ahorro. Así
+ * que sin llave la pantalla no avisa en amarillo ni intenta un correo que no
+ * va a salir: anota la invitación y ofrece el enlace. La persona escribe su
+ * nombre al crear la cuenta, por eso el campo del nombre no se pide acá.
  */
 
 /**
@@ -116,6 +122,10 @@ export default function Equipo() {
     [vuelta],
   );
 
+  // Sin la llave en el servidor la invitación va por WhatsApp: es el modo
+  // elegido para producción, no un error que haya que mostrar.
+  const porWhatsapp = correos.datos?.activos === false;
+
   /** Manda (o reenvía) el correo y dice cómo le fue. */
   async function mandarCorreo(email: string, suNombre?: string) {
     setMandando(email);
@@ -152,6 +162,22 @@ export default function Equipo() {
     }
     setCorreo("");
     setNombre("");
+
+    if (porWhatsapp) {
+      // `window.open` después de un `await` lo bloquea el celular: el botón
+      // del aviso es un toque nuevo, y ese sí lo deja abrir WhatsApp.
+      toast.success(`Anotamos a ${email}`, {
+        description:
+          "Ahora mándale el enlace. Al crear su cuenta con ese correo queda con el rol que elegiste.",
+        action: {
+          label: "Por WhatsApp",
+          onClick: () => mandarPorWhatsapp(rol, email),
+        },
+        duration: 20_000,
+      });
+      return;
+    }
+
     await mandarCorreo(email, nombre.trim() || undefined);
   }
 
@@ -224,32 +250,32 @@ export default function Equipo() {
                     Invitar
                   </h2>
 
-                  {correos.datos && !correos.datos.activos && (
-                    <p className="bg-warning/12 text-warning flex items-start gap-2 rounded-xl p-3 text-sm text-pretty">
-                      <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-                      <span>
-                        {correos.datos.motivo} Mientras tanto la invitación
-                        queda anotada y le puedes mandar el enlace por WhatsApp.
-                      </span>
+                  {porWhatsapp && (
+                    <p className="text-muted-foreground text-sm text-pretty">
+                      Las invitaciones van por WhatsApp: anotas su correo, le
+                      mandas el enlace y, cuando crea su cuenta con ese
+                      correo, queda con el rol que elegiste.
                     </p>
                   )}
 
                   <form onSubmit={invitar} className="space-y-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`${idCorreo}-nombre`}>Su nombre</Label>
-                      <Input
-                        id={`${idCorreo}-nombre`}
-                        autoComplete="off"
-                        required
-                        value={nombre}
-                        onChange={(e) => setNombre(e.target.value)}
-                        placeholder="María"
-                      />
-                      <p className="text-muted-foreground text-xs text-pretty">
-                        Con este nombre firma los reportes que les llegan a los
-                        dueños.
-                      </p>
-                    </div>
+                    {!porWhatsapp && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`${idCorreo}-nombre`}>Su nombre</Label>
+                        <Input
+                          id={`${idCorreo}-nombre`}
+                          autoComplete="off"
+                          required
+                          value={nombre}
+                          onChange={(e) => setNombre(e.target.value)}
+                          placeholder="María"
+                        />
+                        <p className="text-muted-foreground text-xs text-pretty">
+                          Con este nombre firma los reportes que les llegan a los
+                          dueños.
+                        </p>
+                      </div>
+                    )}
 
                     <div className="space-y-1.5">
                       <Label htmlFor={idCorreo}>Su correo</Label>
@@ -265,8 +291,9 @@ export default function Equipo() {
                         placeholder="maria@lapatoteca.cl"
                       />
                       <p className="text-muted-foreground text-xs text-pretty">
-                        Ahí le llega la invitación. Es también el correo con el
-                        que va a entrar.
+                        {porWhatsapp
+                          ? "Tiene que crear su cuenta con este mismo correo: es el que le da el rol, y con el que va a entrar."
+                          : "Ahí le llega la invitación. Es también el correo con el que va a entrar."}
                       </p>
                     </div>
 
@@ -297,7 +324,11 @@ export default function Equipo() {
                       disabled={ocupado || mandando !== null}
                     >
                       <Send />
-                      {mandando ? "Mandando…" : "Invitar y mandar el correo"}
+                      {porWhatsapp
+                        ? "Anotar la invitación"
+                        : mandando
+                          ? "Mandando…"
+                          : "Invitar y mandar el correo"}
                     </Button>
                   </form>
                 </CardContent>
@@ -364,8 +395,10 @@ export default function Equipo() {
                               </span>
                               <span className="text-muted-foreground block text-sm">
                                 {NOMBRE_DEL_ROL[invitacion.rol]} · anotada el{" "}
-                                {formatearFechaCorta(invitacion.creadaEn)},
-                                todavía no le llega nada
+                                {formatearFechaCorta(invitacion.creadaEn)},{" "}
+                                {porWhatsapp
+                                  ? "todavía no crea su cuenta"
+                                  : "todavía no le llega nada"}
                               </span>
                             </span>
                             <Button
@@ -379,19 +412,21 @@ export default function Equipo() {
                             </Button>
                           </div>
                           <div className="flex flex-wrap gap-2">
+                            {!porWhatsapp && (
+                              <Button
+                                size="sm"
+                                disabled={mandando !== null}
+                                onClick={() => mandarCorreo(invitacion.email)}
+                              >
+                                <Send />
+                                {mandando === invitacion.email
+                                  ? "Mandando…"
+                                  : "Mandar el correo"}
+                              </Button>
+                            )}
                             <Button
                               size="sm"
-                              disabled={mandando !== null}
-                              onClick={() => mandarCorreo(invitacion.email)}
-                            >
-                              <Send />
-                              {mandando === invitacion.email
-                                ? "Mandando…"
-                                : "Mandar el correo"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
+                              variant={porWhatsapp ? "default" : "outline"}
                               onClick={() =>
                                 mandarPorWhatsapp(
                                   invitacion.rol,
