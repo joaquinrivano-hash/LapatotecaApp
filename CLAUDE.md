@@ -1,9 +1,10 @@
 # La Patoteca — Prototipo navegable
 
-Hotel y jardín canino en Providencia, Santiago de Chile. Este repo es un
-**prototipo navegable** para validar flujos y pantallas antes de conectar un
-backend real. No hay servidor: los datos son mock y las acciones persisten en
-localStorage.
+Hotel y jardín canino en Providencia, Santiago de Chile. Empezó como un
+**prototipo navegable** con datos mock en localStorage, y ese modo sigue
+existiendo para demos y desarrollo. **En producción (`lapatoteca.cl`) corre
+sobre Supabase**, con login real: el interruptor es
+`NEXT_PUBLIC_ORIGEN_DATOS` (ver "La nube" y "Dónde vive cada cosa").
 
 ---
 
@@ -168,7 +169,9 @@ en la renovación.
 | `/staff` | Staff | Celular, botones grandes, check-in/out de un toque |
 | `/admin` | Admin | Backoffice: clientes, calendario, pagos, planes, KPIs |
 
-El rol se elige en un **login mock** con selector; no hay auth real.
+Con `NEXT_PUBLIC_ORIGEN_DATOS=supabase` (producción) se entra con correo y
+contraseña, y el rol lo decide la base. Con `local` (el prototipo) el rol se
+elige en un **login mock** con selector, que en producción no aparece.
 
 ### Capa de repositorio — la regla que no se rompe
 
@@ -766,6 +769,17 @@ la pantalla de pagos.
 Se agenda como una `EstadiaJardin` con `origen: "dia_de_prueba"` y deja al
 perro en `diaDePrueba.estado = "agendado"`.
 
+**Se anuncia en palabras y con la hora**: "Día de prueba el próximo jueves 29
+de octubre a las 09:00". `describirDia` (en `lib/utils/fecha.ts`) dice "hoy",
+"mañana", "el próximo…" dentro de la semana que viene y "el jueves 5 de
+noviembre" más allá; "2026-10-22" obliga al dueño a hacer la cuenta. La hora
+no está en el perro sino en la estadía, así que `alertasDePerro` la recibe
+de quien la tenga a mano.
+
+En Mi cuenta el día agendado **no es una alerta**: es lo que se esperaba que
+hiciera. Va en verde, sin triángulo, y cierra con "¡Te esperamos!". En el
+backoffice sí sigue siendo alerta, porque el perro todavía no es cliente.
+
 **Cancelar y reprogramar**, con 24 horas de corte:
 
 | | Cancelar | Cambiar la fecha |
@@ -913,6 +927,57 @@ a anotar, no las que pasaron. Se muestra solo cuando hay algo que advertir.
 
 Solo entran jornadas y estadías **cerradas**. Una en curso no tiene hora de
 retiro, y contarla como "retiro a las 00:00" sería inventar un dato.
+
+### La planilla de turnos
+
+`lib/rules/turnos.ts`, `lib/servicios/turnos.ts` y la pestaña **Turnos** de
+`/admin/equipo`. Equipo tiene dos pestañas porque son dos trabajos distintos
+con la misma gente: quién **puede** entrar (accesos) y quién **está** cuando
+hay perros (turnos).
+
+Va día por día y no en una grilla de siete columnas: en el celular la grilla
+obliga a desplazarse de lado para leer un turno.
+
+**Lo real llega por dos caminos y nunca se mezclan.** El fichaje
+(`entradaReal` / `salidaReal`) es la hora que la persona declaró. Los
+**rastros** —reportes e incidentes, que llevan su nombre y su hora— son un
+PISO, no la presencia: si llegó a las 7 y el primer perro a las 8, su primer
+rastro es a las 8. Por eso la pantalla escribe "Entró 07:22" para el fichaje
+y *"activo desde 13:40"* en itálica para el rastro. Decirlos igual
+convertiría una deducción en un hecho, y eso después se usa para conversar
+sobre puntualidad. Sin ninguno de los dos, la respuesta es "no se sabe".
+
+Ojo con un hueco que queda: **marcar una llegada no guarda quién apretó el
+botón**, y marcar llegadas es lo que más se hace en un turno. Así que un
+turno tranquilo se parece a uno ausente, y la pantalla no lo presenta como
+ausencia. Se arregla con una columna `marcado_por` en `estadias_jardin` y
+`reservas_hotel`.
+
+**El turno planificado no lo puede tocar quien lo cubre.** RLS sabe acotar
+filas, no columnas, así que la política que deja fichar dejaría también
+reescribir el propio horario — y entonces el que llegó tarde quedaría
+puntual. Lo cuida el disparador `proteger_turno_planificado`, misma idea que
+`proteger_ficha_de_la_casa`.
+
+**La cobertura se mide solo en las horas de atención**
+(`NEGOCIO.turnos.horasQueSeCubren`, 07:00–21:00 del folleto), no en las 24.
+De noche quedan los perros de hotel durmiendo y eso no es una pregunta de
+planilla: la dueña vive en la casa. Marcar cada noche como descubierta haría
+que el aviso rojo apareciera los siete días y entonces se deja de mirar,
+justo antes de que aparezca el que importa.
+
+Por lo mismo, con la planilla vacía **no se listan los huecos**: sería "nadie
+cubre de 00:00 a 24:00" repetido siete veces. Ese caso lo dice una sola
+línea, y en rojo solo si ese día hubo perros.
+
+Dos detalles chicos que costaron un rato: el final del día es `"24:00"` y no
+`"00:00"` —el minuto 1440 da la vuelta al reloj y un hueco de un día entero
+se leía como que no dura nada—, y el botón de fichar aparece **solo si hay
+turno asignado para hoy**: pedirle a alguien que fiche algo que nadie
+planificó es pedirle que invente el dato.
+
+El seed no inventa turnos. Sesenta días de planilla que nadie escribió es
+llenar la pantalla de datos falsos.
 
 ### El calendario y su semáforo
 
@@ -1085,10 +1150,26 @@ Tres cosas que no son obvias:
   pantalla dice por qué no salió el correo y ofrece el enlace a
   `/crear-cuenta/equipo` por WhatsApp, que sigue funcionando como antes.
 
-Para que el correo llegue hacen falta dos cosas en el panel de Supabase,
-explicadas en `.env.example`: un **SMTP propio** (el remitente incluido solo
-escribe a los miembros del equipo del proyecto en Supabase, y pocos por hora)
-y el dominio de la app en las **Redirect URLs**.
+Para que el correo llegue hacen falta dos cosas en el panel de Supabase: un
+**SMTP propio** —ya está, es Resend, ver "Dónde vive cada cosa"— y el dominio
+de la app en las **Redirect URLs**.
+
+El otro correo que manda el sistema es la **confirmación** al registrarse, y
+sale por el mismo Resend. El remitente que Supabase trae por defecto no sirve
+para operar: solo escribe a los miembros del equipo del proyecto y con un tope
+de pocos envíos por hora.
+
+Ese tope costó una tarde entera de diagnóstico, así que vale escribir cómo se
+ve desde adentro: la cuenta **queda creada** aunque el correo no salga, y
+Supabase responde `Error sending confirmation email`. Por eso el mensaje que
+ve la persona no la invita a reintentar —reintentar gasta otro envío, no
+arregla nada y la deja convencida de que no tiene cuenta cuando sí la tiene—
+sino que le pide que escriba.
+
+Y una trampa del cambio a Resend: **conectar un SMTP propio NO sube el tope
+de envíos**. Sigue en el número bajo del remitente incluido hasta que se suba
+a mano en Authentication → Rate Limits. Sin eso parece que Resend quedó mal
+configurado cuando lo que pasa es que Supabase no lo deja mandar.
 
 #### Grants y políticas son dos cosas
 
@@ -1268,6 +1349,48 @@ pasado por `pruebas` y sin `build`, `lint` y `test` verdes.
 Ojo con el nombre: la rama de una funcionalidad es `prueba/` en **singular**.
 Git no deja que exista `pruebas` y `pruebas/whatsapp` a la vez —una referencia
 no puede ser archivo y carpeta al mismo tiempo— y el error que tira no dice eso.
+
+### Dónde vive cada cosa
+
+Lo que no está en el código no lo ve ninguna sesión nueva. Esto es lo que hay
+afuera, y se actualiza cuando cambia:
+
+| Qué | Dónde |
+|---|---|
+| Dominio `lapatoteca.cl` | Comprado en **NIC Chile**, delegado a `ns1/ns2.vercel-dns.com`. `lapatoteca.cl` redirige a `www`. |
+| Hosting | Proyecto de Vercel **`lapatoteca`**: tiene el dominio y publica `main` como Production. |
+| Proyecto viejo | **`lapatoteca-app`** en Vercel quedó sin el dominio y está por borrarse. Ahí vive `lapatoteca-apppruebas.vercel.app`, que apuntaba a `prueba/vista-dueno`. **No se cargan variables ahí.** |
+| Base y login | Supabase, proyecto `kcxzoesspkggpchvqlnw`, plan Pro (US$25 + IVA al mes, el servidor Micro lo cubre el crédito). |
+| Correo saliente | **Resend**, dominio `lapatoteca.cl` verificado (región Brasil). Los tres registros DNS los puso Resend solo, con el *Auto configure* de Vercel. La API key vive en Supabase → Authentication → SMTP, con usuario `resend` y remitente `hola@lapatoteca.cl`. |
+| Buscador de direcciones | Llave de Google Cloud con el correo de la empresa, restringida a los dominios de `lapatoteca.cl`, `*.vercel.app` y `localhost:3000`, y a Maps JavaScript API + Places API (New). |
+
+Variables en Vercel (proyecto `lapatoteca`, Production y Preview):
+`NEXT_PUBLIC_ORIGEN_DATOS=supabase`, `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` y `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`. Las
+`NEXT_PUBLIC_` van como tipo **Config**, no Secret: terminan en el navegador
+igual, y Vercel no deja marcarlas secretas. Lo que las protege son las
+políticas de RLS y las restricciones de la llave. Tres trampas que ya costaron
+una tarde:
+
+- **Vercel las mete al construir.** Cargar o corregir una variable no cambia
+  lo publicado: hay que hacer **Redeploy**, sin caché.
+- **El nombre tiene que ser exacto.** Una `Z` de más al final
+  (`…_API_KEYZ`) dejó el buscador apagado sin ningún error a la vista.
+- **Hay que cargarlas en el proyecto que tiene el dominio.** Con dos
+  proyectos conectados al mismo repo, las dos publicaciones salen bien y
+  solo una se ve.
+
+Para saber si una variable `NEXT_PUBLIC_` entró, se busca su valor en los
+`.js` de la página publicada: si quedó `process.env.NOMBRE` sin reemplazar,
+no estaba al construir.
+
+#### Varias sesiones a la vez
+
+Cada sesión en la nube tiene su propia copia del repo y su propia
+conversación; entre ellas solo se ven a través de GitHub. Por eso: traer
+`main` y `pruebas` **al empezar y antes de subir**, subir apenas algo
+termina, y anotar acá lo que cambie afuera del código (Vercel, Supabase,
+Google). Otra sesión no se va a enterar de otra manera.
 
 ## 6. Comandos
 

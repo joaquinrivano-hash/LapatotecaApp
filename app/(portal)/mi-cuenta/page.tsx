@@ -150,7 +150,21 @@ export default function MiCuenta() {
 
       <section className="space-y-2">
         {perros.map((perro) => {
-          const alertas = alertasDePerro(perro, hoy);
+          const prueba = (datos?.estadias ?? []).find(
+            (e) =>
+              e.perroId === perro.id &&
+              e.origen === "dia_de_prueba" &&
+              e.fecha === perro.diaDePrueba.fecha &&
+              e.estado !== "cancelada",
+          );
+          // El día de prueba agendado es una buena noticia para el dueño, no
+          // un problema: va aparte de las alertas, sin triángulo ni amarillo.
+          const todas = alertasDePerro(perro, hoy, prueba?.inicioProgramado);
+          const agendado =
+            perro.diaDePrueba.estado === "agendado"
+              ? todas.find((a) => a.tipo === "sin_dia_de_prueba")
+              : undefined;
+          const alertas = todas.filter((a) => a !== agendado);
           const bloquea = alertas.some((a) => a.bloquea);
           return (
             <Card key={perro.id}>
@@ -174,6 +188,11 @@ export default function MiCuenta() {
                   <p className="text-muted-foreground truncate text-sm">
                     {perro.raza} · {perro.pesoKg} kg
                   </p>
+                  {agendado && (
+                    <p className="text-success mt-1 text-sm font-semibold text-pretty">
+                      {agendado.mensaje} ¡Te esperamos!
+                    </p>
+                  )}
                   {alertas.length > 0 && (
                     <p
                       className={cn(

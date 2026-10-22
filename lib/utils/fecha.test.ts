@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describirDia,
   diasEntre,
   formatearDiaMesCorto,
   esFinDeSemana,
@@ -123,5 +124,36 @@ describe("una fecha sin hora es un día del calendario", () => {
     expect(fechaISO("2026-01-01")).toBe("2026-01-01");
     // 6 de septiembre de 2026: el día en que empieza el horario de verano.
     expect(fechaISO("2026-09-06")).toBe("2026-09-06");
+  });
+});
+
+describe("describirDia", () => {
+  // El 22 de octubre de 2026 es jueves.
+  const HOY = "2026-10-22";
+
+  it("dice hoy y mañana", () => {
+    expect(describirDia("2026-10-22", HOY)).toBe("hoy jueves 22 de octubre");
+    expect(describirDia("2026-10-23", HOY)).toBe(
+      "mañana viernes 23 de octubre",
+    );
+  });
+
+  it("dice el próximo dentro de la semana que viene", () => {
+    expect(describirDia("2026-10-26", HOY)).toBe(
+      "el próximo lunes 26 de octubre",
+    );
+    expect(describirDia("2026-10-29", HOY)).toBe(
+      "el próximo jueves 29 de octubre",
+    );
+  });
+
+  it("más lejos, solo el día", () => {
+    expect(describirDia("2026-11-05", HOY)).toBe("el jueves 5 de noviembre");
+  });
+
+  it("cruza el mes sin perder el nombre del mes", () => {
+    expect(describirDia("2026-11-02", "2026-10-30")).toBe(
+      "el próximo lunes 2 de noviembre",
+    );
   });
 });

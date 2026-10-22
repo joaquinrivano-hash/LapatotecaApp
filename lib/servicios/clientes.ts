@@ -14,7 +14,8 @@ import {
   vacunasPorVencer,
 } from "@/lib/rules/admision";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
-import type { Cliente, FechaISO, Perro } from "@/lib/types";
+import type { Cliente, FechaISO, InstanteISO, Perro } from "@/lib/types";
+import { describirDia, formatearHora } from "@/lib/utils/fecha";
 
 export type TipoAlerta =
   | "vacuna_vencida"
@@ -36,7 +37,16 @@ export interface AlertaPerro {
 /** Cuántos días antes empieza a avisarse una vacuna que va a vencer. */
 export const DIAS_AVISO_VACUNA = 30;
 
-export function alertasDePerro(perro: Perro, hoy: FechaISO): AlertaPerro[] {
+/**
+ * `inicioDiaDePrueba` es la hora de llegada agendada. Vive en la estadía y no
+ * en el perro, así que la pasa quien la tenga a mano; sin ella el aviso dice
+ * solo el día.
+ */
+export function alertasDePerro(
+  perro: Perro,
+  hoy: FechaISO,
+  inicioDiaDePrueba?: InstanteISO,
+): AlertaPerro[] {
   const alertas: AlertaPerro[] = [];
 
   const vencidas = vacunasFaltantes(perro, hoy);
@@ -65,7 +75,7 @@ export function alertasDePerro(perro: Perro, hoy: FechaISO): AlertaPerro[] {
       perroId: perro.id,
       mensaje:
         perro.diaDePrueba.estado === "agendado"
-          ? `Día de prueba agendado para el ${perro.diaDePrueba.fecha}.`
+          ? `Día de prueba ${describirDiaDePrueba(perro, hoy, inicioDiaDePrueba)}.`
           : perro.diaDePrueba.estado === "rechazado"
             ? "El día de prueba no fue aprobado."
             : "Todavía no hace su día de prueba.",
@@ -99,6 +109,18 @@ export function alertasDePerro(perro: Perro, hoy: FechaISO): AlertaPerro[] {
   }
 
   return alertas;
+}
+
+/** "el próximo jueves 29 de octubre a las 09:00" */
+function describirDiaDePrueba(
+  perro: Perro,
+  hoy: FechaISO,
+  inicio?: InstanteISO,
+): string {
+  const fecha = perro.diaDePrueba.fecha;
+  if (!fecha) return "agendado";
+  const dia = describirDia(fecha, hoy);
+  return inicio ? `${dia} a las ${formatearHora(inicio)}` : dia;
 }
 
 export interface ClienteConPerros {
