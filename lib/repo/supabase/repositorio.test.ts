@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 
 import { clienteFalso, filas } from "@/lib/repo/supabase/falso";
 import { crearRepositorioSupabase } from "@/lib/repo/supabase/repositorio";
+import type { Cotizacion } from "@/lib/types";
 
 const repo = (responder?: Parameters<typeof clienteFalso>[0]) => {
   const falso = clienteFalso(responder);
@@ -684,5 +685,112 @@ describe("notificaciones.crear", () => {
         creadaEn: "2026-10-22T12:00:00.000Z",
       }),
     ).rejects.toThrow(/No tienes permiso/);
+  });
+});
+
+describe("agenda: agendar y comprar", () => {
+  // El dueño no escribe `planes` ni el día de prueba de su perro: con eso se
+  // dejaría el saldo del pack en cero o se aprobaría solo. Cada una es una
+  // sola llamada a una función de la base.
+  const HORARIO = {
+    fecha: "2026-10-27",
+    inicio: "2026-10-27T12:00:00.000Z",
+    fin: "2026-10-27T18:00:00.000Z",
+  };
+  const COTIZACION: Cotizacion = {
+    lineas: [],
+    subtotal: 10000,
+    descuentos: [],
+    total: 10000,
+  };
+
+  it("agendar el día de prueba manda el horario y la cotización que vio", async () => {
+    const { repo: r, llamadas, argumentosDe } = repo(() => ({
+      data: {
+        estadia: { id: "uuid-e", origen: "dia_de_prueba" },
+        pago: { id: "uuid-g", monto: 10000, estado: "pendiente" },
+        perro: { id: "uuid-perro", dia_de_prueba: { estado: "agendado", fecha: "2026-10-27" } },
+      },
+    }));
+
+    const { estadia, pago, perro } = await r.agenda.agendarDiaDePrueba(
+      "uuid-perro",
+      HORARIO,
+      COTIZACION,
+      "2026-10-22T12:00:00.000Z",
+    );
+
+    expect(llamadas.map((l) => l.tabla)).toEqual(["rpc:agendar_dia_de_prueba"]);
+    expect(argumentosDe("rpc")).toEqual([
+      {
+        perro: "uuid-perro",
+        nueva_fecha: "2026-10-27",
+        nuevo_inicio: "2026-10-27T12:00:00.000Z",
+        nuevo_fin: "2026-10-27T18:00:00.000Z",
+        la_cotizacion: COTIZACION,
+      },
+    ]);
+    expect(estadia.origen).toBe("dia_de_prueba");
+    expect(pago.estado).toBe("pendiente");
+    expect(perro.diaDePrueba.estado).toBe("agendado");
+  });
+
+  it("agendar con plan es una llamada, no un update al saldo", async () => {
+    const { repo: r, llamadas, argumentosDe } = repo(() => ({
+      data: {
+        estadia: { id: "uuid-e", origen: "plan", plan_id: "uuid-plan" },
+        plan: { id: "uuid-plan", dias_usados: 4 },
+      },
+    }));
+
+    const { estadia, plan } = await r.agenda.agendarDiaConPlan(
+      "uuid-plan",
+      HORARIO,
+      COTIZACION,
+      "2026-10-22T12:00:00.000Z",
+    );
+
+    expect(llamadas.map((l) => l.tabla)).toEqual(["rpc:agendar_dia_con_plan"]);
+    expect(argumentosDe("rpc")).toMatchObject([{ plan: "uuid-plan" }]);
+    expect(estadia.planId).toBe("uuid-plan");
+    expect(plan.diasUsados).toBe(4);
+  });
+
+  it("comprar un plan no manda ni el precio ni los días: los calcula la base", async () => {
+    const { repo: r, llamadas, argumentosDe } = repo(() => ({
+      data: {
+        plan: { id: "uuid-plan", dias_totales: 12, precio: 168000 },
+        pago: { id: "uuid-g", concepto: "plan", monto: 168000, estado: "pendiente" },
+      },
+    }));
+
+    const { plan, pago } = await r.agenda.comprarPlan(
+      "uuid-perro",
+      { tipo: "dias", dias: 12 },
+      "2026-10-22T12:00:00.000Z",
+    );
+
+    expect(llamadas.map((l) => l.tabla)).toEqual(["rpc:comprar_plan_de_jardin"]);
+    expect(argumentosDe("rpc")).toEqual([
+      { perro: "uuid-perro", tipo_de_plan: "dias", dias: 12 },
+    ]);
+    expect(plan).toMatchObject({ diasTotales: 12, precio: 168000 });
+    expect(pago.estado).toBe("pendiente");
+  });
+
+  it("el pase libre va sin días: los pone el mes", async () => {
+    const { repo: r, argumentosDe } = repo(() => ({
+      data: { plan: { id: "uuid-plan" }, pago: { id: "uuid-g" } },
+    }));
+
+    await r.agenda.comprarPlan(
+      "uuid-perro",
+      { tipo: "pase_libre" },
+      "2026-10-22T12:00:00.000Z",
+    );
+
+    expect(argumentosDe("rpc")).toEqual([
+      { perro: "uuid-perro", tipo_de_plan: "pase_libre", dias: null },
+    ]);
   });
 });

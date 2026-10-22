@@ -218,12 +218,7 @@ describe("día de prueba", () => {
   it("se agenda como media jornada desde la hora elegida", async () => {
     const { perro } = await crearCuenta(repo, { cuenta: CUENTA, perro: PERRO });
 
-    const { estadia, perro: actualizado } = await agendarDiaDePrueba(
-      repo,
-      perro.id,
-      LUNES,
-      A_LAS_9,
-    );
+    const { estadia, perro: actualizado } = await agendarDiaDePrueba(repo, perro.id, LUNES, A_LAS_9, DOMINGO);
 
     expect(estadia.origen).toBe("dia_de_prueba");
     expect(estadia.estado).toBe("esperada");
@@ -242,7 +237,7 @@ describe("día de prueba", () => {
       cuenta: CUENTA,
       perro: PERRO,
     });
-    const { pago } = await agendarDiaDePrueba(repo, perro.id, LUNES, A_LAS_9);
+    const { pago } = await agendarDiaDePrueba(repo, perro.id, LUNES, A_LAS_9, DOMINGO);
 
     expect(pago.monto).toBe(PRECIOS.diaDePrueba);
     expect(pago.estado).toBe("pendiente");
@@ -260,10 +255,10 @@ describe("día de prueba", () => {
 
   it("no deja tomarlo dos veces", async () => {
     const { perro } = await crearCuenta(repo, { cuenta: CUENTA, perro: PERRO });
-    await agendarDiaDePrueba(repo, perro.id, LUNES, A_LAS_9);
+    await agendarDiaDePrueba(repo, perro.id, LUNES, A_LAS_9, DOMINGO);
 
     await expect(
-      agendarDiaDePrueba(repo, perro.id, LUNES, A_LAS_9),
+      agendarDiaDePrueba(repo, perro.id, LUNES, A_LAS_9, DOMINGO),
     ).rejects.toThrow(RegistroRechazado);
   });
 
@@ -283,7 +278,7 @@ describe("día de prueba", () => {
 
   it("no deja dos días de prueba en el mismo bloque", async () => {
     const primero = await crearCuenta(repo, { cuenta: CUENTA, perro: PERRO });
-    await agendarDiaDePrueba(repo, primero.perro.id, LUNES, A_LAS_9);
+    await agendarDiaDePrueba(repo, primero.perro.id, LUNES, A_LAS_9, DOMINGO);
 
     const segundo = await crearCuenta(repo, {
       cuenta: { ...CUENTA, email: "otro@ejemplo.cl" },
@@ -302,7 +297,7 @@ describe("día de prueba", () => {
 
     // Media hora después sí se puede.
     await expect(
-      agendarDiaDePrueba(repo, segundo.perro.id, LUNES, A_LAS_9 + 30),
+      agendarDiaDePrueba(repo, segundo.perro.id, LUNES, A_LAS_9 + 30, DOMINGO),
     ).resolves.toBeTruthy();
   });
 });

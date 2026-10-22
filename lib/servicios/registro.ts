@@ -24,7 +24,10 @@ import {
   type BloqueDeEntrada,
   type PoliticaDeCancelacion,
 } from "@/lib/rules/dia-de-prueba";
-import type { RepositorioPatoteca } from "@/lib/repo/tipos";
+import type {
+  DiaDePruebaAgendado,
+  RepositorioPatoteca,
+} from "@/lib/repo/tipos";
 import {
   fechaISO,
   formatearFechaCorta,
@@ -50,7 +53,6 @@ import type {
   Configuracion,
   InstanteISO,
   Medicamento,
-  Pago,
   Perro,
   Sexo,
   TipoVacuna,
@@ -378,18 +380,18 @@ export async function cotizarDiaDePrueba(
   };
 }
 
-export interface DiaDePruebaAgendado {
-  estadia: EstadiaJardin;
-  perro: Perro;
-  pago: Pago;
-}
+export type { DiaDePruebaAgendado };
 
 /**
  * Agenda el día de prueba y emite su cobro.
  *
- * El cobro queda **pendiente**: el prototipo no tiene pasarela, y en la
- * realidad los primeros meses se paga por transferencia. Administración lo
- * marca pagado cuando llega la plata.
+ * El cobro queda **pendiente**: no hay pasarela, y en la realidad los
+ * primeros meses se paga por transferencia. Administración lo marca pagado
+ * cuando llega la plata.
+ *
+ * El día, el cobro y el perro "agendado" van juntos, en `repo.agenda`: en la
+ * nube el dueño no puede marcar su día de prueba por su cuenta —si pudiera,
+ * se lo daría por aprobado desde la consola—, y el cobro lo pone la base.
  */
 export async function agendarDiaDePrueba(
   repo: RepositorioPatoteca,
@@ -413,35 +415,12 @@ export async function agendarDiaDePrueba(
     );
   }
 
-  const perroActual = (await repo.perros.obtener(perroId))!;
-
-  const estadia = await repo.estadiasJardin.crear({
-    clienteId: perroActual.clienteId,
+  return repo.agenda.agendarDiaDePrueba(
     perroId,
-    fecha,
-    inicioProgramado: previa.inicio,
-    finProgramado: previa.fin,
-    origen: "dia_de_prueba",
-    estado: "esperada",
-    cotizacion: previa.cotizacion,
-    creadaEn: ahora,
-  });
-
-  const pago = await repo.pagos.crear({
-    clienteId: perroActual.clienteId,
-    concepto: "dia_de_prueba",
-    referenciaId: estadia.id,
-    monto: previa.cotizacion.total,
-    estado: "pendiente",
-    emitidoEn: ahora,
-    venceEn: fecha,
-  });
-
-  const perro = await repo.perros.actualizar(perroId, {
-    diaDePrueba: { estado: "agendado", fecha },
-  });
-
-  return { estadia, perro, pago };
+    { fecha, inicio: previa.inicio, fin: previa.fin },
+    previa.cotizacion,
+    ahora,
+  );
 }
 
 function motivosDelRechazo(previa: CotizacionDiaDePrueba): string[] {

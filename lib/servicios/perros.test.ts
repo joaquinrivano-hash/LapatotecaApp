@@ -190,6 +190,15 @@ describe("actualizarPerroComoDueno", () => {
     expect(perro.pesoKg).toBe(12);
     expect(perro.esterilizado).toBe(PELUSA.esterilizado);
   });
+
+  it("tampoco puede darse el día de prueba por aprobado", async () => {
+    const { perro, cambios } = await actualizarPerroComoDueno(repo, "p1", {
+      diaDePrueba: { estado: "aprobado", fecha: HOY },
+    });
+
+    expect(perro.diaDePrueba).toEqual(PELUSA.diaDePrueba);
+    expect(cambios).toEqual([]);
+  });
 });
 
 describe("habilitarPeso", () => {

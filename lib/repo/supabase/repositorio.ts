@@ -784,6 +784,58 @@ function agendaDe(cliente: Cliente0): AgendaRepo {
     fila ? aEntidad<T>(fila as Fila) : null;
 
   return {
+    async agendarDiaDePrueba(perroId, horario, cotizacion) {
+      const r = await llamar(
+        "agendar_dia_de_prueba",
+        {
+          perro: perroId,
+          nueva_fecha: horario.fecha,
+          nuevo_inicio: horario.inicio,
+          nuevo_fin: horario.fin,
+          la_cotizacion: cotizacion,
+        },
+        "No se pudo agendar el día de prueba",
+      );
+      return {
+        estadia: entidad<EstadiaJardin>(r.estadia)!,
+        pago: entidad<Pago>(r.pago)!,
+        perro: entidad<Perro>(r.perro)!,
+      };
+    },
+
+    async agendarDiaConPlan(planId, horario, cotizacion) {
+      const r = await llamar(
+        "agendar_dia_con_plan",
+        {
+          plan: planId,
+          nueva_fecha: horario.fecha,
+          nuevo_inicio: horario.inicio,
+          nuevo_fin: horario.fin,
+          la_cotizacion: cotizacion,
+        },
+        "No se pudo agendar el día con el plan",
+      );
+      return {
+        estadia: entidad<EstadiaJardin>(r.estadia)!,
+        plan: entidad<PlanComprado>(r.plan)!,
+      };
+    },
+
+    async comprarPlan(perroId, compra) {
+      // Días, precio y vencimiento los calcula la base con las mismas
+      // reglas: si los mandara la app, un plan de 99 días por $0 sería una
+      // línea de consola.
+      const r = await llamar(
+        "comprar_plan_de_jardin",
+        { perro: perroId, tipo_de_plan: compra.tipo, dias: compra.dias ?? null },
+        "No se pudo comprar el plan",
+      );
+      return {
+        plan: entidad<PlanComprado>(r.plan)!,
+        pago: entidad<Pago>(r.pago)!,
+      };
+    },
+
     async cancelarDiaDePrueba(estadiaId) {
       const r = await llamar(
         "cancelar_dia_de_prueba",

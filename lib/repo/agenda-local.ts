@@ -1,8 +1,9 @@
 /**
- * Cancelar y mover lo agendado, en el prototipo.
+ * Agendar, comprar, cancelar y mover, en el prototipo.
  *
  * Es la gemela de las funciones de
- * `supabase/migrations/20261022150000_cambios_de_agenda.sql`: mismas reglas,
+ * `supabase/migrations/20261022150000_cambios_de_agenda.sql` y
+ * `20261022160000_planes_y_dia_de_prueba.sql`: mismas reglas,
  * mismo orden y los mismos rechazos. Allá existen porque el dueño no puede
  * tocar un cobro y el cambio tiene que pasar entero por la base; acá todo
  * vive en el navegador, así que es la misma secuencia escrita sobre las
@@ -12,12 +13,17 @@
  * corren sobre esta; `supabase/pruebas/aislamiento.sh`, sobre aquella.
  */
 
+import { NEGOCIO } from "@/lib/config/negocio";
+import { PRECIOS } from "@/lib/config/precios";
 import { ErrorRepositorio } from "@/lib/repo/error";
 import type { AgendaRepo, RepositorioPatoteca } from "@/lib/repo/tipos";
 import { politicaDeCancelacion } from "@/lib/rules/dia-de-prueba";
+import { comprarPlan, esDiaHabil, planVigente } from "@/lib/rules/planes";
 import { calcularDevolucionJardin } from "@/lib/rules/precio-jardin";
 import { fechaISO } from "@/lib/utils/fecha";
 import type { EstadiaJardin, ID, Pago, PlanComprado } from "@/lib/types";
+
+const ms = (instante: string) => new Date(instante).getTime();
 
 type Colecciones = Pick<
   RepositorioPatoteca,
@@ -61,6 +67,141 @@ export function crearAgendaLocal(repo: Colecciones): AgendaRepo {
   }
 
   return {
+    async agendarDiaDePrueba(perroId, horario, cotizacion, ahora) {
+      const perro = await repo.perros.obtener(perroId);
+      if (!perro) throw new ErrorRepositorio("No existe ese perro.");
+      // Solo desde "pendiente": agendado ya lo tiene tomado, y aprobado o
+      // rechazado ya pasó por la casa.
+      if (perro.diaDePrueba.estado !== "pendiente") {
+        throw new ErrorRepositorio("Este perrito ya tiene su día de prueba tomado.");
+      }
+      // Media jornada, ni más ni menos: un día de prueba de doce horas sería
+      // un día completo al precio de la evaluación.
+      if (
+        ms(horario.inicio) <= ms(ahora) ||
+        ms(horario.fin) - ms(horario.inicio) !==
+          NEGOCIO.diaDePrueba.horasDeEstadia * 3_600_000 ||
+        fechaISO(horario.inicio) !== horario.fecha
+      ) {
+        throw new ErrorRepositorio("Esa hora no sirve para el día de prueba.");
+      }
+      // La cotización es la que vio el dueño; lo que se cobra lo pone la
+      // regla. Si no calzan, alguien la tocó en el camino.
+      if (cotizacion.total !== PRECIOS.diaDePrueba) {
+        throw new ErrorRepositorio("El precio del día de prueba no calza.");
+      }
+
+      const estadia = await repo.estadiasJardin.crear({
+        clienteId: perro.clienteId,
+        perroId,
+        fecha: horario.fecha,
+        inicioProgramado: horario.inicio,
+        finProgramado: horario.fin,
+        origen: "dia_de_prueba",
+        estado: "esperada",
+        cotizacion,
+        creadaEn: ahora,
+      });
+
+      // Se cobra al agendar, y nace pendiente: Administración lo marca
+      // pagado cuando llega la transferencia.
+      const pago = await repo.pagos.crear({
+        clienteId: perro.clienteId,
+        concepto: "dia_de_prueba",
+        referenciaId: estadia.id,
+        monto: PRECIOS.diaDePrueba,
+        estado: "pendiente",
+        emitidoEn: ahora,
+        venceEn: horario.fecha,
+      });
+
+      const agendado = await repo.perros.actualizar(perroId, {
+        diaDePrueba: { estado: "agendado", fecha: horario.fecha },
+      });
+
+      return { estadia, pago, perro: agendado };
+    },
+
+    async agendarDiaConPlan(planId, horario, cotizacion, ahora) {
+      const plan = await repo.planes.obtener(planId);
+      if (!plan) throw new ErrorRepositorio("No existe ese plan.");
+      if (!planVigente(plan, horario.fecha)) {
+        throw new ErrorRepositorio("Ese plan ya no cubre ese día.");
+      }
+      if (NEGOCIO.planes.soloDiasHabiles && !esDiaHabil(horario.fecha)) {
+        throw new ErrorRepositorio("Los días del plan se usan de lunes a viernes.");
+      }
+      if (
+        horario.fecha < fechaISO(ahora) ||
+        ms(horario.fin) <= ms(horario.inicio) ||
+        fechaISO(horario.inicio) !== horario.fecha
+      ) {
+        throw new ErrorRepositorio("Esa hora no sirve para un día de jardín.");
+      }
+      // Un perro no tiene dos jornadas el mismo día, y menos dos días del pack.
+      const delDia = await repo.estadiasJardin.porFecha(horario.fecha);
+      if (
+        delDia.some((e) => e.perroId === plan.perroId && e.estado !== "cancelada")
+      ) {
+        throw new ErrorRepositorio("Ese perro ya tiene el día agendado.");
+      }
+
+      // El día del pack se descuenta al AGENDAR, no cuando el perro llega. Y
+      // van juntos: un día creado sin descontar sería gratis.
+      const estadia = await repo.estadiasJardin.crear({
+        clienteId: plan.clienteId,
+        perroId: plan.perroId,
+        fecha: horario.fecha,
+        inicioProgramado: horario.inicio,
+        finProgramado: horario.fin,
+        origen: "plan",
+        planId,
+        estado: "esperada",
+        cotizacion,
+        creadaEn: ahora,
+      });
+      const descontado = await repo.planes.actualizar(planId, {
+        diasUsados: plan.diasUsados + 1,
+      });
+
+      return { estadia, plan: descontado };
+    },
+
+    async comprarPlan(perroId, compra, ahora) {
+      const perro = await repo.perros.obtener(perroId);
+      if (!perro) throw new ErrorRepositorio("No existe ese perro.");
+
+      const { plan, cerrados } = comprarPlan({
+        id: "pendiente",
+        clienteId: perro.clienteId,
+        perroId,
+        tipo: compra.tipo,
+        dias: compra.dias,
+        compradoEn: ahora,
+        planesActuales: await repo.planes.porPerro(perroId),
+      });
+
+      // Los días no son acumulables: comprar uno nuevo cierra el anterior.
+      if (cerrados.length > 0) await repo.planes.guardarVarios(cerrados);
+
+      const { id: _descartado, ...sinId } = plan;
+      void _descartado;
+      const guardado = await repo.planes.crear(sinId);
+
+      // Pendiente: no hay pasarela. El dueño transfiere y Administración lo
+      // marca pagado, igual que el abono del hotel y el día suelto.
+      const pago = await repo.pagos.crear({
+        clienteId: perro.clienteId,
+        concepto: "plan",
+        referenciaId: guardado.id,
+        monto: guardado.precio,
+        estado: "pendiente",
+        emitidoEn: ahora,
+      });
+
+      return { plan: guardado, pago };
+    },
+
     async cancelarDiaDePrueba(estadiaId, ahora) {
       const estadia = await esperada(estadiaId, "cancelar");
       exigirDiaDePrueba(estadia);
@@ -105,7 +246,6 @@ export function crearAgendaLocal(repo: Colecciones): AgendaRepo {
       const estadia = await esperada(estadiaId, "cambiar");
       exigirDiaDePrueba(estadia);
 
-      const ms = (instante: string) => new Date(instante).getTime();
       if (
         ms(nuevo.fin) <= ms(nuevo.inicio) ||
         ms(nuevo.inicio) <= ms(ahora) ||

@@ -28,7 +28,7 @@ import {
   calcularPrecioJardin,
   type DevolucionJardin,
 } from "@/lib/rules/precio-jardin";
-import { comprarPlan, elegirPlanParaUsar, planesVigentes } from "@/lib/rules/planes";
+import { elegirPlanParaUsar, planesVigentes } from "@/lib/rules/planes";
 import { cotizarPaseo, cotizarSpa, cotizarTraslado } from "@/lib/rules/servicios";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
 import { describirAviso, dejarAviso } from "@/lib/servicios/avisos";
@@ -326,26 +326,31 @@ export async function reservarDiaJardin(
 
   const perro = (await repo.perros.obtener(entrada.perroId))!;
 
-  // El día del plan se descuenta al AGENDAR, no cuando el perro llega.
+  // Con plan, el día del pack se descuenta al AGENDAR, no cuando el perro
+  // llega, y el día y el descuento van juntos en `repo.agenda`: en la nube
+  // el dueño no toca el saldo de su plan, porque se lo dejaría en cero.
+  let estadia: EstadiaJardin;
   let planUsado: PlanComprado | null = null;
   if (previa.planDisponible) {
-    planUsado = await repo.planes.actualizar(previa.planDisponible.id, {
-      diasUsados: previa.planDisponible.diasUsados + 1,
+    ({ estadia, plan: planUsado } = await repo.agenda.agendarDiaConPlan(
+      previa.planDisponible.id,
+      { fecha: entrada.fecha, inicio: previa.inicio, fin: previa.fin },
+      previa.cotizacion,
+      ahora,
+    ));
+  } else {
+    estadia = await repo.estadiasJardin.crear({
+      clienteId: perro.clienteId,
+      perroId: perro.id,
+      fecha: entrada.fecha,
+      inicioProgramado: previa.inicio,
+      finProgramado: previa.fin,
+      origen: "dia_suelto",
+      estado: "esperada",
+      cotizacion: previa.cotizacion,
+      creadaEn: ahora,
     });
   }
-
-  const estadia = await repo.estadiasJardin.crear({
-    clienteId: perro.clienteId,
-    perroId: perro.id,
-    fecha: entrada.fecha,
-    inicioProgramado: previa.inicio,
-    finProgramado: previa.fin,
-    origen: previa.planDisponible ? "plan" : "dia_suelto",
-    planId: previa.planDisponible?.id,
-    estado: "esperada",
-    cotizacion: previa.cotizacion,
-    creadaEn: ahora,
-  });
 
   // El día suelto se paga POR ADELANTADO, igual que el plan: la jornada se
   // cobra al agendarla, no al cerrarla. Lo que puede aparecer después es el
@@ -553,36 +558,16 @@ export async function comprarPlanDeJardin(
     );
   }
 
-  const planesActuales = await repo.planes.porPerro(args.perroId);
-  const { plan, cerrados, cotizacion } = comprarPlan({
-    id: "pendiente",
-    clienteId: perro.clienteId,
-    perroId: perro.id,
-    tipo: args.tipo,
-    dias: args.dias,
-    compradoEn: ahora,
-    planesActuales,
-  });
-
-  // Comprar uno nuevo cierra el anterior: los días no son acumulables.
-  if (cerrados.length > 0) await repo.planes.guardarVarios(cerrados);
-
-  const { id: _descartado, ...sinId } = plan;
-  void _descartado;
-  const guardado = await repo.planes.crear(sinId);
-
-  const pago = await repo.pagos.crear({
-    clienteId: perro.clienteId,
-    concepto: "plan",
-    referenciaId: guardado.id,
-    monto: cotizacion.total,
-    estado: "pagado",
-    metodo: "webpay",
-    emitidoEn: ahora,
-    pagadoEn: ahora,
-  });
-
-  return { plan: guardado, pago };
+  // Días, precio y vencimiento los pone `repo.agenda`, con las mismas reglas
+  // que cotizó la pantalla. Y el cobro nace PENDIENTE: no hay pasarela, el
+  // dueño transfiere y Administración lo marca pagado, igual que el abono del
+  // hotel. La primera versión lo daba por pagado con "webpay", y en la nube la
+  // base lo rechazaba después de crear el plan: quedaba un plan sin cobro.
+  return repo.agenda.comprarPlan(
+    args.perroId,
+    { tipo: args.tipo, dias: args.dias },
+    ahora,
+  );
 }
 
 /* ── Servicios spot ────────────────────────────────────────────────── */
