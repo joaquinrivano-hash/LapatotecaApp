@@ -124,3 +124,49 @@ export async function resolverDiaDePrueba(
     },
   });
 }
+
+/* ── Lo que el dueño tiene que enterarse ───────────────────────────── */
+
+/**
+ * ¿Este perro pasó su día de prueba y todavía no ha reservado nada?
+ *
+ * Es el momento exacto en que hay algo que avisarle al dueño: ya puede
+ * reservar y probablemente no lo sabe, porque lo único que cambió en su
+ * pantalla fue que DESAPARECIÓ un aviso. La ausencia de una advertencia no
+ * se nota.
+ *
+ * La condición ES el estado, así que no hace falta guardar si ya lo vio: el
+ * aviso se apaga solo cuando reserva, que es justo cuando deja de hacer
+ * falta. Una bandeja con leídos y no leídos sería más maquinaria para decir
+ * lo mismo peor.
+ *
+ * Cuentan también las reservas canceladas: quien reservó y se arrepintió ya
+ * descubrió que podía hacerlo.
+ */
+export function esperandoSuPrimeraReserva(
+  perro: Perro,
+  estadias: EstadiaJardin[],
+  reservasHotel: { perroId: ID }[],
+): boolean {
+  if (perro.diaDePrueba.estado !== "aprobado") return false;
+
+  const tieneHotel = reservasHotel.some((r) => r.perroId === perro.id);
+  const tieneJardin = estadias.some(
+    (e) => e.perroId === perro.id && e.origen !== "dia_de_prueba",
+  );
+  return !tieneHotel && !tieneJardin;
+}
+
+/** Los perros de ese cliente que acaban de quedar habilitados. */
+export async function reciénAprobados(
+  repo: RepositorioPatoteca,
+  clienteId: ID,
+): Promise<Perro[]> {
+  const [perros, estadias, reservas] = await Promise.all([
+    repo.perros.porCliente(clienteId),
+    repo.estadiasJardin.porCliente(clienteId),
+    repo.reservasHotel.porCliente(clienteId),
+  ]);
+
+  return perros.filter((p) => esperandoSuPrimeraReserva(p, estadias, reservas));
+}

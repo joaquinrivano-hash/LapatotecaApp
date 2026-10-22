@@ -837,6 +837,23 @@ Solo entran los días que **ya pasaron**: uno agendado para el jueves no se
 evalúa el martes. Y la fecha que manda es la de la jornada, no la de la ficha:
 si lo reprogramaron, la estadía es la que quedó.
 
+**Y el dueño se entera.** Al aprobar, lo único que cambiaba en su pantalla
+era que DESAPARECÍA un aviso, y la ausencia de una advertencia no se nota: el
+dueño pagó, vino, y se quedaba sin saber que ya podía reservar.
+`<YaPuedeReservar />` lo dice arriba de todo en Mi cuenta, con el botón.
+
+No hay bandeja ni estado de "leído": la condición ES el estado —aprobado y
+sin ninguna reserva todavía— así que el aviso se apaga solo cuando reserva,
+que es justo cuando deja de hacer falta. El día de prueba mismo no cuenta
+como reserva, y la de un hermano tampoco: el aviso es por perro.
+
+Y el **rechazo** abre una conversación en vez de dar un portazo. El motivo se
+escribió para la ficha —"se puso brusco con los chicos"— y leerlo así, sin
+nadie al lado, es duro y no deja hacer nada; la pantalla pone el WhatsApp de
+la casa. El hecho lo dice la línea de alerta, con su triángulo, y el bloque
+de abajo solo ofrece la salida: decirlo dos veces en dos tonos es decirlo dos
+veces.
+
 Las condiciones se muestran **antes de pagar**, no detrás de un enlace.
 Enterarse después es la manera segura de que se sientan letra chica.
 

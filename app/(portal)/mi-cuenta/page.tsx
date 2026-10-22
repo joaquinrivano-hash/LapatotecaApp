@@ -24,6 +24,7 @@ import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import { MiPerro } from "@/components/portal/mi-perro";
 import { ContactoCasa } from "@/components/shared/contacto-casa";
+import { YaPuedeReservar } from "@/components/shared/ya-puede-reservar";
 import { ComoPagar } from "@/components/shared/como-pagar";
 import { excedePeso } from "@/lib/rules/admision";
 import { PrecioCLP } from "@/components/shared/precio";
@@ -148,6 +149,10 @@ export default function MiCuenta() {
         </p>
       </div>
 
+      {/* Arriba de los perros a propósito: es una noticia, y una noticia
+          debajo de una lista es una noticia que no se lee. */}
+      <YaPuedeReservar clienteId={clienteId} />
+
       <section className="space-y-2">
         {perros.map((perro) => {
           const prueba = (datos?.estadias ?? []).find(
@@ -211,6 +216,24 @@ export default function MiCuenta() {
                 )}
                 <ChevronRight className="text-muted-foreground size-5 shrink-0" />
                 </button>
+                {perro.diaDePrueba.estado === "rechazado" && (
+                  /* Un rechazo es una conversación, no un aviso. El motivo
+                     se escribió para la ficha —"se puso brusco con los
+                     chicos"— y leerlo así, sin nadie al lado, es duro y no
+                     deja hacer nada. Mejor abrir la puerta de hablarlo. */
+                  <div className="space-y-2 border-t border-border/60 p-3 text-sm">
+                    {/* El hecho ya lo dice la línea de arriba, con su
+                        triángulo. Repetirlo acá en otro tono es decirlo dos
+                        veces; lo que falta es qué hacer. */}
+                    <p className="text-pretty">
+                      Conversémoslo y vemos qué podemos hacer por{" "}
+                      {perro.nombre}.
+                    </p>
+                    <ContactoCasa
+                      mensaje={`Hola, quiero conversar sobre el día de prueba de ${perro.nombre}.`}
+                    />
+                  </div>
+                )}
                 {excedePeso(perro) && (
                   <div className="space-y-2 border-t border-border/60 p-3 text-sm">
                     <p className="text-pretty">
