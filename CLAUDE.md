@@ -1413,6 +1413,24 @@ que no existe, y `401` es que existe y está cerrada.
 se sabe que existe— porque un `401` aislado no distingue "existe" de
 "cualquier otro problema de permisos".
 
+Para una migración que agrega **funciones** y no columnas (como
+`cambios_de_agenda` o `planes_y_dia_de_prueba`), lo mismo con `rpc`:
+
+```
+GET /rest/v1/rpc/<funcion>?<parametro>=00000000-0000-0000-0000-000000000000
+```
+
+- `404` con `PGRST202` (`Searched for the function …`) → NO existe.
+- `401` con `permission denied for function` → existe y la clave anónima no
+  la puede llamar, que es lo esperado: todas llevan `revoke all … from
+  public`.
+
+Con `GET`, nunca `POST`: PostgREST corre el `GET` en una transacción de solo
+lectura, así que aunque la función se pudiera ejecutar no escribiría nada.
+Los nombres de los parámetros cuentan —el `404` lista los que buscó—. Los
+controles que se usaron el 22-10-2026: `funcion_que_no_existe` (da `404`) y
+`descontar_stock` con `producto` y `cantidad` (existe, da `401`).
+
 #### Las políticas se prueban, no se leen
 
 ```
@@ -1583,7 +1601,7 @@ afuera, y se actualiza cuando cambia:
 | Hosting | Proyecto de Vercel **`lapatoteca`**: tiene el dominio y publica `main` como Production. |
 | Proyecto viejo | **`lapatoteca-app`** en Vercel quedó sin el dominio y está por borrarse. Ahí vive `lapatoteca-apppruebas.vercel.app`, que apuntaba a `prueba/vista-dueno`. **No se cargan variables ahí.** |
 | Base y login | Supabase, proyecto `kcxzoesspkggpchvqlnw`, plan Pro (US$25 + IVA al mes, el servidor Micro lo cubre el crédito). |
-| Migraciones corridas | **Las 13**, al 22 de octubre de 2026 — hasta `20261022140000_marcado_por`. Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
+| Migraciones corridas | **Las 13**, al 22 de octubre de 2026 — hasta `20261022140000_marcado_por`. **Faltan dos** cuyo código ya está en `main`: `20261022150000_cambios_de_agenda` y `20261022160000_planes_y_dia_de_prueba` (verificado desde afuera el 22-10: sus funciones no existían). Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
 | Confirmación de correo | **Encendida.** Quien se registra recibe un enlace y hasta que no lo abre no tiene sesión. Se apaga en Authentication → Sign In → Email si alguna vez estorba. |
 | Correo saliente | **Resend**, dominio `lapatoteca.cl` verificado (región Brasil). Los tres registros DNS los puso Resend solo, con el *Auto configure* de Vercel. La API key vive en Supabase → Authentication → SMTP, con usuario `resend` y remitente `hola@lapatoteca.cl`. |
 | Buscador de direcciones | Llave de Google Cloud con el correo de la empresa, restringida a los dominios de `lapatoteca.cl`, `*.vercel.app` y `localhost:3000`, y a Maps JavaScript API + Places API (New). |
@@ -1635,23 +1653,28 @@ editor SQL. Entonces el código de `main` puede estar leyendo una columna que
 la base todavía no tiene, y eso no lo detecta ningún test ni el build: se ve
 cuando alguien abre la pantalla.
 
-Ya pasó: `main` tiene el código de las dos migraciones del 21-10 sin que
-nadie haya confirmado que corrieron. Si no corrieron, `/admin/configuracion`
-**se cae** (los datos de transferencia llegan vacíos) y habilitar a un perro
-con sobrepeso falla. Parte del motivo es que en Supabase
-`configuracion.obtener()` no completa con los valores de fábrica los campos
-que la fila no trae, como sí hace `normalizarDatos()` en el modo local.
+Ya pasó con las dos del 21-10: llegaron a `main` sin que nadie confirmara
+que corrieron (después se confirmó que sí). Si no hubieran corrido,
+`/admin/configuracion` **se caía** (los datos de transferencia llegan vacíos)
+y habilitar a un perro con sobrepeso fallaba. Parte del motivo es que en
+Supabase `configuracion.obtener()` no completa con los valores de fábrica los
+campos que la fila no trae, como sí hace `normalizarDatos()` en el modo
+local.
+
+Y pasa ahora, a propósito, con `cambios_de_agenda` y
+`planes_y_dia_de_prueba` (ver más abajo por qué esas dos no tienen un orden
+que no rompa nada).
 
 | Migración | Qué agrega | ¿Corrió en producción? |
 |---|---|---|
-| `20261014…` (las ocho primeras) | Esquema, permisos, escrituras, cuidador, devoluciones, invitaciones, hora marcada | Se asumen corridas: son de antes del 21-10 y producción funciona sobre ellas. Falta que alguien lo marque |
-| `20261021120000_ficha_que_decide_la_casa` | `perros.excepcion_peso`, `configuracion.whatsapp_de_contacto` y el disparador que no deja al dueño cambiar sexo, castración ni la excepción de peso | **Sin confirmar** |
-| `20261021130000_datos_de_transferencia` | `configuracion.transferencia` | **Sin confirmar** |
-| `20261021140000_alta_de_cuenta` | `clientes.perfil_id` toma solo el usuario que crea la ficha: sin eso, el alta del dueño falla | **Sin confirmar** |
-| `20261022120000_turnos` | La tabla `turnos`, sus permisos y el disparador que protege el turno planificado | **Sin confirmar** |
-| `20261022140000_marcado_por` | Quién marcó cada llegada y salida, firmado por la base (`firmar_la_marca`) | **Sin confirmar** |
-| `20261022150000_cambios_de_agenda` | Cancelar y mover lo agendado con su cobro, en la base; el disparador que no deja al dueño reescribir estadías ni reservas. **Sin ella, cancelar desde el portal falla** (antes de este cambio quedaba a medias) | **Sin confirmar** |
-| `20261022160000_planes_y_dia_de_prueba` | Comprar y usar un plan y agendar el día de prueba, en la base; los disparadores que no dejan al dueño tocar planes, aprobarse el día de prueba ni insertar días o reservas por fuera. **Va junto con su código**: con una sin la otra, agendar el día de prueba y usar el plan fallan (ver abajo) | **Sin confirmar** |
+| `20261014…` (las ocho primeras) | Esquema, permisos, escrituras, cuidador, devoluciones, invitaciones, hora marcada | Corridas (confirmado al 22-10-2026) |
+| `20261021120000_ficha_que_decide_la_casa` | `perros.excepcion_peso`, `configuracion.whatsapp_de_contacto` y el disparador que no deja al dueño cambiar sexo, castración ni la excepción de peso | Corrida (al 22-10-2026) |
+| `20261021130000_datos_de_transferencia` | `configuracion.transferencia` | Corrida (al 22-10-2026) |
+| `20261021140000_alta_de_cuenta` | `clientes.perfil_id` toma solo el usuario que crea la ficha: sin eso, el alta del dueño falla | Corrida (al 22-10-2026) |
+| `20261022120000_turnos` | La tabla `turnos`, sus permisos y el disparador que protege el turno planificado | Corrida (al 22-10-2026) |
+| `20261022140000_marcado_por` | Quién marcó cada llegada y salida, firmado por la base (`firmar_la_marca`) | Corrida (al 22-10-2026) |
+| `20261022150000_cambios_de_agenda` | Cancelar y mover lo agendado con su cobro, en la base; el disparador que no deja al dueño reescribir estadías ni reservas. **Sin ella, cancelar desde el portal falla** (antes de este cambio quedaba a medias) | **No corrida** — verificado desde afuera el 22-10-2026. Su código está en `main` |
+| `20261022160000_planes_y_dia_de_prueba` | Comprar y usar un plan y agendar el día de prueba, en la base; los disparadores que no dejan al dueño tocar planes, aprobarse el día de prueba ni insertar días o reservas por fuera. **Va junto con su código**: con una sin la otra, agendar el día de prueba y usar el plan fallan (ver abajo) | **No corrida** — verificado desde afuera el 22-10-2026. Su código está en `main` |
 
 La regla de acá en adelante:
 
@@ -1669,6 +1692,15 @@ dejan nada a medias—, pero durante el intervalo nadie puede agendar el día
 de prueba ni usar su plan. Se corre la migración y se publica `main` en
 seguida, minutos y no días.
 
+Se publicó el 22-10-2026 con el código primero, que es el orden que deja el
+intervalo más corto: Vercel tarda un par de minutos en construir y mientras
+tanto sigue sirviendo la versión anterior. **Las dos migraciones se corren
+apenas el despliegue de `main` aparece como Ready**, en orden
+(`cambios_de_agenda` y después `planes_y_dia_de_prueba`), y se marcan acá
+con la fecha. Para comprobar que quedaron, ver "Saber si una migración ya
+corrió, desde afuera": con las funciones creadas, `cancelar_dia_de_prueba` y
+`comprar_plan_de_jardin` dejan de dar `404`.
+
 La prueba de aislamiento (`supabase/pruebas/aislamiento.sh`) ya corrió en
 verde con las once primeras, en la sesión que juntó las ramas (`39f7663`),
 y con las quince (hasta `planes_y_dia_de_prueba`) el 22-10-2026, en la
@@ -1681,30 +1713,52 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
 
 **Afuera del código** (lo hace la dueña o quien tenga acceso a los paneles):
 
-1. Correr en Supabase las migraciones **sin confirmar** de la tabla de
-   arriba, en orden, y marcarlas.
-2. Cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel, proyecto **`lapatoteca`**,
+1. **Urgente:** correr en Supabase `20261022150000_cambios_de_agenda` y
+   `20261022160000_planes_y_dia_de_prueba`, en ese orden, apenas el
+   despliegue de `main` del 22-10 quede listo. Hasta entonces agendar el día
+   de prueba, usar o comprar un plan y cancelar desde el portal fallan.
+   Marcarlas en la tabla.
+2. Después de correrlas, **ordenar lo que dejaron a medias los bugs que
+   arreglan**:
+   - Los días de prueba cancelados a medias: la estadía `cancelada`, el
+     perro todavía `agendado` y el cobro pendiente. Pasó al menos con
+     **Emma** (cuenta de javi), agendada para el 22-10. Se encuentran con
+     `select f.id, f.nombre, e.id as estadia from perros f join
+     estadias_jardin e on e.perro_id = f.id and e.origen = 'dia_de_prueba'
+     where f.dia_de_prueba->>'estado' = 'agendado' and e.estado =
+     'cancelada' and not exists (select 1 from estadias_jardin v where
+     v.perro_id = f.id and v.origen = 'dia_de_prueba' and v.estado <>
+     'cancelada');` y se arreglan devolviendo el perro a
+     `{"estado": "pendiente"}` y dejando el cobro en lo que corresponda
+     (reembolsado en cero si avisó a tiempo, $5.000 si no).
+   - Los planes que se compraron sin cobro (la compra fallaba después de
+     crear el plan): `select p.* from planes p left join pagos g on
+     g.referencia_id = p.id and g.concepto = 'plan' where g.id is null;`.
+3. Cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel, proyecto **`lapatoteca`**,
    Production y Preview, como Secret. Después **Redeploy** sin caché.
-3. Revisar las **Redirect URLs** de Supabase (Authentication → URL
+4. Revisar las **Redirect URLs** de Supabase (Authentication → URL
    Configuration): tienen que estar `https://www.lapatoteca.cl/**`,
    `https://lapatoteca.cl/**` y `https://*.vercel.app/**`. Si falta, el
    correo de invitación deja a la persona en la portada.
-4. Confirmar que el **tope de correos por hora** de Supabase se subió en
+5. Confirmar que el **tope de correos por hora** de Supabase se subió en
    Authentication → Rate Limits (ver más arriba: Resend solo no lo sube).
-5. En `/admin/configuracion`: cargar el WhatsApp de la casa y la cuenta para
+6. En `/admin/configuracion`: cargar el WhatsApp de la casa y la cuenta para
    transferir.
-6. Volver a invitar a `pxeclt@gmail.com` **con su nombre**: su invitación se
+7. Volver a invitar a `pxeclt@gmail.com` **con su nombre**: su invitación se
    anotó antes de que existiera el correo, y mandarla sin nombre lo deja
    firmando los reportes con el correo.
-7. Probar en la vista previa de `pruebas` **del proyecto `lapatoteca`** —no
+8. Probar en la vista previa de `pruebas` **del proyecto `lapatoteca`** —no
    en `lapatoteca-app-git-pruebas-…`, que es el proyecto viejo— y recién
    entonces pasar `pruebas` a `main`.
 
 **Decisiones de producto abiertas:**
 
-- **Planes y tienda nacen pagados** (con un "webpay" que no existe), mientras
-  que el hotel, el día de prueba y el día suelto nacen pendientes hasta que
-  Administración concilia la transferencia. ¿Se igualan?
+- **La tienda nace pagada** (con un "webpay" que no existe), mientras que
+  todo lo demás nace pendiente hasta que Administración concilia la
+  transferencia. Los planes ya se igualaron (22-10): darlos por pagados
+  hacía fallar la compra en la nube. La tienda tiene el **mismo bug** —crea
+  la orden "pagada", descuenta stock y falla al crear el cobro—, así que
+  igualarla no es solo una decisión: hoy en la nube no funciona.
 - **El sexo quedó fijo para el dueño**, igual que la castración, porque
   decide si a un macho se le exige. Lo decidió una sesión; falta que la dueña
   lo confirme.
