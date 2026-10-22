@@ -1608,6 +1608,25 @@ Los nombres de los parámetros cuentan —el `404` lista los que buscó—. Los
 controles que se usaron el 22-10-2026: `funcion_que_no_existe` (da `404`) y
 `descontar_stock` con `producto` y `cantidad` (existe, da `401`).
 
+#### Borrar un cliente de prueba
+
+Para dejar la base limpia después de probar. Todo lo de un cliente cuelga de
+su ficha (`clientes`) y se va en cascada: perros, días, hotel, planes,
+servicios, cobros, órdenes, avisos y mensajes. Quedan dos cosas aparte:
+
+- **Los reportes** guardan sus perros en una lista (`perro_ids`) sin llave
+  foránea: el que era solo de ese perro se borra, y en uno compartido se le
+  saca el perro y el reporte queda.
+- **La cuenta de acceso** vive en `auth.users`, y borrar la ficha no la
+  toca. Se borra después —si no, ese correo no se puede volver a registrar—
+  y en ese orden: borrarla primero deja la ficha suelta, sin dueño.
+
+Las consultas siempre filtran `perfiles.rol = 'cliente'`: un correo del
+equipo no se borra por error. Corren desde el editor SQL, que es dueño de las
+tablas y por eso no lo frena RLS. Las del 22-10-2026, con las que se borró la
+cuenta de prueba `garbarian5@gmail.com` y su perra Emma, están en el
+historial de la sesión; se rehacen con este mismo esquema.
+
 #### Las políticas se prueban, no se leen
 
 ```
@@ -1910,7 +1929,9 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
    `20261022160000_planes_y_dia_de_prueba`~~ — hecho el 22-10-2026,
    verificado desde afuera.
 2. ~~Ordenar lo que dejaron a medias los bugs que arreglan~~ — hecho el
-   22-10-2026. Se confirmaron en la base los 6 disparadores nuevos. El único
+   22-10-2026. Después, ese mismo día, se borró la cuenta de prueba
+   (`garbarian5@gmail.com`, con Emma) y todo lo suyo para partir de cero
+   (ver "Borrar un cliente de prueba"). Se confirmaron en la base los 6 disparadores nuevos. El único
    día de prueba cancelado a medias era el de **Emma** (cuenta de prueba de
    la dueña): volvió a `pendiente` y su cobro quedó reembolsado en $0. No
    había planes sin cobro. Si vuelve a aparecer algo así, las consultas son:
