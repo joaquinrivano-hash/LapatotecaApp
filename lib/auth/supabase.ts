@@ -179,6 +179,45 @@ export function crearAutenticacionSupabase(
       if (error) throw new ErrorAutenticacion(explicarAuth(error));
     },
 
+    async abrirDesdeEnlace(enlace) {
+      if (enlace.tipo === "error") throw new ErrorAutenticacion(enlace.mensaje);
+
+      if (enlace.tipo === "sesion") {
+        // A mano porque el cliente PKCE descarta este formato (ver enlace.ts).
+        const { data, error } = await sb.auth.setSession({
+          access_token: enlace.accessToken,
+          refresh_token: enlace.refreshToken,
+        });
+        if (error || !data.user) {
+          throw new ErrorAutenticacion(
+            error ? explicarAuth(error) : "No pudimos abrir la sesión.",
+          );
+        }
+        return identidadDe(data.user);
+      }
+
+      if (enlace.tipo === "verificar") {
+        const { data, error } = await sb.auth.verifyOtp({
+          token_hash: enlace.tokenHash,
+          type: enlace.type,
+        });
+        if (error || !data.user) {
+          throw new ErrorAutenticacion(
+            error ? explicarAuth(error) : "No pudimos abrir la sesión.",
+          );
+        }
+        return identidadDe(data.user);
+      }
+
+      // Sin nada en la URL puede que la sesión ya esté abierta: la persona
+      // recargó la pantalla después de abrir el enlace.
+      const { data } = await sb.auth.getUser();
+      if (!data.user) {
+        throw new ErrorAutenticacion("El enlace venció o ya se usó.");
+      }
+      return identidadDe(data.user);
+    },
+
     async salir() {
       const { error } = await sb.auth.signOut();
       if (error) throw new ErrorAutenticacion(explicarAuth(error));

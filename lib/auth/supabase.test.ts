@@ -301,3 +301,55 @@ describe("alCambiar", () => {
     expect(unsubscribe).toHaveBeenCalled();
   });
 });
+
+describe("abrirDesdeEnlace", () => {
+  // El cliente PKCE descarta la sesión que trae la invitación en el
+  // fragmento, así que la app la abre a mano con setSession.
+  it("abre la sesión que trae la invitación", async () => {
+    const setSession = vi.fn().mockResolvedValue({ data: { user: usuario } });
+    const { auth } = doble(
+      { setSession } as Auth,
+      tablas({ rol: "staff", nombre: "Javiera" }, null),
+    );
+
+    const identidad = await auth.abrirDesdeEnlace({
+      tipo: "sesion",
+      accessToken: "aaa",
+      refreshToken: "bbb",
+    });
+
+    expect(setSession).toHaveBeenCalledWith({
+      access_token: "aaa",
+      refresh_token: "bbb",
+    });
+    expect(identidad.rol).toBe("staff");
+    expect(identidad.staff).toBe("Javiera");
+  });
+
+  it("verifica el token_hash cuando la plantilla lo manda así", async () => {
+    const verifyOtp = vi.fn().mockResolvedValue({ data: { user: usuario } });
+    const { auth } = doble({ verifyOtp } as Auth, tablas({ rol: "admin" }, null));
+
+    await auth.abrirDesdeEnlace({ tipo: "verificar", tokenHash: "xyz", type: "invite" });
+
+    expect(verifyOtp).toHaveBeenCalledWith({ token_hash: "xyz", type: "invite" });
+  });
+
+  it("un enlace vencido falla con el motivo, sin tocar la sesión", async () => {
+    const setSession = vi.fn();
+    const { auth } = doble({ setSession } as Auth);
+
+    await expect(
+      auth.abrirDesdeEnlace({ tipo: "error", mensaje: "El enlace venció o ya se usó." }),
+    ).rejects.toThrow(/venció/);
+    expect(setSession).not.toHaveBeenCalled();
+  });
+
+  it("sin enlace, sirve la sesión que ya estaba abierta", async () => {
+    const getUser = vi.fn().mockResolvedValue({ data: { user: usuario } });
+    const { auth } = doble({ getUser } as Auth, tablas({ rol: "staff" }, null));
+
+    const identidad = await auth.abrirDesdeEnlace({ tipo: "nada" });
+    expect(identidad.rol).toBe("staff");
+  });
+});

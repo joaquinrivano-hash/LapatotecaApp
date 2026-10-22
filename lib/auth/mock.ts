@@ -49,6 +49,10 @@ export function crearAutenticacionMock(): Autenticacion {
       throw new ErrorAutenticacion(SIN_CONTRASENAS);
     },
 
+    async abrirDesdeEnlace() {
+      throw new ErrorAutenticacion(SIN_CONTRASENAS);
+    },
+
     async salir() {
       useSesion.getState().salir();
     },
