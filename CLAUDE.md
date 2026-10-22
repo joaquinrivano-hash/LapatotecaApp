@@ -1997,8 +1997,8 @@ producción, con `build`, `lint`, `test` y la prueba de aislamiento en verde.
    Después se marca "Corrida" en la tabla de migraciones y en "Dónde vive
    cada cosa". Hasta entonces, un día de prueba pagado y cancelado a tiempo
    no aparece en "Por devolver".
-2. **Paso 7**: mandarle a `pxeclt@gmail.com` el enlace por WhatsApp desde
-   `/admin/equipo`.
+2. ~~**Paso 7**: mandarle a `pxeclt@gmail.com` el enlace por WhatsApp desde
+   `/admin/equipo`~~ — mandado el 22-10-2026; falta que cree su cuenta.
 3. Decir **de quién es la cuenta para transferir** (empresa o personal): se
    lee sin sesión (ver "Lo que vive en la base y se edita desde la app").
 4. Confirmar **la regla nueva del día de prueba pagado y cancelado tarde**:
@@ -2133,10 +2133,12 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
    para transferir~~ — hecho el 22-10-2026, verificado desde afuera. Queda
    decidir si los datos de pago siguen visibles sin sesión (ver "Lo que vive
    en la base y se edita desde la app").
-7. Mandarle a `pxeclt@gmail.com` el enlace por WhatsApp desde
-   `/admin/equipo`, si su invitación sigue en la lista. Al crear su cuenta en
-   `/crear-cuenta/equipo` con ese mismo correo escribe su nombre, que es con
-   el que firma los reportes, y queda con el rol de la invitación.
+7. ~~Mandarle a `pxeclt@gmail.com` el enlace por WhatsApp desde
+   `/admin/equipo`~~ — **mandado el 22-10-2026** (lo dijo la dueña). Falta
+   que esa persona cree su cuenta en `/crear-cuenta/equipo` con ese mismo
+   correo: ahí escribe su nombre, que es con el que firma los reportes, y
+   queda con el rol de la invitación. **Sin confirmar** que ya la creó: se
+   ve en `/admin/equipo`, donde la invitación pasa a usada.
 8. Probar en la vista previa de `pruebas` **del proyecto `lapatoteca`** —no
    en `lapatoteca-app-git-pruebas-…`, que es el proyecto viejo— y recién
    entonces pasar `pruebas` a `main`.
