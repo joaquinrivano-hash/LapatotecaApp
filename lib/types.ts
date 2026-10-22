@@ -71,6 +71,12 @@ export interface DiaDePrueba {
   estado: EstadoDiaDePrueba;
   fecha?: FechaISO;
   nota?: string;
+  /**
+   * Aprobado sin venir: ya era cliente antes de la app. La casa lo conoce, y
+   * pedirle una evaluación —y $10.000— a un perro que viene hace años sería
+   * tratarlo como un desconocido. Ver `aprobarSinDiaDePrueba`.
+   */
+  yaEraCliente?: boolean;
 }
 
 /**

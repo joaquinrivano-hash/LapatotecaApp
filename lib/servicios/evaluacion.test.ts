@@ -5,14 +5,17 @@ import { crearAlmacenMemoria } from "@/lib/repo/almacen";
 import { CLAVE_ALMACEN, crearRepositorioLocal } from "@/lib/repo/local";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
 import {
+  aprobarSinDiaDePrueba,
   diasDePruebaPorEvaluar,
   diasDePruebaQueVienen,
   esperandoSuPrimeraReserva,
+  inscritosSinDiaDePrueba,
+  previaDeAprobarSinDiaDePrueba,
   reciénAprobados,
   resolverDiaDePrueba,
 } from "@/lib/servicios/evaluacion";
 import { instanteEnHora } from "@/lib/utils/fecha";
-import type { Cliente, EstadiaJardin, Perro } from "@/lib/types";
+import type { Cliente, EstadiaJardin, Pago, Perro } from "@/lib/types";
 
 const HOY = "2026-10-22";
 let repo: RepositorioPatoteca;
@@ -333,5 +336,200 @@ describe("diasDePruebaQueVienen", () => {
 
     const cola = await diasDePruebaQueVienen(repo, HOY);
     expect(cola.map((x) => x.perro.nombre)).toEqual(["Mota", "Trufa"]);
+  });
+});
+
+describe("aprobarSinDiaDePrueba", () => {
+  const AHORA = "2026-10-22T15:00:00.000Z";
+
+  const cobro = (extra: Partial<Pago> = {}): Pago => ({
+    id: "pago-1",
+    clienteId: "cli-1",
+    concepto: "dia_de_prueba",
+    referenciaId: "est-1",
+    monto: 10000,
+    estado: "pendiente",
+    emitidoEn: "2026-10-20T12:00:00.000Z",
+    venceEn: "2026-10-21",
+    ...extra,
+  });
+
+  it("aprueba sin que venga y lo deja marcado como cliente de antes", async () => {
+    montar({ perros: [perro({ diaDePrueba: { estado: "pendiente" } })] });
+
+    const { perro: aprobado, estadia, aDevolver } = await aprobarSinDiaDePrueba(
+      repo,
+      "perro-1",
+      AHORA,
+    );
+
+    expect(aprobado.diaDePrueba).toMatchObject({
+      estado: "aprobado",
+      fecha: "2026-10-22",
+      yaEraCliente: true,
+    });
+    expect(estadia).toBeNull();
+    expect(aDevolver).toBe(0);
+  });
+
+  it("si alcanzó a agendar, cancela el día y anula el cobro pendiente", async () => {
+    montar({
+      perros: [perro({ diaDePrueba: { estado: "agendado", fecha: "2026-10-29" } })],
+      estadiasJardin: [estadia("2026-10-29", { estado: "esperada" })],
+      pagos: [cobro()],
+    });
+
+    const { estadia: cancelada, aDevolver } = await aprobarSinDiaDePrueba(
+      repo,
+      "perro-1",
+      AHORA,
+    );
+
+    expect(cancelada?.id).toBe("est-1");
+    expect(aDevolver).toBe(0);
+    expect((await repo.estadiasJardin.obtener("est-1"))?.estado).toBe("cancelada");
+    const pago = await repo.pagos.obtener("pago-1");
+    expect(pago).toMatchObject({ monto: 0, estado: "reembolsado" });
+    expect(pago?.venceEn).toBeUndefined();
+  });
+
+  // Mañana a primera hora: con el dueño cancelando sería tardío y le
+  // costaría el cargo. Acá no canceló él, así que no hay política de aviso.
+  it("lo pagado vuelve entero aunque el día sea mañana", async () => {
+    montar({
+      perros: [perro({ diaDePrueba: { estado: "agendado", fecha: "2026-10-23" } })],
+      estadiasJardin: [estadia("2026-10-23", { estado: "esperada" })],
+      pagos: [cobro({ estado: "pagado", pagadoEn: "2026-10-21T12:00:00.000Z" })],
+    });
+
+    const { aDevolver } = await aprobarSinDiaDePrueba(repo, "perro-1", AHORA);
+
+    expect(aDevolver).toBe(10000);
+    expect(await repo.pagos.obtener("pago-1")).toMatchObject({
+      monto: 10000,
+      estado: "reembolsado",
+    });
+  });
+
+  it("la previa dice lo mismo que va a pasar, sin cambiar nada", async () => {
+    montar({
+      perros: [perro({ diaDePrueba: { estado: "agendado", fecha: "2026-10-23" } })],
+      estadiasJardin: [estadia("2026-10-23", { estado: "esperada" })],
+      pagos: [cobro({ estado: "pagado" })],
+    });
+
+    const previa = await previaDeAprobarSinDiaDePrueba(repo, "perro-1");
+
+    expect(previa.estadia?.id).toBe("est-1");
+    expect(previa.aDevolver).toBe(10000);
+    expect((await repo.perros.obtener("perro-1"))?.diaDePrueba.estado).toBe("agendado");
+    expect((await repo.pagos.obtener("pago-1"))?.estado).toBe("pagado");
+  });
+
+  // Si algo falla a mitad de camino, volver a tocar el botón termina lo que
+  // faltó sin volver a tocar lo que ya se hizo.
+  it("repetirlo a medias termina lo que faltó", async () => {
+    montar({
+      perros: [perro({ diaDePrueba: { estado: "agendado", fecha: "2026-10-29" } })],
+      estadiasJardin: [estadia("2026-10-29", { estado: "cancelada" })],
+      pagos: [cobro({ estado: "reembolsado", monto: 0 })],
+    });
+
+    const { perro: aprobado, estadia: cancelada } = await aprobarSinDiaDePrueba(
+      repo,
+      "perro-1",
+      AHORA,
+    );
+    expect(aprobado.diaDePrueba.estado).toBe("aprobado");
+    expect(cancelada).toBeNull();
+  });
+
+  it("no toca un día de jardín normal del mismo perro", async () => {
+    montar({
+      perros: [perro({ diaDePrueba: { estado: "pendiente" } })],
+      estadiasJardin: [
+        estadia("2026-10-29", { estado: "esperada", origen: "dia_suelto" }),
+      ],
+    });
+
+    await aprobarSinDiaDePrueba(repo, "perro-1", AHORA);
+    expect((await repo.estadiasJardin.obtener("est-1"))?.estado).toBe("esperada");
+  });
+
+  it("no se aprueba dos veces", async () => {
+    montar({ perros: [perro({ diaDePrueba: { estado: "aprobado" } })] });
+    await expect(aprobarSinDiaDePrueba(repo, "perro-1", AHORA)).rejects.toThrow(
+      "ya está aprobado",
+    );
+  });
+
+  // La casa ya lo miró y dijo que no: eso no es saltarse una evaluación.
+  it("no se salta un rechazo", async () => {
+    montar({
+      perros: [perro({ diaDePrueba: { estado: "rechazado", nota: "brusco" } })],
+    });
+    await expect(aprobarSinDiaDePrueba(repo, "perro-1", AHORA)).rejects.toThrow(
+      "no aprobó su día de prueba",
+    );
+  });
+
+  it("si ya vino, lo que falta es el veredicto", async () => {
+    montar({
+      perros: [perro()],
+      estadiasJardin: [estadia("2026-10-20", { estado: "finalizada" })],
+    });
+    await expect(aprobarSinDiaDePrueba(repo, "perro-1", AHORA)).rejects.toThrow(
+      "ya vino a su día de prueba",
+    );
+  });
+
+  it("si está en la casa ahora, tampoco", async () => {
+    montar({
+      perros: [perro({ diaDePrueba: { estado: "agendado", fecha: HOY } })],
+      estadiasJardin: [estadia(HOY, { estado: "presente" })],
+    });
+    await expect(aprobarSinDiaDePrueba(repo, "perro-1", AHORA)).rejects.toThrow(
+      "está en la casa",
+    );
+  });
+
+  it("queda listo para reservar y el dueño se entera", async () => {
+    montar({ perros: [perro({ diaDePrueba: { estado: "pendiente" } })] });
+    await aprobarSinDiaDePrueba(repo, "perro-1", AHORA);
+    const listos = await reciénAprobados(repo, "cli-1");
+    expect(listos.map((p) => p.nombre)).toEqual(["Trufa"]);
+  });
+});
+
+describe("inscritosSinDiaDePrueba", () => {
+  it("trae los pendientes, el más reciente primero", async () => {
+    montar({
+      perros: [
+        perro({
+          id: "perro-1",
+          nombre: "Trufa",
+          diaDePrueba: { estado: "pendiente" },
+          creadoEn: "2026-10-10T12:00:00.000Z",
+        }),
+        perro({
+          id: "perro-2",
+          nombre: "Mota",
+          diaDePrueba: { estado: "pendiente" },
+          creadoEn: "2026-10-21T12:00:00.000Z",
+        }),
+        perro({ id: "perro-3", nombre: "Agendada" }),
+        perro({ id: "perro-4", nombre: "Lista", diaDePrueba: { estado: "aprobado" } }),
+      ],
+    });
+
+    const inscritos = await inscritosSinDiaDePrueba(repo, HOY);
+    expect(inscritos.map((x) => x.perro.nombre)).toEqual(["Mota", "Trufa"]);
+    expect(inscritos[0].diasInscrito).toBe(1);
+    expect(inscritos[0].cliente?.nombre).toBe("Camila");
+  });
+
+  it("sin pendientes no trae nada", async () => {
+    montar({ perros: [perro({ diaDePrueba: { estado: "aprobado" } })] });
+    await expect(inscritosSinDiaDePrueba(repo, HOY)).resolves.toEqual([]);
   });
 });

@@ -178,3 +178,58 @@ export function aDevolverAlCancelar(
 ): number {
   return politica.sinCosto ? pagado : Math.max(0, pagado - politica.costo);
 }
+
+export interface CobroPerdonado {
+  id: ID;
+  cambios: Partial<Pago>;
+}
+
+/**
+ * Qué pasa con los cobros de un día de prueba que la casa perdona.
+ *
+ * Es el cliente antiguo: viene hace tiempo, se inscribe en la app y alcanzó
+ * a agendar su día de prueba antes de que Administración lo aprobara. No es
+ * una cancelación del dueño —la decide la casa—, así que no hay política de
+ * aviso: se perdona entero, también el cargo por moverlo tarde, porque nunca
+ * debió tener que agendarlo.
+ *
+ * Igual que una cancelación a tiempo:
+ *
+ * - **Pendiente** → anulado: queda reembolsado en cero, que es la constancia
+ *   de que existió. No hay plata que mover.
+ * - **Pagado** → reembolsado conservando el monto: es lo que se le debe, y
+ *   lo que aparece en "Por devolver".
+ * - **Ya reembolsado** → no se toca. Así perdonar dos veces no hace nada.
+ */
+export function perdonarCobrosDelDiaDePrueba(
+  pagos: Pago[],
+  estadiaId: ID,
+): { cobros: CobroPerdonado[]; aDevolver: number } {
+  const cobros: CobroPerdonado[] = [];
+  let aDevolver = 0;
+
+  for (const pago of pagos) {
+    if (pago.referenciaId !== estadiaId || pago.concepto !== "dia_de_prueba") {
+      continue;
+    }
+    if (pago.estado === "pagado") {
+      aDevolver += pago.monto;
+      cobros.push({
+        id: pago.id,
+        cambios: { estado: "reembolsado", venceEn: undefined },
+      });
+    } else if (pago.estado === "pendiente" || pago.estado === "vencido") {
+      cobros.push({
+        id: pago.id,
+        cambios: {
+          monto: 0,
+          estado: "reembolsado",
+          pagadoEn: undefined,
+          venceEn: undefined,
+        },
+      });
+    }
+  }
+
+  return { cobros, aDevolver };
+}

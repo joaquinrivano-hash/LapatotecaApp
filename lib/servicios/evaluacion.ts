@@ -16,6 +16,7 @@
  */
 
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
+import { perdonarCobrosDelDiaDePrueba } from "@/lib/rules/dia-de-prueba";
 import { fechaISO } from "@/lib/utils/fecha";
 import type {
   Cliente,
@@ -189,6 +190,173 @@ export async function resolverDiaDePrueba(
       nota: nota?.trim() || perro.diaDePrueba.nota,
     },
   });
+}
+
+/* ── El que ya era cliente ─────────────────────────────────────────── */
+
+/**
+ * Hay clientes que vienen hace años y entran a la app por primera vez. El
+ * alta les crea el perro con el día de prueba pendiente, como a cualquiera,
+ * y pedirle una evaluación —y $10.000— a un perro que la casa conoce de
+ * memoria sería tratarlo como a un desconocido.
+ *
+ * Por eso Administración lo puede aprobar sin que venga. Es una decisión de
+ * la casa y no del dueño: el dueño no puede declararse cliente antiguo, y el
+ * alta sigue naciendo pendiente para todos.
+ */
+
+export interface AprobacionSinDiaDePrueba {
+  /** El día de prueba que alcanzó a agendar y que se cancela, si había uno. */
+  estadia: EstadiaJardin | null;
+  /** Lo que ya había pagado por ese día: vuelve entero, en "Por devolver". */
+  aDevolver: number;
+}
+
+/**
+ * Lo que va a pasar si se aprueba sin día de prueba. No cambia nada: es para
+ * mostrarlo ANTES de confirmar, igual que las condiciones de una cancelación.
+ */
+export async function previaDeAprobarSinDiaDePrueba(
+  repo: RepositorioPatoteca,
+  perroId: ID,
+): Promise<AprobacionSinDiaDePrueba> {
+  const { perro, esperadas } = await loQueHayQueSaltarse(repo, perroId);
+  if (esperadas.length === 0) return { estadia: null, aDevolver: 0 };
+
+  const pagos = await repo.pagos.porCliente(perro.clienteId);
+  const aDevolver = esperadas.reduce(
+    (total, e) => total + perdonarCobrosDelDiaDePrueba(pagos, e.id).aDevolver,
+    0,
+  );
+  return { estadia: esperadas[0], aDevolver };
+}
+
+/**
+ * Aprueba el día de prueba de un perro que ya era cliente, sin que venga y
+ * sin cobrarle.
+ *
+ * Si alcanzó a agendar su día de prueba, se cancela y sus cobros se perdonan
+ * enteros (`perdonarCobrosDelDiaDePrueba`): lo pendiente se anula y lo
+ * pagado queda en "Por devolver". Sin política de aviso, porque no canceló
+ * él: la casa decidió que no le hacía falta.
+ *
+ * Se puede repetir sin hacer daño, y por eso el orden: primero los cobros,
+ * después el día, al final el perro. Si algo falla a mitad de camino, volver
+ * a tocar el botón termina lo que faltó — lo ya perdonado no se vuelve a
+ * tocar y lo ya cancelado ya no aparece.
+ */
+export async function aprobarSinDiaDePrueba(
+  repo: RepositorioPatoteca,
+  perroId: ID,
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<AprobacionSinDiaDePrueba & { perro: Perro }> {
+  const { perro, esperadas } = await loQueHayQueSaltarse(repo, perroId);
+
+  let aDevolver = 0;
+  if (esperadas.length > 0) {
+    const pagos = await repo.pagos.porCliente(perro.clienteId);
+    for (const estadia of esperadas) {
+      const perdon = perdonarCobrosDelDiaDePrueba(pagos, estadia.id);
+      for (const cobro of perdon.cobros) {
+        await repo.pagos.actualizar(cobro.id, cobro.cambios);
+      }
+      await repo.estadiasJardin.actualizar(estadia.id, { estado: "cancelada" });
+      aDevolver += perdon.aDevolver;
+    }
+  }
+
+  const aprobado = await repo.perros.actualizar(perroId, {
+    diaDePrueba: {
+      estado: "aprobado",
+      // Es cuando se decidió: no vino ningún día que anotar.
+      fecha: fechaISO(ahora),
+      nota: "Ya era cliente antes de la app: aprobado sin día de prueba.",
+      yaEraCliente: true,
+    },
+  });
+
+  return { perro: aprobado, estadia: esperadas[0] ?? null, aDevolver };
+}
+
+/**
+ * Revisa que el perro se pueda aprobar sin venir, y junta los días de prueba
+ * agendados que habría que cancelar.
+ */
+async function loQueHayQueSaltarse(
+  repo: RepositorioPatoteca,
+  perroId: ID,
+): Promise<{ perro: Perro; esperadas: EstadiaJardin[] }> {
+  const perro = await repo.perros.obtener(perroId);
+  if (!perro) throw new Error("Ese perro ya no está.");
+
+  const { estado } = perro.diaDePrueba;
+  if (estado === "aprobado") {
+    throw new Error(`${perro.nombre} ya está aprobado.`);
+  }
+  if (estado === "rechazado") {
+    // Saltarse un rechazo no es lo mismo que saltarse una evaluación: la
+    // casa ya lo miró y dijo que no. Si fue un error, se corrige en la ficha.
+    throw new Error(
+      `${perro.nombre} no aprobó su día de prueba. Si fue un error, ` +
+        "cámbialo desde su ficha.",
+    );
+  }
+
+  const delDia = (await repo.estadiasJardin.porPerro(perroId)).filter(
+    (e) => e.origen === "dia_de_prueba",
+  );
+  if (delDia.some((e) => e.estado === "presente")) {
+    throw new Error(
+      `${perro.nombre} está en la casa en su día de prueba: dale el ` +
+        "veredicto cuando termine.",
+    );
+  }
+  // Ya vino: lo que falta es el veredicto, no saltárselo.
+  if (estado === "agendado" && delDia.some((e) => e.estado === "finalizada")) {
+    throw new Error(
+      `${perro.nombre} ya vino a su día de prueba: dale el veredicto en el ` +
+        "tablero.",
+    );
+  }
+
+  return { perro, esperadas: delDia.filter((e) => e.estado === "esperada") };
+}
+
+export interface InscritoSinDiaDePrueba {
+  perro: Perro;
+  cliente: Cliente | null;
+  /** Hace cuántos días se inscribió. 0 es hoy. */
+  diasInscrito: number;
+}
+
+/**
+ * Los perros inscritos que todavía no agendan su día de prueba.
+ *
+ * Es donde aparece el cliente antiguo apenas crea su cuenta, para aprobarlo
+ * de un toque sin tener que ir a buscarlo a Clientes. Y también el cliente
+ * nuevo que se inscribió y no agendó, que es alguien a quien escribirle.
+ *
+ * Los más recientes primero: el que se acaba de inscribir es el que está
+ * esperando una respuesta.
+ */
+export async function inscritosSinDiaDePrueba(
+  repo: RepositorioPatoteca,
+  hoy: FechaISO,
+): Promise<InscritoSinDiaDePrueba[]> {
+  const perros = await repo.perros.listar();
+  const pendientes = perros.filter((p) => p.diaDePrueba.estado === "pendiente");
+  if (pendientes.length === 0) return [];
+
+  const clientes = await repo.clientes.listar();
+  const porCliente = new Map(clientes.map((c) => [c.id, c]));
+
+  return pendientes
+    .map((perro) => ({
+      perro,
+      cliente: porCliente.get(perro.clienteId) ?? null,
+      diasInscrito: diasEntreISO(fechaISO(perro.creadoEn), hoy),
+    }))
+    .sort((a, b) => b.perro.creadoEn.localeCompare(a.perro.creadoEn));
 }
 
 /* ── Lo que el dueño tiene que enterarse ───────────────────────────── */

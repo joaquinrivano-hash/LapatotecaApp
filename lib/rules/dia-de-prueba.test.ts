@@ -7,6 +7,7 @@ import {
   cobroDelDiaDePrueba,
   hayBloquesLibres,
   minutosDeEntrada,
+  perdonarCobrosDelDiaDePrueba,
   politicaConAviso,
   politicaDeCancelacion,
   rangoDelBloque,
@@ -191,5 +192,82 @@ describe("cobroDelDiaDePrueba", () => {
       cobro("otro", "2026-06-01T10:00:00.000Z", "dia_suelto"),
     ];
     expect(cobroDelDiaDePrueba(pagos, "e1")?.id).toBe("dia");
+  });
+});
+
+describe("perdonarCobrosDelDiaDePrueba", () => {
+  const cobro = (id: string, extra: Partial<Pago> = {}) =>
+    ({
+      id,
+      clienteId: "c1",
+      concepto: "dia_de_prueba",
+      referenciaId: "e1",
+      monto: 10000,
+      estado: "pendiente",
+      emitidoEn: "2026-10-10T10:00:00.000Z",
+      ...extra,
+    }) as Pago;
+
+  it("lo pendiente se anula: queda reembolsado en cero", () => {
+    const { cobros, aDevolver } = perdonarCobrosDelDiaDePrueba(
+      [cobro("dia", { venceEn: "2026-10-12" })],
+      "e1",
+    );
+    expect(aDevolver).toBe(0);
+    expect(cobros).toEqual([
+      {
+        id: "dia",
+        cambios: {
+          monto: 0,
+          estado: "reembolsado",
+          pagadoEn: undefined,
+          venceEn: undefined,
+        },
+      },
+    ]);
+  });
+
+  it("lo pagado vuelve entero y conserva el monto, para que salga en Por devolver", () => {
+    const { cobros, aDevolver } = perdonarCobrosDelDiaDePrueba(
+      [cobro("dia", { estado: "pagado", pagadoEn: "2026-10-11T10:00:00.000Z" })],
+      "e1",
+    );
+    expect(aDevolver).toBe(10000);
+    expect(cobros[0].cambios).toEqual({ estado: "reembolsado", venceEn: undefined });
+    expect(cobros[0].cambios).not.toHaveProperty("monto");
+  });
+
+  // No es una cancelación del dueño: la casa lo perdona entero, también el
+  // cargo por haberlo movido encima de la hora.
+  it("también perdona el cargo por moverlo tarde", () => {
+    const { cobros, aDevolver } = perdonarCobrosDelDiaDePrueba(
+      [
+        cobro("dia", { estado: "pagado" }),
+        cobro("cargo", { monto: 5000, emitidoEn: "2026-10-12T10:00:00.000Z" }),
+      ],
+      "e1",
+    );
+    expect(cobros.map((c) => c.id)).toEqual(["dia", "cargo"]);
+    expect(aDevolver).toBe(10000);
+  });
+
+  it("perdonar dos veces no hace nada: lo reembolsado no se toca", () => {
+    const { cobros, aDevolver } = perdonarCobrosDelDiaDePrueba(
+      [cobro("dia", { estado: "reembolsado", monto: 0 })],
+      "e1",
+    );
+    expect(cobros).toEqual([]);
+    expect(aDevolver).toBe(0);
+  });
+
+  it("no toca cobros de otra estadía ni de otro concepto", () => {
+    const { cobros } = perdonarCobrosDelDiaDePrueba(
+      [
+        cobro("otra-estadia", { referenciaId: "e2" }),
+        cobro("dia-suelto", { concepto: "dia_suelto" }),
+      ],
+      "e1",
+    );
+    expect(cobros).toEqual([]);
   });
 });
