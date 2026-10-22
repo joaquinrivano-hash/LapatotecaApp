@@ -1920,7 +1920,8 @@ el RUT y el número de cuenta. La tabla está abierta porque el formulario de
 alta la necesita antes de que exista una cuenta (ver "La nube"). Si la
 cuenta es de la empresa, es lo mismo que ponerla en una boleta; si el RUT es
 personal, conviene mover los datos de pago a algo que solo vea quien tiene
-sesión. **Pendiente de que la dueña diga de quién es la cuenta.**
+sesión. **Es de la empresa** (lo dijo la dueña el 22-10-2026), así que se
+queda como está.
 
 #### Qué migraciones corrieron en producción
 
@@ -1996,15 +1997,15 @@ producción, con `build`, `lint`, `test` y la prueba de aislamiento en verde.
    editor SQL~~ — corrida el 22-10-2026, la consulta de `pg_proc` dio `true`.
 2. ~~**Paso 7**: mandarle a `pxeclt@gmail.com` el enlace por WhatsApp desde
    `/admin/equipo`~~ — mandado el 22-10-2026; falta que cree su cuenta.
-3. Decir **de quién es la cuenta para transferir** (empresa o personal): se
-   lee sin sesión (ver "Lo que vive en la base y se edita desde la app").
-4. Confirmar **la regla nueva del día de prueba pagado y cancelado tarde**:
-   se cobra el cargo de $5.000 y se devuelve el resto. La pantalla de
-   condiciones antes decía "no hay devolución" para el aviso tardío; se
-   cambió para que quien pagó antes no salga peor que quien no pagó (ver
-   "El día de prueba"). Si la dueña prefiere quedarse con todo, se revierte
+3. ~~Decir **de quién es la cuenta para transferir**~~ — de la empresa
+   (22-10-2026): puede seguir leyéndose sin sesión.
+4. ~~Confirmar **la regla nueva del día de prueba pagado y cancelado
+   tarde**~~ — confirmada el 22-10-2026: "se sigue la política", o sea el
+   cargo de $5.000 y se devuelve el resto. Si algún día cambia, se revierte
    en `aDevolverAlCancelar`, su gemela en SQL y el texto de
    `components/shared/politicas-dia-de-prueba.tsx`.
+5. **Desconectar `lapatoteca-app` del repo en Vercel** (paso 10 de "Lo que
+   falta hacer afuera"). La dueña lo pidió; una sesión no ve Vercel.
 
 **Lo que sigue en código**, sugerido y sin empezar:
 
@@ -2021,7 +2022,7 @@ producción, con `build`, `lint`, `test` y la prueba de aislamiento en verde.
 
 **Cómo retomar**: traer `main` y `pruebas`, correr `npm test`, leer esta
 sección y "Lo que falta hacer afuera", y preguntarle a la dueña cuáles de
-los cuatro pasos de arriba ya hizo.
+los pasos de arriba ya hizo.
 
 #### Lo que falta hacer afuera, y lo que falta decidir
 
@@ -2146,6 +2147,16 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
    `401` no distingue la versión: si hay que volver a comprobarlo, es
    con `select prosrc like '%a_devolver%' from pg_proc where
    proname = 'cancelar_dia_de_prueba';`, que tiene que dar `true`.
+10. **Desconectar el proyecto viejo `lapatoteca-app` del repo.** Lo pidió
+    la dueña el 22-10-2026. Cada push se publica dos veces —una en cada
+    proyecto— y es la sospecha principal de por qué producción dejó de
+    publicarse esa noche (ver el paso 0). Se hace en
+    `https://vercel.com/rivano1/lapatoteca-app/settings/git` →
+    **Disconnect**. Desconectar no borra el proyecto ni
+    `lapatoteca-apppruebas.vercel.app`: solo deja de publicar con cada push.
+    Borrarlo entero es Settings → General → Delete Project, al final.
+    **Sin confirmar** que se hizo: desde afuera se ve cuando el bot de
+    Vercel deja de nombrar a `lapatoteca-app` en los PR.
 
 **Decisiones de producto abiertas:**
 
@@ -2163,10 +2174,9 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
   igual que el peso?
 - **Fotos de productos**: el modelo tiene `imagenUrl`, pero ni el admin ni
   la tienda la usan.
-- **Cancelar tarde un día de prueba ya pagado devuelve el resto** (22-10):
-  la casa se queda con los $5.000 del cargo, no con los $10.000. Lo decidió
-  una sesión para que pagar antes no salga más caro; falta que la dueña lo
-  confirme.
+- ~~**Cancelar tarde un día de prueba ya pagado devuelve el resto**~~ —
+  confirmado por la dueña el 22-10: la casa se queda con los $5.000 del
+  cargo y devuelve el resto.
 
 #### Varias sesiones a la vez
 
