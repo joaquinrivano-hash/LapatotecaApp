@@ -187,6 +187,22 @@ export function formatearFechaLarga(valor: EntradaFecha): string {
   return fmt(valor, "EEEE d 'de' MMMM 'de' yyyy");
 }
 
+/**
+ * El día dicho como lo diría una persona, mirado desde `hoy`:
+ * "hoy jueves 22 de octubre", "mañana viernes 23 de octubre",
+ * "el próximo jueves 29 de octubre" (dentro de la semana que viene) y
+ * "el jueves 5 de noviembre" más allá. Sin año: lo que está cerca no lo
+ * necesita, y "2026-10-22" obliga a quien lee a hacer la cuenta.
+ */
+export function describirDia(fecha: FechaISO, hoy: FechaISO): string {
+  const dia = fmt(fecha, "EEEE d 'de' MMMM");
+  const faltan = diasEntre(hoy, fecha);
+  if (faltan === 0) return `hoy ${dia}`;
+  if (faltan === 1) return `mañana ${dia}`;
+  if (faltan > 1 && faltan <= 7) return `el próximo ${dia}`;
+  return `el ${dia}`;
+}
+
 /** "dom 21 sep" */
 export function formatearDiaMes(valor: EntradaFecha): string {
   return fmt(valor, "EEE d MMM");
