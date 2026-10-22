@@ -40,6 +40,7 @@ import { nombreDePlan, planVigente, saldoPlan } from "@/lib/rules/planes";
 import {
   cancelarDiaDeJardin,
   loPagadoPorElDia,
+  ReservaRechazada,
 } from "@/lib/servicios/reservas";
 import { alertasDePerro } from "@/lib/servicios/clientes";
 import { hoyDelStaff } from "@/lib/servicios/asistencia";
@@ -114,9 +115,19 @@ export default function MiCuenta() {
         inicioProgramado: r.inicioProgramado,
         esDiaDePrueba: false,
         porConfirmar: r.estado === "pendiente",
+        sePuedeCancelar: false,
       })),
+    // Lo que viene es lo que todavía no termina. Un día finalizado o al que
+    // el perro no llegó ya pasó, aunque sea de hoy: mostrarlo acá lo hacía
+    // parecer una reserva y ofrecía cancelarlo.
     ...(datos?.estadias ?? [])
-      .filter((e) => e.fecha >= hoy && e.estado !== "cancelada")
+      .filter(
+        (e) =>
+          e.fecha >= hoy &&
+          e.estado !== "cancelada" &&
+          e.estado !== "finalizada" &&
+          e.estado !== "no_show",
+      )
       .map((e) => ({
         id: e.id,
         linea: "jardin" as const,
@@ -127,6 +138,9 @@ export default function MiCuenta() {
         inicioProgramado: e.inicioProgramado,
         esDiaDePrueba: e.origen === "dia_de_prueba",
         porConfirmar: false,
+        // Si el perro ya llegó, no se cancela: es un retiro, y lo registra
+        // el equipo.
+        sePuedeCancelar: e.estado === "esperada",
       })),
   ].sort((a, b) => a.fecha.localeCompare(b.fecha));
 
@@ -367,7 +381,9 @@ export default function MiCuenta() {
 
                 {/* El día de prueba se cancela desde su propia pantalla, que
                     además deja reprogramar. */}
-                {item.linea === "jardin" && !item.esDiaDePrueba && (
+                {item.linea === "jardin" &&
+                  !item.esDiaDePrueba &&
+                  item.sePuedeCancelar && (
                   <CancelarDia
                     estadiaId={item.id}
                     inicioProgramado={item.inicioProgramado}
@@ -648,8 +664,22 @@ function CancelarDia({
                       ? "No te cobramos nada."
                       : "El día queda cobrado, como decía la condición.",
               });
-            } catch {
-              toast.error("No pudimos cancelar ese día.");
+            } catch (problema) {
+              // El motivo se dice: "no pudimos" a secas deja al dueño sin
+              // saber si reintentar o escribirnos.
+              toast.error(
+                problema instanceof ReservaRechazada
+                  ? problema.message
+                  : "No pudimos cancelar ese día.",
+                {
+                  description:
+                    problema instanceof ReservaRechazada
+                      ? problema.motivos.join(" ")
+                      : problema instanceof Error
+                        ? problema.message
+                        : undefined,
+                },
+              );
             }
           }}
         >

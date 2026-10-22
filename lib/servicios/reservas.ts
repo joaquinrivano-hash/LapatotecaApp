@@ -45,6 +45,7 @@ import type {
   DatosBancarios,
   DuracionPaseo,
   EstadiaJardin,
+  EstadoEstadia,
   FechaISO,
   ID,
   InstanteISO,
@@ -441,6 +442,15 @@ export async function simularCancelacionDeJardin(
   return { devolucion, aDevolver: devolucion.devuelve ? pagado : 0 };
 }
 
+/** Por qué un día que no está "esperada" ya no se cancela, dicho al dueño. */
+const POR_QUE_NO_SE_CANCELA: Record<EstadoEstadia, string> = {
+  esperada: "",
+  cancelada: "Ya estaba cancelado.",
+  presente: "El perro ya está en la casa: pídele al equipo que registre el retiro.",
+  finalizada: "Ese día ya terminó.",
+  no_show: "Ese día ya pasó.",
+};
+
 export async function cancelarDiaDeJardin(
   repo: RepositorioPatoteca,
   estadiaId: ID,
@@ -455,9 +465,7 @@ export async function cancelarDiaDeJardin(
   // cancelación, y lo registra el equipo.
   if (estadia.estado !== "esperada") {
     throw new ReservaRechazada("Ese día ya no se puede cancelar.", [
-      estadia.estado === "cancelada"
-        ? "Ya estaba cancelado."
-        : "El perro ya está en la casa: pídele al equipo que registre el retiro.",
+      POR_QUE_NO_SE_CANCELA[estadia.estado],
     ]);
   }
 

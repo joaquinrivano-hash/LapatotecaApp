@@ -726,6 +726,16 @@ cliente reserva a futuro y no hay ningún perro en la puerta que registrar.
 - La tienda, si un producto no alcanza, **compra lo que hay y lo avisa**, en
   vez de fallar la orden entera: en una tienda de mostrador eso es lo que pasa.
 - El desglose que ve el cliente muestra **cada descuento por separado**.
+- **"Lo que viene" es lo que todavía no termina.** Un día finalizado, o al
+  que el perro no llegó, ya pasó aunque sea de hoy, y no aparece ahí.
+  "Cancelar" se ofrece solo en un día **esperado**: si el perro ya llegó es
+  un retiro, y lo registra el equipo. Se vio en producción el 22-10: un
+  ingreso sin reserva ya cerrado salía como si fuera una reserva, ofrecía
+  cancelarlo, y al tocar fallaba con un "no pudimos" sin motivo.
+- **Cuando algo falla, la pantalla dice por qué.** Un `catch` que muestra
+  "no pudimos" a secas deja al dueño sin saber si reintentar o escribirnos,
+  y a quien revisa sin pista. El motivo sale del servicio
+  (`ReservaRechazada`, `RegistroRechazado`) o del mensaje de la base.
 
 Los `input type="date"` se ven en el formato del navegador, que puede no ser el
 chileno. Por eso llevan la fecha escrita debajo.
