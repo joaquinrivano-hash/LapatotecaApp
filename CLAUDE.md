@@ -1059,6 +1059,20 @@ Tres detalles que son la diferencia entre que funcione y que sea un agujero:
 El **primer admin** sí se asciende a mano, una vez, desde el editor SQL: no hay
 ningún admin todavía que pueda invitarlo. De ahí en adelante invita él.
 
+**Invitar no manda ningún correo**, y la pantalla lo dice. Mandarlo desde la
+app exigiría justamente la `service_role` key. Así que después de anotar el
+correo, `/admin/equipo` deja el mensaje con el enlace a
+`/crear-cuenta/equipo` listo para mandarlo por WhatsApp, por correo (abre el
+del propio admin) o copiarlo. La primera versión decía "Invitamos a…" y la
+persona se quedó esperando un correo que nunca iba a salir.
+
+El único correo que sí manda el sistema es la **confirmación de Supabase** al
+registrarse. Con el servidor de correo que trae Supabase por defecto, ese
+correo solo llega a direcciones del equipo del proyecto en Supabase y con un
+tope de pocos envíos por hora. Para que llegue a cualquiera hay que
+configurar un SMTP propio en Supabase (Authentication → SMTP) o apagar la
+confirmación de correo.
+
 #### Grants y políticas son dos cosas
 
 Se confunden fácil y hacen falta las dos: el **grant** dice si un rol puede
