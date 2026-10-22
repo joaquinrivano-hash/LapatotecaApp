@@ -1859,7 +1859,7 @@ afuera, y se actualiza cuando cambia:
 | Hosting | Proyecto de Vercel **`lapatoteca`**: tiene el dominio y publica `main` como Production. |
 | Proyecto viejo | **`lapatoteca-app`** en Vercel quedó sin el dominio y está por borrarse. Ahí vive `lapatoteca-apppruebas.vercel.app`, que apuntaba a `prueba/vista-dueno`. **No se cargan variables ahí.** |
 | Base y login | Supabase, proyecto `kcxzoesspkggpchvqlnw`, plan Pro (US$25 + IVA al mes, el servidor Micro lo cubre el crédito). |
-| Migraciones corridas | **Las 15**, al 22 de octubre de 2026 — hasta `20261022160000_planes_y_dia_de_prueba`. Las dos últimas se verificaron desde afuera después de correrlas: sus seis funciones existen y dan `401` sin sesión. La 16ª, `20261022170000_devolver_el_dia_de_prueba`, está publicada y **sin confirmar** que corrió (paso 9 de "Lo que falta hacer afuera"). Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
+| Migraciones corridas | **Las 16**, al 22 de octubre de 2026 — hasta `20261022170000_devolver_el_dia_de_prueba`. `cambios_de_agenda` y `planes_y_dia_de_prueba` se verificaron desde afuera después de correrlas: sus seis funciones existen y dan `401` sin sesión. La 16ª la corrió la dueña y la confirmó con la consulta de `pg_proc` (dio `true`). Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
 | Confirmación de correo | **Encendida.** Quien se registra recibe un enlace y hasta que no lo abre no tiene sesión. Se apaga en Authentication → Sign In → Email si alguna vez estorba. |
 | Correo saliente | **Resend**, dominio `lapatoteca.cl` verificado (región Brasil). Los tres registros DNS los puso Resend solo, con el *Auto configure* de Vercel. La API key vive en Supabase → Authentication → SMTP, con usuario `resend` y remitente `hola@lapatoteca.cl`. |
 | Buscador de direcciones | Llave de Google Cloud con el correo de la empresa, restringida a los dominios de `lapatoteca.cl`, `*.vercel.app` y `localhost:3000`, y a Maps JavaScript API + Places API (New). |
@@ -1951,7 +1951,7 @@ no tienen un orden que no rompa nada (ver más abajo): el código llegó a
 | `20261022140000_marcado_por` | Quién marcó cada llegada y salida, firmado por la base (`firmar_la_marca`) | Corrida (al 22-10-2026) |
 | `20261022150000_cambios_de_agenda` | Cancelar y mover lo agendado con su cobro, en la base; el disparador que no deja al dueño reescribir estadías ni reservas. **Sin ella, cancelar desde el portal falla** (antes de este cambio quedaba a medias) | Corrida el 22-10-2026, verificada desde afuera |
 | `20261022160000_planes_y_dia_de_prueba` | Comprar y usar un plan y agendar el día de prueba, en la base; los disparadores que no dejan al dueño tocar planes, aprobarse el día de prueba ni insertar días o reservas por fuera. **Va junto con su código**: con una sin la otra, agendar el día de prueba y usar el plan fallan (ver abajo) | Corrida el 22-10-2026, verificada desde afuera |
-| `20261022170000_devolver_el_dia_de_prueba` | Redefine `cancelar_dia_de_prueba` para que lo ya pagado quede en "Por devolver". **No está acoplada**: sin ella el código nuevo funciona igual, con el comportamiento viejo (lo pagado no se devuelve), así que se puede correr después de publicar. Si alguna vez se vuelve a correr `cambios_de_agenda` suelto, hay que correr esta después | **Sin confirmar** |
+| `20261022170000_devolver_el_dia_de_prueba` | Redefine `cancelar_dia_de_prueba` para que lo ya pagado quede en "Por devolver". **No está acoplada**: sin ella el código nuevo funciona igual, con el comportamiento viejo (lo pagado no se devuelve), así que se puede correr después de publicar. Si alguna vez se vuelve a correr `cambios_de_agenda` suelto, hay que correr esta después | Corrida el 22-10-2026, confirmada con `pg_proc` |
 
 La regla de acá en adelante:
 
@@ -1992,11 +1992,8 @@ producción, con `build`, `lint`, `test` y la prueba de aislamiento en verde.
 **Lo que le toca a la dueña**, en este orden (el detalle de cada uno está en
 "Lo que falta hacer afuera"):
 
-1. **Paso 9**: correr `20261022170000_devolver_el_dia_de_prueba` en el editor
-   SQL y confirmar con la consulta de `pg_proc` (tiene que dar `true`).
-   Después se marca "Corrida" en la tabla de migraciones y en "Dónde vive
-   cada cosa". Hasta entonces, un día de prueba pagado y cancelado a tiempo
-   no aparece en "Por devolver".
+1. ~~**Paso 9**: correr `20261022170000_devolver_el_dia_de_prueba` en el
+   editor SQL~~ — corrida el 22-10-2026, la consulta de `pg_proc` dio `true`.
 2. ~~**Paso 7**: mandarle a `pxeclt@gmail.com` el enlace por WhatsApp desde
    `/admin/equipo`~~ — mandado el 22-10-2026; falta que cree su cuenta.
 3. Decir **de quién es la cuenta para transferir** (empresa o personal): se
@@ -2142,11 +2139,12 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
 8. Probar en la vista previa de `pruebas` **del proyecto `lapatoteca`** —no
    en `lapatoteca-app-git-pruebas-…`, que es el proyecto viejo— y recién
    entonces pasar `pruebas` a `main`.
-9. Correr en Supabase `20261022170000_devolver_el_dia_de_prueba` (editor SQL,
-   pegar el archivo entero, Run). Hasta que corra, un día de prueba ya
-   pagado y cancelado a tiempo **no aparece en "Por devolver"**. Como la
-   función ya existía, el truco del `401` no distingue la versión: se
-   confirma con `select prosrc like '%a_devolver%' from pg_proc where
+9. ~~Correr en Supabase `20261022170000_devolver_el_dia_de_prueba`~~ —
+   **corrida el 22-10-2026** por la dueña, y la consulta de `pg_proc` dio
+   `true`. Desde ahí, un día de prueba ya pagado y cancelado a tiempo
+   aparece en "Por devolver". Como la función ya existía, el truco del
+   `401` no distingue la versión: si hay que volver a comprobarlo, es
+   con `select prosrc like '%a_devolver%' from pg_proc where
    proname = 'cancelar_dia_de_prueba';`, que tiene que dar `true`.
 
 **Decisiones de producto abiertas:**
