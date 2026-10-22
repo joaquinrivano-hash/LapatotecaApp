@@ -107,7 +107,12 @@ export function FormularioDeIngreso() {
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-8 px-4 py-10">
       <header className="flex flex-col items-center gap-3 text-center">
-        <LogoPatoteca tamano={96} prioridad />
+        {/* El logo vuelve al inicio. Acá no hay cabecera ni menú, así que
+            sin esto la pantalla es un callejón sin salida para quien entró
+            a mirar y todavía no tiene cuenta. */}
+        <Link href="/" aria-label="Volver al inicio">
+          <LogoPatoteca tamano={96} prioridad />
+        </Link>
         <p className="text-muted-foreground text-pretty">
           Entra para ver las reservas de tu perrito, sus reportes y tus cobros.
         </p>

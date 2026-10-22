@@ -50,7 +50,12 @@ export function CumpleanosDelMes({ hoy }: { hoy: string }) {
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2">
           <Cake className="size-5" />
-          Cumpleaños de <span className="capitalize">{formatearMes(hoy)}</span>
+          {/* Envuelto en un solo hijo: con el texto y el mes sueltos, el
+              gap-2 del título se suma al espacio y quedan separados doble. */}
+          <span>
+            Cumpleaños de{" "}
+            <span className="capitalize">{formatearMes(hoy)}</span>
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent>

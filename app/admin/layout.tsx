@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  CalendarDays,
+CalendarDays,
   ChartNoAxesColumn,
   Database,
+  Dog,
   LogOut,
   Package,
   SlidersHorizontal,
@@ -71,15 +72,28 @@ export default function AdminLayout({
                 Backoffice
               </p>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={salir}
-              disabled={saliendo}
-              aria-label="Salir"
-            >
-              <LogOut />
-            </Button>
+            {/* La puerta a la otra cara. Joaquín y Siván administran Y a
+                veces hacen el turno; con una cuenta por persona no se
+                cambian de rol, así que tiene que haber por dónde pasar.
+                Sin esto solo se llegaba escribiendo la URL. */}
+            <div className="flex shrink-0 items-center gap-1">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/staff">
+                  <Dog />
+                  <span className="hidden sm:inline">Vista cuidador</span>
+                  <span className="sr-only sm:hidden">Vista cuidador</span>
+                </Link>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={salir}
+                disabled={saliendo}
+                aria-label="Salir"
+              >
+                <LogOut />
+              </Button>
+            </div>
           </div>
 
           {/* En el celular la navegación se desliza; en pantalla grande cabe entera. */}

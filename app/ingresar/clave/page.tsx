@@ -111,7 +111,9 @@ export default function CambiarClave() {
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-4 py-10">
       <header className="flex flex-col items-center gap-3 text-center">
-        <LogoPatoteca tamano={88} prioridad />
+        <Link href="/" aria-label="Volver al inicio">
+          <LogoPatoteca tamano={88} prioridad />
+        </Link>
         <h1 className="font-display text-2xl font-bold">
           Elige tu contraseña nueva
         </h1>

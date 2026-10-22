@@ -147,9 +147,14 @@ export default function Pagos() {
           ) : (
             <Button size="lg" disabled={ocupado} onClick={emitir}>
               <FileText />
-              Emitir cuentas de{" "}
-              <span className="capitalize">
-                {formatearMes(`${periodo}-15T12:00:00Z`)}
+              {/* Una sola etiqueta y no texto + span sueltos: el botón es
+                  flex con gap-2, así que dos hijos reciben ese gap ADEMÁS
+                  del espacio del texto y el mes queda separado el doble. */}
+              <span>
+                Emitir cuentas de{" "}
+                <span className="capitalize">
+                  {formatearMes(`${periodo}-15T12:00:00Z`)}
+                </span>
               </span>
             </Button>
           )}

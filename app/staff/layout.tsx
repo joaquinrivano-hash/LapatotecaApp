@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AlertTriangle, CameraIcon, Home, LogOut, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  CameraIcon,
+  Home,
+  LogOut,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { LogoPatoteca } from "@/components/shared/logo";
@@ -59,15 +66,26 @@ export default function StaffLayout({
               {formatearFechaLarga(`${hoyDelStaff()}T12:00:00Z`)}
             </p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={salir}
-            disabled={saliendo}
-            aria-label="Salir"
-          >
-            <LogOut />
-          </Button>
+          <div className="flex shrink-0 items-center gap-1">
+            {/* La vuelta al backoffice, solo para quien lo tiene. Un
+                cuidador no ve este botón porque no tiene dónde ir. */}
+            {rol === "admin" && (
+              <Button asChild variant="ghost" size="icon" aria-label="Backoffice">
+                <Link href="/admin">
+                  <ShieldCheck />
+                </Link>
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={salir}
+              disabled={saliendo}
+              aria-label="Salir"
+            >
+              <LogOut />
+            </Button>
+          </div>
         </div>
       </header>
 
