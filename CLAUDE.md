@@ -676,7 +676,23 @@ Lo único que sí se bloquea es registrar dos veces al mismo perro el mismo día
 eso no es una decisión, es un error.
 
 Solo aplica a perros que ya son clientes. Uno nuevo necesita su día de prueba
-antes de quedarse, así que no puede entrar por esta vía.
+antes de quedarse, así que no puede entrar por esta vía. **Y eso no se
+fuerza**: todo lo demás sí, porque el perro ya está en la puerta y la decisión
+es de quien lo está mirando, pero la jornada completa en la casa es
+exactamente lo que el día de prueba evalúa. Dejarlo entrar sería saltarse la
+evaluación, no decidir sobre ella. Lo cuida `registrarIngreso`, no la
+pantalla, que es por donde entra todo el mundo.
+
+La primera versión escribía la regla en la pantalla —"solo perros que ya son
+clientes"— y ofrecía a cualquiera igual, y `forzar` saltaba el reparo del día
+de prueba junto con los demás. Una pantalla que enuncia una regla y la
+incumple es peor que una que no la menciona.
+
+En la lista el perro que no es cliente **igual se muestra**, apagado y con el
+motivo al lado. Esconderlo haría que quien está buscando a un perro que sabe
+que existe piense que la app se equivocó; y si ninguno de los resultados puede
+quedarse, abajo dice qué hacer —el día de prueba lo agenda el dueño y lo
+aprueba Administración—, porque no es algo que se resuelva en la puerta.
 
 ### El portal del cliente
 
@@ -837,6 +853,25 @@ Solo entran los días que **ya pasaron**: uno agendado para el jueves no se
 evalúa el martes. Y la fecha que manda es la de la jornada, no la de la ficha:
 si lo reprogramaron, la estadía es la que quedó.
 
+#### Y los que vienen, en la misma tarjeta
+
+Esa regla —solo los que ya pasaron— es correcta para un veredicto y dejó un
+agujero: un día de prueba recién agendado **no aparecía en ningún lado** del
+backoffice. La cola no lo miraba, y el calendario de ocupación muestra un
+número, no quién. La casa se enteraba el día que el perro aparecía en la
+puerta, que es la primera vez que ese dueño le pide algo: justo el que no
+puede pasar desapercibido.
+
+`diasDePruebaQueVienen` llena la otra mitad, en la misma tarjeta y sin
+botones: todavía no pasó nada que decidir. El veredicto va arriba porque es
+lo que tranca a un cliente. La tarjeta se esconde cuando no hay ninguna de
+las dos cosas.
+
+Los lista **por la estadía**, no por `perro.diaDePrueba.fecha`, así que
+reprogramar los mueve; y sin tope por arriba, porque un rango de "los
+próximos siete días" dejaría invisible al que agendó para el mes que viene,
+que es exactamente el problema que esto viene a arreglar.
+
 **Y el dueño se entera.** Al aprobar, lo único que cambiaba en su pantalla
 era que DESAPARECÍA un aviso, y la ausencia de una advertencia no se nota: el
 dueño pagó, vino, y se quedaba sin saber que ya podía reservar.
@@ -917,9 +952,23 @@ emitir. Los cobros sueltos que entran en una cuenta quedan marcados con
 
 ### Un rango que termina antes de empezar
 
-`aMs`, en `lib/rules/capacidad.ts`. Pasa cuando un retiro después de
-medianoche queda guardado en el día de la llegada: la jornada queda con el
-fin antes que el inicio.
+`aMs`, en `lib/rules/capacidad.ts`. Pasa por **tres causas, y dos son
+normales** — no es solo un dato corrupto:
+
+- **La llegada tarde**, que es la común y no tiene arreglo en el registro: un
+  perro agendado de 9 a 15 que entra a las 16. La ocupación mira `inicioReal`
+  y, mientras no haya retiro, `finProgramado`, que para entonces ya pasó. El
+  perro llegó tarde y está adentro; lo que no puede pasar es que por eso
+  desaparezca del calendario.
+- **El retiro después de medianoche** guardado en el día de la llegada.
+- Un **ingreso sin reserva con una hora de retiro ya ocurrida.** Ese sí tenía
+  un bug propio y está arreglado en su origen: `opcionesDeRetiro` devolvía
+  lista **vacía** pasado el cierre, y quien llamaba se inventaba una hora de
+  retiro —el cierre, ya ocurrido—, así que la estadía nacía terminando antes
+  de empezar. Ahora nunca devuelve vacío: pasado el cierre ofrece la hora
+  siguiente, que es la estimación honesta para un perro que llegó fuera de
+  horario. Un test afirmaba el bug ("pasado el cierre la lista queda vacía");
+  lo reemplazó la invariante, barrida minuto a minuto.
 
 Lo que hacía antes era desaparecer. El rango invertido no cae en ninguna
 franja, así que el pico del día daba **0** y el calendario mostraba la casa
@@ -932,8 +981,10 @@ de su día. Es lo único cierto que queda, y es el lado seguro para
 equivocarse — contar de menos deja sobrevender un cupo, contar de más a lo
 sumo bloquea una reserva que alguien puede revisar.
 
-Ojo que esto es una **red**, no el arreglo: si aparece, hay un dato mal
-guardado en alguna parte y conviene encontrar quién lo escribió.
+Sigue siendo una **red** y no el arreglo de las dos primeras causas, pero ya
+no es una red a ciegas: se sabe qué la dispara. Si aparece por un camino que
+no es la llegada tarde ni el cruce de medianoche, hay algo nuevo escribiendo
+mal y conviene encontrarlo.
 
 ### Gráficos de barras apiladas: el error que ya se cometió dos veces
 

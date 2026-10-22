@@ -3,7 +3,7 @@ import type { DatosPatoteca } from "@/lib/data/seed";
 import { crearAlmacenMemoria } from "@/lib/repo/almacen";
 import { CLAVE_ALMACEN, crearRepositorioLocal } from "@/lib/repo/local";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
-import { instanteEnHora } from "@/lib/utils/fecha";
+import { hhmmDesdeMinutos, instanteEnHora } from "@/lib/utils/fecha";
 import type {
   Cliente,
   EstadiaJardin,
@@ -403,7 +403,15 @@ describe("ingreso no planificado", () => {
   it("con reparos igual se puede forzar: el perro ya está en la puerta", async () => {
     montar({
       ...SIN_ESTADIAS,
-      perros: [perroAdmisible({ diaDePrueba: { estado: "pendiente" } })],
+      perros: [
+        perroAdmisible({
+          vacunas: NEGOCIO.admision.vacunasObligatorias.map((tipo) => ({
+            tipo,
+            fechaAplicacion: "2024-01-01",
+            fechaVencimiento: "2025-01-01",
+          })),
+        }),
+      ],
     });
 
     const { estadia } = await registrarIngreso(repo, {
@@ -412,6 +420,27 @@ describe("ingreso no planificado", () => {
       forzar: true,
     });
     expect(estadia.estado).toBe("presente");
+  });
+
+  it("el día de prueba NO se fuerza: por acá solo entran clientes", async () => {
+    // Todo lo demás se fuerza porque el perro ya está en la puerta y la
+    // decisión es de quien lo está mirando. Esto no: la jornada completa en
+    // la casa es exactamente lo que el día de prueba evalúa, así que dejarlo
+    // entrar sería saltarse la evaluación, no decidir sobre ella.
+    for (const estado of ["pendiente", "agendado", "rechazado"] as const) {
+      montar({
+        ...SIN_ESTADIAS,
+        perros: [perroAdmisible({ diaDePrueba: { estado } })],
+      });
+
+      await expect(
+        registrarIngreso(repo, {
+          perroId: PELUSA.id,
+          ahora: en("10:00"),
+          forzar: true,
+        }),
+      ).rejects.toThrow(/todavía no es cliente/);
+    }
   });
 
   it("avisa cuando no queda cupo", async () => {
@@ -496,8 +525,24 @@ describe("opcionesDeRetiro", () => {
     expect(new Set(minutos).size).toBe(minutos.length);
   });
 
-  it("no ofrece horas que ya pasaron", () => {
-    expect(opcionesDeRetiro(en("19:30"))).toHaveLength(0);
+  it("pasado el cierre sigue ofreciendo una hora, y es futura", () => {
+    // Este test afirmaba lo contrario —que la lista quedaba vacía— y con eso
+    // dejaba pasar el bug: quien llamaba se inventaba una hora de retiro
+    // (el cierre, ya ocurrido) y la estadía nacía terminando antes de
+    // empezar. Un rango invertido no ocupa ninguna franja, así que el día
+    // desaparecía del calendario aunque los números lo contaran.
+    const opciones = opcionesDeRetiro(en("19:30"));
+    expect(opciones).toHaveLength(1);
+    expect(opciones[0].minutos).toBe(20 * 60 + 30);
+  });
+
+  it("nunca devuelve vacío, y ninguna opción está en el pasado", () => {
+    for (let minuto = 0; minuto < 24 * 60; minuto += 7) {
+      const hora = hhmmDesdeMinutos(minuto);
+      const opciones = opcionesDeRetiro(en(hora));
+      expect(opciones.length, hora).toBeGreaterThan(0);
+      for (const o of opciones) expect(o.minutos, hora).toBeGreaterThan(minuto);
+    }
   });
 });
 

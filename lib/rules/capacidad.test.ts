@@ -315,4 +315,38 @@ describe("un rango que viene al revés", () => {
     );
     expect(o.perrosDistintos).toBe(1);
   });
+
+  /*
+   * La causa COMÚN, y la que no es un dato corrupto: la llegada tarde.
+   *
+   * Un perro agendado de 9 a 15 que entra a las 16. La ocupación mira
+   * `inicioReal` y, mientras no haya retiro, `finProgramado` — que para
+   * entonces ya pasó. No hay nada que arreglar en el registro: el perro
+   * llegó tarde y está adentro. Lo que no puede pasar es que por eso
+   * desaparezca del calendario.
+   */
+  it("la llegada tarde, sin retiro todavía, igual ocupa", () => {
+    const [ocupante] = ocupantesDeEstadias([
+      {
+        id: "e1",
+        clienteId: "c1",
+        perroId: "p1",
+        fecha: "2026-10-22",
+        origen: "dia_suelto",
+        estado: "presente",
+        inicioProgramado: enSantiago("2026-10-22", "09:00"),
+        finProgramado: enSantiago("2026-10-22", "15:00"),
+        inicioReal: enSantiago("2026-10-22", "16:00"),
+        creadaEn: "2026-10-01T12:00:00.000Z",
+      },
+    ]);
+
+    // El rango que sale del registro viene al revés: entró a las 16 y el
+    // retiro agendado era a las 15.
+    expect(ocupante.inicio > ocupante.fin).toBe(true);
+
+    const o = calcularOcupacionDia("2026-10-22", [ocupante]);
+    expect(o.pico).toBe(1);
+    expect(o.picoMinutoDelDia).toBe(16 * 60);
+  });
 });

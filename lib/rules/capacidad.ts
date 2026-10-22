@@ -96,11 +96,21 @@ interface RangoEnMs {
 /**
  * Los rangos en milisegundos, con el final arreglado si viene al revés.
  *
- * Un rango que termina antes de empezar es un dato corrupto: pasa cuando un
- * retiro después de medianoche queda guardado en el día de la llegada. Y
- * hasta que alguien lo note, el perro **desaparece de la ocupación**: no cae
- * en ninguna franja, el pico del día da 0 y el calendario muestra la casa
- * vacía mientras el perro está adentro.
+ * Un rango que termina antes de empezar hace que el perro **desaparezca de
+ * la ocupación**: no cae en ninguna franja, el pico del día da 0 y el
+ * calendario muestra la casa vacía mientras el perro está adentro. Los
+ * números del día, que cuentan perros distintos y no franjas, igual lo
+ * cuentan — y entonces el calendario y los números se contradicen.
+ *
+ * No es solo un dato corrupto. Pasa en tres casos, dos de ellos normales:
+ *
+ * - **La llegada tarde**, que es el común: un perro agendado de 9 a 15 que
+ *   entra a las 16. La ocupación mira `inicioReal` y, mientras no haya
+ *   retiro, `finProgramado` — que para entonces ya pasó.
+ * - **El retiro después de medianoche** guardado en el día de la llegada.
+ * - Un ingreso sin reserva con una hora de retiro ya ocurrida. Ese tenía su
+ *   propia causa en `opcionesDeRetiro` y está arreglado ahí: la lista nunca
+ *   queda vacía, así que nadie vuelve a inventarse el cierre como retiro.
  *
  * Se trata como "llegó y no sabemos cuándo se fue": ocupa hasta el final de
  * su día. Es lo único cierto que queda —el perro demostrablemente llegó— y
