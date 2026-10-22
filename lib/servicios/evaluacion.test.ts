@@ -6,6 +6,8 @@ import { CLAVE_ALMACEN, crearRepositorioLocal } from "@/lib/repo/local";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
 import {
   diasDePruebaPorEvaluar,
+  esperandoSuPrimeraReserva,
+  reciénAprobados,
   resolverDiaDePrueba,
 } from "@/lib/servicios/evaluacion";
 import { instanteEnHora } from "@/lib/utils/fecha";
@@ -180,5 +182,73 @@ describe("resolverDiaDePrueba", () => {
     await expect(
       resolverDiaDePrueba(repo, "perro-999", "aprobado"),
     ).rejects.toThrow(/ya no está/);
+  });
+});
+
+describe("esperandoSuPrimeraReserva", () => {
+  const aprobado = perro({ diaDePrueba: { estado: "aprobado", fecha: "2026-10-20" } });
+
+  // Lo único que cambió en su pantalla al aprobarlo fue que DESAPARECIÓ un
+  // aviso, y la ausencia de una advertencia no se nota.
+  it("sí, apenas lo aprueban", () => {
+    expect(esperandoSuPrimeraReserva(aprobado, [], [])).toBe(true);
+  });
+
+  it("el día de prueba mismo no cuenta como reserva", () => {
+    expect(
+      esperandoSuPrimeraReserva(aprobado, [estadia("2026-10-20")], []),
+    ).toBe(true);
+  });
+
+  it("no, si ya reservó un día de jardín", () => {
+    expect(
+      esperandoSuPrimeraReserva(
+        aprobado,
+        [estadia("2026-10-28", { id: "est-2", origen: "dia_suelto" })],
+        [],
+      ),
+    ).toBe(false);
+  });
+
+  it("no, si ya reservó hotel", () => {
+    expect(esperandoSuPrimeraReserva(aprobado, [], [{ perroId: "perro-1" }])).toBe(
+      false,
+    );
+  });
+
+  it("no, mientras no esté aprobado", () => {
+    for (const estado of ["pendiente", "agendado", "rechazado"] as const) {
+      expect(
+        esperandoSuPrimeraReserva(perro({ diaDePrueba: { estado } }), [], []),
+      ).toBe(false);
+    }
+  });
+
+  // Un hermano que ya reservó no habla por él: el aviso es por perro.
+  it("la reserva de OTRO perro no lo apaga", () => {
+    expect(
+      esperandoSuPrimeraReserva(aprobado, [], [{ perroId: "otro-perro" }]),
+    ).toBe(true);
+  });
+});
+
+describe("reciénAprobados", () => {
+  it("trae solo a los que quedaron habilitados y no han reservado", async () => {
+    montar({
+      perros: [
+        perro({ id: "p-listo", diaDePrueba: { estado: "aprobado", fecha: "2026-10-20" } }),
+        perro({ id: "p-esperando", diaDePrueba: { estado: "agendado", fecha: "2026-10-20" } }),
+      ],
+    });
+    const listos = await reciénAprobados(repo, "cli-1");
+    expect(listos.map((p) => p.id)).toEqual(["p-listo"]);
+  });
+
+  it("se apaga solo cuando reserva", async () => {
+    montar({
+      perros: [perro({ diaDePrueba: { estado: "aprobado", fecha: "2026-10-20" } })],
+      estadiasJardin: [estadia("2026-10-28", { id: "est-2", origen: "dia_suelto" })],
+    });
+    await expect(reciénAprobados(repo, "cli-1")).resolves.toEqual([]);
   });
 });
