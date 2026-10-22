@@ -9,6 +9,7 @@ import { LogoPatoteca } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { InputClave } from "@/components/shared/input-clave";
 import { Label } from "@/components/ui/label";
 import { autenticacion } from "@/lib/auth";
 import { puertaDe } from "@/lib/auth/puertas";
@@ -137,9 +138,8 @@ export function FormularioDeIngreso() {
 
           <div className="space-y-1.5">
             <Label htmlFor={idClave}>Tu contraseña</Label>
-            <Input
+            <InputClave
               id={idClave}
-              type="password"
               autoComplete="current-password"
               required
               value={clave}

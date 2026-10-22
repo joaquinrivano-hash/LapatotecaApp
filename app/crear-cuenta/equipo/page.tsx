@@ -10,6 +10,7 @@ import { LogoPatoteca } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { InputClave } from "@/components/shared/input-clave";
 import { Label } from "@/components/ui/label";
 import { autenticacion, hayAuthReal } from "@/lib/auth";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
@@ -185,9 +186,8 @@ export default function CrearCuentaDeEquipo() {
 
               <div className="space-y-1.5">
                 <Label htmlFor={idClave}>Elige una contraseña</Label>
-                <Input
+                <InputClave
                   id={idClave}
-                  type="password"
                   autoComplete="new-password"
                   required
                   value={clave}
