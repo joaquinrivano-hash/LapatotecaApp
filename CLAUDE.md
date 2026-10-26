@@ -1312,6 +1312,73 @@ podría entrar, y eso sigue dando error—. El id sale del nombre
 que marque en `/staff` cae en SU turno; con el id sorteado, regenerar el
 seed habría dejado el turno del lunes sin dueño.
 
+#### Dónde se fichó
+
+`lib/rules/ubicacion.ts` y `lib/utils/geolocalizacion.ts`. Al tocar
+"Llegué" o "Me voy", el celular manda dónde estaba y queda en el turno
+(`entradaUbicacion` / `salidaUbicacion`): el punto con su precisión, o el
+motivo por el que no lo dio. La hora sola no dice si quien fichó estaba en
+la casa; esto da una pista. **Una pista, no una prueba**: un GPS se puede
+falsear, y se lee como lo que es.
+
+Lo decidió la dueña el 26-10, con cuatro respuestas que explican el
+diseño: en el **fichaje del turno** y no en la llegada de cada perro —que
+casi siempre es en la casa y no diría nada—; en la **entrada y la
+salida**; se guarda **el punto** y no solo un sí/no, para poder revisarlo;
+y **sin ubicación se ficha igual**.
+
+Eso último es la regla de siempre: un GPS que falla no puede dejar a
+alguien sin su entrada, igual que un perro sin reserva se registra
+igual. `ubicacionActual` **nunca falla**: sin permiso, sin señal o sin
+respuesta devuelve el motivo, y la planilla dice "sin ubicación: el
+celular no dio permiso". El motivo importa porque no dio permiso y no
+encontró señal no se conversan igual. Y el aviso al fichar lo dice en el
+momento, para que se arregle antes del próximo turno.
+
+Tres detalles que no son obvios:
+
+- **La hora es la del toque**, no la de cuando el GPS contesta. Buscar
+  señal adentro de una casa puede tardar segundos, y esa espera no es un
+  atraso de nadie.
+- **El `timeout` del navegador no cuenta el aviso de permiso abierto.** Si
+  nadie lo toca, el botón quedaba pegado para siempre; por eso hay un tope
+  propio de 15 segundos que se rinde con "tardó demasiado".
+- **La distancia se calcula al mostrar, no se guarda.** Si se corrige el
+  punto de la casa, los fichajes viejos se vuelven a medir contra el bueno.
+
+**Qué cuenta como "en la casa"** lo decide `dondeFicho`, y la precisión
+manda antes que la distancia, en las dos direcciones. **Lejos** es solo
+cuando ni el error alcanza a la casa: un punto a 280 m con ±140 m puede
+estar en la puerta, y acusar a alguien de fichar en la calle por un GPS
+movido es peor que no decir nada. **En la casa** pide además una
+precisión razonable (`NEGOCIO.turnos.precisionMaximaM`): con ±2 km sacados
+de la antena cualquier punto del barrio calza. Lo de en medio es
+**poco precisa**. El radio (`radioDeLaCasaM`) es de 150 m porque adentro
+de una casa el GPS se corre unas decenas de metros.
+
+El punto de la casa es `NEGOCIO.ubicacion`, el mismo que usa el buscador
+de direcciones. **Hasta el 26-10 era aproximado** —la esquina de Diagonal
+Oriente con Manuel Montt, que alcanza para priorizar sugerencias— y para
+esto tiene que ser la puerta: corrido 200 m, todos los fichajes salen
+lejos. Ver el paso 12 de "Lo que falta hacer afuera".
+
+En la planilla va al lado de la hora: "Entró 07:22 en la casa", o "a 3 km
+de la casa (ver mapa)" en ámbar. El mapa aparece solo cuando hay algo que
+mirar —lejos o dudosa—; al lado de cada "en la casa" sería un enlace que
+nadie toca. Lo fichado antes de existir esto no dice nada, que es lo
+cierto. El rastro tampoco: es deducido, no tiene celular detrás.
+
+**A quien se le registra la ubicación hay que contárselo**, y la tarjeta
+de fichar lo dice: "Al fichar guardamos dónde estás, para saber que
+fichaste en la casa". Es un dato personal del equipo; esconderlo sería
+la manera segura de que se sienta como vigilancia.
+
+En la base son dos columnas `jsonb` en `turnos`
+(`20261026120000_ubicacion_del_fichaje.sql`). No hizo falta tocar
+`proteger_turno_planificado`, que cuida solo el horario planificado: la
+ubicación la escribe quien ficha, igual que la hora. La prueba de
+aislamiento lo verifica.
+
 ### El calendario y su semáforo
 
 En la tira de días el color va al revés de un semáforo de alerta: **verde desde
@@ -1924,7 +1991,7 @@ afuera, y se actualiza cuando cambia:
 | Hosting | Proyecto de Vercel **`lapatoteca`**: tiene el dominio y publica `main` como Production. |
 | Proyecto viejo | **`lapatoteca-app`** en Vercel quedó sin el dominio y está por borrarse. Ahí vive `lapatoteca-apppruebas.vercel.app`, que apuntaba a `prueba/vista-dueno`. **No se cargan variables ahí.** |
 | Base y login | Supabase, proyecto `kcxzoesspkggpchvqlnw`, plan Pro (US$25 + IVA al mes, el servidor Micro lo cubre el crédito). |
-| Migraciones corridas | **Las 16**, al 22 de octubre de 2026 — hasta `20261022170000_devolver_el_dia_de_prueba`. `cambios_de_agenda` y `planes_y_dia_de_prueba` se verificaron desde afuera después de correrlas: sus seis funciones existen y dan `401` sin sesión. La 16ª la corrió la dueña y la confirmó con la consulta de `pg_proc` (dio `true`). Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
+| Migraciones corridas | **Las 16**, al 22 de octubre de 2026 — hasta `20261022170000_devolver_el_dia_de_prueba`. `cambios_de_agenda` y `planes_y_dia_de_prueba` se verificaron desde afuera después de correrlas: sus seis funciones existen y dan `401` sin sesión. La 16ª la corrió la dueña y la confirmó con la consulta de `pg_proc` (dio `true`). La 17ª, `20261026120000_ubicacion_del_fichaje`, está en `pruebas` y **sin confirmar** (paso 11 de "Lo que falta hacer afuera"): tiene que correr ANTES de pasar su código a `main`. Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
 | Confirmación de correo | **Encendida.** Quien se registra recibe un enlace y hasta que no lo abre no tiene sesión. Se apaga en Authentication → Sign In → Email si alguna vez estorba. |
 | Correo saliente | **Resend**, dominio `lapatoteca.cl` verificado (región Brasil). Los tres registros DNS los puso Resend solo, con el *Auto configure* de Vercel. La API key vive en Supabase → Authentication → SMTP, con usuario `resend` y remitente `hola@lapatoteca.cl`. |
 | Buscador de direcciones | Llave de Google Cloud con el correo de la empresa, restringida a los dominios de `lapatoteca.cl`, `*.vercel.app` y `localhost:3000`, y a Maps JavaScript API + Places API (New). |
@@ -2018,6 +2085,7 @@ no tienen un orden que no rompa nada (ver más abajo): el código llegó a
 | `20261022150000_cambios_de_agenda` | Cancelar y mover lo agendado con su cobro, en la base; el disparador que no deja al dueño reescribir estadías ni reservas. **Sin ella, cancelar desde el portal falla** (antes de este cambio quedaba a medias) | Corrida el 22-10-2026, verificada desde afuera |
 | `20261022160000_planes_y_dia_de_prueba` | Comprar y usar un plan y agendar el día de prueba, en la base; los disparadores que no dejan al dueño tocar planes, aprobarse el día de prueba ni insertar días o reservas por fuera. **Va junto con su código**: con una sin la otra, agendar el día de prueba y usar el plan fallan (ver abajo) | Corrida el 22-10-2026, verificada desde afuera |
 | `20261022170000_devolver_el_dia_de_prueba` | Redefine `cancelar_dia_de_prueba` para que lo ya pagado quede en "Por devolver". **No está acoplada**: sin ella el código nuevo funciona igual, con el comportamiento viejo (lo pagado no se devuelve), así que se puede correr después de publicar. Si alguna vez se vuelve a correr `cambios_de_agenda` suelto, hay que correr esta después | Corrida el 22-10-2026, confirmada con `pg_proc` |
+| `20261026120000_ubicacion_del_fichaje` | `turnos.entrada_ubicacion` y `turnos.salida_ubicacion`, dónde estaba el celular al fichar. **Va antes que su código**: con el código nuevo y sin estas columnas, fichar falla; al revés no rompe nada, porque el código viejo no las nombra | **Sin confirmar** |
 
 La regla de acá en adelante:
 
@@ -2046,7 +2114,8 @@ La prueba de aislamiento (`supabase/pruebas/aislamiento.sh`) ya corrió en
 verde con las once primeras, en la sesión que juntó las ramas (`39f7663`),
 con las quince (hasta `planes_y_dia_de_prueba`) el 22-10-2026, en la
 sesión que arregló las cancelaciones y cerró los planes y el día de prueba,
-y con las dieciséis (hasta `devolver_el_dia_de_prueba`) ese mismo día. Eso dice que las migraciones hacen lo que dicen en
+con las dieciséis (hasta `devolver_el_dia_de_prueba`) ese mismo día, y con
+las diecisiete (hasta `ubicacion_del_fichaje`) el 26-10-2026. Eso dice que las migraciones hacen lo que dicen en
 un Postgres limpio; si corrieron en producción lo dice la tabla.
 
 #### Dónde quedamos (cierre del 22-10-2026)
@@ -2071,6 +2140,9 @@ producción, con `build`, `lint`, `test` y la prueba de aislamiento en verde.
    `components/shared/politicas-dia-de-prueba.tsx`.
 5. **Desconectar `lapatoteca-app` del repo en Vercel** (paso 10 de "Lo que
    falta hacer afuera"). La dueña lo pidió; una sesión no ve Vercel.
+6. **El fichaje con ubicación** (26-10) está en `pruebas`. Para pasarlo a
+   `main`: correr su migración primero (paso 11) y mandar el punto exacto
+   de la casa (paso 12).
 
 **Lo que sigue en código**, sugerido y sin empezar:
 
@@ -2222,6 +2294,19 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
     Borrarlo entero es Settings → General → Delete Project, al final.
     **Sin confirmar** que se hizo: desde afuera se ve cuando el bot de
     Vercel deja de nombrar a `lapatoteca-app` en los PR.
+11. **Correr `20261026120000_ubicacion_del_fichaje` en Supabase ANTES de
+    pasar a `main` el fichaje con ubicación.** Con el código nuevo y sin las
+    columnas, fichar falla. Agrega dos columnas y nada más, así que correrla
+    antes no le hace nada a lo publicado. Se confirma desde afuera con el
+    truco de la columna: `GET /rest/v1/turnos?select=entrada_ubicacion&limit=1`
+    tiene que dar `401` y no `400` (ver "Saber si una migración ya corrió,
+    desde afuera").
+12. **El punto exacto de la casa.** `NEGOCIO.ubicacion` es la esquina de
+    Diagonal Oriente con Manuel Montt, aproximada; para decir si alguien
+    fichó en la casa tiene que ser la puerta. La dueña lo saca de Google
+    Maps dejando apretado sobre la casa: aparecen dos números
+    (`-33.44…, -70.61…`). Hasta que se corrija, un fichaje en la casa puede
+    salir "a 200 m de la casa".
 
 **Decisiones de producto abiertas:**
 
@@ -2318,6 +2403,9 @@ tema tiene su explicación más arriba en este archivo.
 - **El que ya era cliente no hace día de prueba** (22-10): Administración
   lo aprueba sin que venga y sin cobrarle, desde el tablero o la ficha del
   cliente (ver "Y el que ya era cliente no lo hace").
+- **El fichaje guarda dónde se hizo** (26-10): la planilla dice "en la
+  casa" o "a 3 km de la casa", y sin ubicación se ficha igual (ver "Dónde
+  se fichó"). En `pruebas`, esperando su migración.
 
 ## 6. Comandos
 
