@@ -2181,6 +2181,9 @@ producción, con `build`, `lint`, `test` y la prueba de aislamiento en verde.
 6. **El fichaje con ubicación** (26-10) está en `pruebas`. Para pasarlo a
    `main`: correr su migración primero (paso 11) y mandar el punto exacto
    de la casa (paso 12).
+7. **Cambiar la plantilla del correo de "olvidé mi contraseña"** en
+   Supabase (paso 13). Hasta entonces el enlace sigue fallando al abrirlo
+   desde el correo del celular.
 
 **Lo que sigue en código**, sugerido y sin empezar:
 
@@ -2346,7 +2349,7 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
     (`-33.44…, -70.61…`). Hasta que se corrija, un fichaje en la casa puede
     salir "a 200 m de la casa".
 
-10. **Cambiar la plantilla del correo de "olvidé mi contraseña"** en Supabase
+13. **Cambiar la plantilla del correo de "olvidé mi contraseña"** en Supabase
     → Authentication → Emails → *Reset Password*. Es lo que hace que el
     enlace funcione abriéndolo desde el correo del celular (ver "Y el enlace
     tiene que servir donde se abra"). El código ya acepta los dos formatos,
@@ -2472,7 +2475,7 @@ tema tiene su explicación más arriba en este archivo.
   estaba abierta en el navegador (22-10), y el enlace **sirve abriéndolo
   donde sea** —también en el navegador interno del correo, que es donde más
   se abre— con el formato `token_hash` (26-10). Falta cambiar la plantilla
-  en Supabase: paso 10 de "Lo que falta hacer afuera".
+  en Supabase: paso 13 de "Lo que falta hacer afuera".
 - **Lo pagado del día de prueba se devuelve** al cancelar (22-10): aparece en
   "Por devolver", y la pantalla pide la cuenta antes de confirmar, con el
   mismo formulario que el día de jardín.
