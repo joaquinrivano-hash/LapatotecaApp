@@ -26,6 +26,7 @@ import {
   type TurnoConPersona,
 } from "@/lib/servicios/turnos";
 import type { LadoObservado } from "@/lib/rules/turnos";
+import { describirDondeFicho, dondeFicho } from "@/lib/rules/ubicacion";
 import { hoyDelStaff } from "@/lib/servicios/asistencia";
 import {
   diaDeSemana,
@@ -34,7 +35,7 @@ import {
   formatearHora,
   sumarDias,
 } from "@/lib/utils/fecha";
-import type { FechaISO } from "@/lib/types";
+import type { FechaISO, UbicacionDeFichaje } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** El lunes de la semana en que cae esa fecha. */
@@ -343,11 +344,19 @@ function Observado({
 
   return (
     <span className="text-muted-foreground block text-sm text-pretty">
-      <Lado lado={comparacion.entrada} verbo="Entró" />
+      <Lado
+        lado={comparacion.entrada}
+        verbo="Entró"
+        ubicacion={turno.entradaUbicacion}
+      />
       {comparacion.salida.instante && (
         <>
           {" · "}
-          <Lado lado={comparacion.salida} verbo="salió" />
+          <Lado
+            lado={comparacion.salida}
+            verbo="salió"
+            ubicacion={turno.salidaUbicacion}
+          />
         </>
       )}
       {atraso !== null && atraso > NEGOCIO.turnos.minutosDeTolerancia && (
@@ -360,7 +369,15 @@ function Observado({
   );
 }
 
-function Lado({ lado, verbo }: { lado: LadoObservado; verbo: string }) {
+function Lado({
+  lado,
+  verbo,
+  ubicacion,
+}: {
+  lado: LadoObservado;
+  verbo: string;
+  ubicacion?: UbicacionDeFichaje;
+}) {
   if (!lado.instante) return <span>sin {verbo.toLowerCase()}</span>;
 
   return (
@@ -368,7 +385,47 @@ function Lado({ lado, verbo }: { lado: LadoObservado; verbo: string }) {
       {lado.fuente === "fichaje"
         ? `${verbo} ${formatearHora(lado.instante)}`
         : `activ${verbo === "Entró" ? "o desde" : "o hasta"} ${formatearHora(lado.instante)}`}
+      {/* Solo el fichaje trae ubicación: el rastro es deducido. Y lo
+          fichado antes de pedirla no dice nada, que es lo cierto. */}
+      {lado.fuente === "fichaje" && ubicacion && (
+        <DondeFicho ubicacion={ubicacion} />
+      )}
     </span>
+  );
+}
+
+/**
+ * "en la casa", "a 2,3 km de la casa (ver mapa)".
+ *
+ * El mapa va solo cuando hay algo que mirar —lejos, o una ubicación
+ * dudosa—: al lado de cada "en la casa" sería un enlace que nadie toca.
+ */
+function DondeFicho({ ubicacion }: { ubicacion: UbicacionDeFichaje }) {
+  const donde = dondeFicho(ubicacion);
+  const texto = describirDondeFicho(donde);
+
+  if (donde.tipo === "en_la_casa") return <> {texto}</>;
+  if (!("lat" in ubicacion)) return <> ({texto})</>;
+
+  return (
+    <>
+      {" "}
+      <span className={cn(donde.tipo === "lejos" && "text-warning font-semibold")}>
+        {texto}
+      </span>{" "}
+      <span className="whitespace-nowrap">
+        (
+        <a
+          href={`https://www.google.com/maps?q=${ubicacion.lat},${ubicacion.lng}`}
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2"
+        >
+          ver mapa
+        </a>
+        )
+      </span>
+    </>
   );
 }
 
