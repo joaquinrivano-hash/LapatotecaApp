@@ -12,9 +12,42 @@ import { InputClave } from "@/components/shared/input-clave";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { autenticacion, hayAuthReal } from "@/lib/auth";
+import type { EnlaceDeClave } from "@/lib/auth/tipos";
 
 /** El mínimo que exige Supabase. */
 const LARGO_MINIMO = 6;
+
+/**
+ * Qué decirle a quien llegó y no puede seguir.
+ *
+ * Tres causas distintas y tres salidas distintas. Juntarlas en un mensaje
+ * solo —como estaba— es mandar a la mitad de la gente a hacer lo que no
+ * sirve.
+ */
+const MOTIVOS: Record<
+  Exclude<EnlaceDeClave["estado"], "abierta">,
+  { titulo: string; queHacer: string }
+> = {
+  vencido: {
+    titulo: "Este enlace ya se usó o venció.",
+    queHacer:
+      "Duran alrededor de una hora y sirven una sola vez; además, algunos " +
+      "correos los abren solos para revisarlos y los gastan. Pide otro desde " +
+      "la pantalla de ingreso.",
+  },
+  otro_navegador: {
+    titulo: "Este enlace se pidió en otro navegador.",
+    queHacer:
+      "Ábrelo en el mismo teléfono o computador, y el mismo navegador, donde " +
+      "lo pediste. Lo más simple es pedir otro desde acá y abrirlo al tiro.",
+  },
+  sin_enlace: {
+    titulo: "Llegaste acá sin un enlace.",
+    queHacer:
+      "Para elegir una contraseña nueva, pídela en la pantalla de ingreso y " +
+      "te llega un correo con el enlace.",
+  },
+};
 
 /**
  * Elegir una contraseña nueva, llegando desde el enlace del correo.
@@ -36,6 +69,11 @@ const LARGO_MINIMO = 6;
  * la contraseña a la cuenta abierta en ese navegador, no a la del correo.
  * Se vio probándolo. Por eso se pregunta `sesionDelEnlaceDeClave`, y la
  * pantalla dice de qué cuenta es la contraseña antes de guardarla.
+ *
+ * **Y cuando no sirve, dice POR QUÉ.** Antes había un solo mensaje —"se abre
+ * donde lo pediste"— para tres causas distintas, así que a quien se le había
+ * gastado el enlace lo mandaba a repetir justo lo que no iba a funcionar.
+ * Pasó con la cuenta de administración el 26-10.
  */
 export default function CambiarClave() {
   const router = useRouter();
@@ -45,8 +83,8 @@ export default function CambiarClave() {
   // El estado inicial se calcula y no se corrige dentro del efecto:
   // `hayAuthReal()` es una constante de compilación, así que en el
   // prototipo esta pantalla nace sabiendo que no tiene nada que hacer.
-  const [estado, setEstado] = useState<"revisando" | "lista" | "sin_sesion">(
-    hayAuthReal() ? "revisando" : "sin_sesion",
+  const [estado, setEstado] = useState<"revisando" | EnlaceDeClave["estado"]>(
+    hayAuthReal() ? "revisando" : "sin_enlace",
   );
   // La dirección tal como llegó, leída en el render: la librería le borra
   // el `code` apenas lo usa, y es justamente lo que dice si lo pudo usar.
@@ -70,13 +108,20 @@ export default function CambiarClave() {
     autenticacion()
       .sesionDelEnlaceDeClave(direccionAlLlegar)
       .then(
-        (identidad) => {
+        (resultado) => {
           if (!vigente) return;
-          setCuenta(identidad?.email ?? null);
-          setEstado(identidad ? "lista" : "sin_sesion");
+          if (resultado.estado === "abierta") {
+            setCuenta(resultado.identidad.email ?? null);
+            // El token ya se gastó, pero no tiene para qué quedar en el
+            // historial ni viajar como `referer`. Lo mismo que hace la
+            // pantalla de bienvenida del equipo con el suyo.
+            window.history.replaceState(null, "", window.location.pathname);
+          }
+          setEstado(resultado.estado);
         },
         () => {
-          if (vigente) setEstado("sin_sesion");
+          // Si la consulta misma falla, lo honesto es ofrecer pedir otro.
+          if (vigente) setEstado("vencido");
         },
       );
 
@@ -136,14 +181,11 @@ export default function CambiarClave() {
         </Card>
       )}
 
-      {estado === "sin_sesion" && (
+      {estado !== "revisando" && estado !== "abierta" && (
         <Card className="space-y-3 p-5 text-center">
-          <p className="font-semibold">Este enlace ya no sirve.</p>
+          <p className="font-semibold">{MOTIVOS[estado].titulo}</p>
           <p className="text-muted-foreground text-sm text-pretty">
-            El enlace se abre solo en el mismo teléfono o computador, y en el
-            mismo navegador, donde lo pediste. También dura un rato y se usa
-            una sola vez. Pide otro desde la pantalla de ingreso y ábrelo
-            ahí mismo.
+            {MOTIVOS[estado].queHacer}
           </p>
           <Button asChild size="lg" className="w-full">
             <Link href="/ingresar">Volver a ingresar</Link>
@@ -151,7 +193,7 @@ export default function CambiarClave() {
         </Card>
       )}
 
-      {estado === "lista" && (
+      {estado === "abierta" && (
         <Card className="p-5">
           {listo ? (
             <p role="status" className="text-center font-semibold">

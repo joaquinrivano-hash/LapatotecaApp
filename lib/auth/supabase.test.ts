@@ -93,7 +93,9 @@ describe("actual", () => {
 
   it("junta el rol del perfil con la ficha del cliente", async () => {
     const { auth } = doble(
-      { getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }) } as Auth,
+      {
+        getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }),
+      } as Auth,
       tablas({ rol: "cliente", nombre: "Javiera" }, { id: "uuid-c" }),
     );
 
@@ -111,7 +113,9 @@ describe("actual", () => {
 
   it("al que trabaja acá le da con qué firmar", async () => {
     const { auth } = doble(
-      { getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }) } as Auth,
+      {
+        getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }),
+      } as Auth,
       tablas({ rol: "staff", nombre: "María" }, null),
     );
 
@@ -123,7 +127,9 @@ describe("actual", () => {
   // Una firma vacía en un reporte es peor que un correo feo.
   it("si el perfil no trae nombre, firma con el correo", async () => {
     const { auth } = doble(
-      { getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }) } as Auth,
+      {
+        getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }),
+      } as Auth,
       tablas({ rol: "staff", nombre: "   " }, null),
     );
 
@@ -147,7 +153,9 @@ describe("actual", () => {
 
   it("sin fila en perfiles tampoco asume nada", async () => {
     const { auth } = doble(
-      { getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }) } as Auth,
+      {
+        getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }),
+      } as Auth,
       tablas(null, null),
     );
     await expect(auth.actual().then((i) => i?.rol)).resolves.toBe("cliente");
@@ -331,11 +339,21 @@ describe("abrirDesdeEnlace", () => {
 
   it("verifica el token_hash cuando la plantilla lo manda así", async () => {
     const verifyOtp = vi.fn().mockResolvedValue({ data: { user: usuario } });
-    const { auth } = doble({ verifyOtp } as Auth, tablas({ rol: "admin" }, null));
+    const { auth } = doble(
+      { verifyOtp } as Auth,
+      tablas({ rol: "admin" }, null),
+    );
 
-    await auth.abrirDesdeEnlace({ tipo: "verificar", tokenHash: "xyz", type: "invite" });
+    await auth.abrirDesdeEnlace({
+      tipo: "verificar",
+      tokenHash: "xyz",
+      type: "invite",
+    });
 
-    expect(verifyOtp).toHaveBeenCalledWith({ token_hash: "xyz", type: "invite" });
+    expect(verifyOtp).toHaveBeenCalledWith({
+      token_hash: "xyz",
+      type: "invite",
+    });
   });
 
   it("un enlace vencido falla con el motivo, sin tocar la sesión", async () => {
@@ -343,7 +361,10 @@ describe("abrirDesdeEnlace", () => {
     const { auth } = doble({ setSession } as Auth);
 
     await expect(
-      auth.abrirDesdeEnlace({ tipo: "error", mensaje: "El enlace venció o ya se usó." }),
+      auth.abrirDesdeEnlace({
+        tipo: "error",
+        mensaje: "El enlace venció o ya se usó.",
+      }),
     ).rejects.toThrow(/venció/);
     expect(setSession).not.toHaveBeenCalled();
   });
@@ -363,6 +384,8 @@ describe("sesionDelEnlaceDeClave", () => {
   // en otro aparato que el que lo pidió.
   const LLEGADA = "https://www.lapatoteca.cl/ingresar/clave?code=abc123";
   const LIMPIA = "https://www.lapatoteca.cl/ingresar/clave";
+  const CON_TOKEN =
+    "https://www.lapatoteca.cl/ingresar/clave?token_hash=abc&type=recovery";
 
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -372,39 +395,121 @@ describe("sesionDelEnlaceDeClave", () => {
     const getUser = vi.fn().mockResolvedValue({ data: { user: usuario } });
     const { auth } = doble({ getUser } as Auth, tablas({ rol: "admin" }, null));
 
-    await expect(auth.sesionDelEnlaceDeClave(LIMPIA)).resolves.toBeNull();
+    await expect(auth.sesionDelEnlaceDeClave(LIMPIA)).resolves.toEqual({
+      estado: "sin_enlace",
+    });
     expect(getUser).not.toHaveBeenCalled();
   });
 
-  it("si la librería usó el enlace (borró el code), es la sesión del enlace", async () => {
-    vi.stubGlobal("location", { href: LIMPIA });
-    const { auth } = doble(
-      { getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }) } as Auth,
-      tablas({ rol: "cliente", nombre: "Javiera" }, { id: "uuid-c" }),
-    );
+  describe("el camino nuevo: token_hash", () => {
+    /*
+     * El que de verdad arregla el problema. No mira la sesión del navegador
+     * ni nada guardado en él: canjea el token y lo que salga de ahí ES la
+     * sesión del enlace. Por eso funciona abriéndolo donde sea, incluido el
+     * navegador interno del correo, que es donde más se abre.
+     */
+    it("canjea el token y esa es la sesión, sin importar el navegador", async () => {
+      // La barra sigue con el token y la sesión previa es de Administración:
+      // en el camino viejo las dos cosas lo habrían hecho fallar.
+      vi.stubGlobal("location", { href: CON_TOKEN });
+      const verifyOtp = vi.fn().mockResolvedValue({ data: { user: usuario } });
+      const { auth } = doble(
+        { verifyOtp, getUser: vi.fn() } as Auth,
+        tablas({ rol: "cliente", nombre: "Javiera" }, { id: "uuid-c" }),
+      );
 
-    const identidad = await auth.sesionDelEnlaceDeClave(LLEGADA);
-    expect(identidad?.email).toBe(usuario.email);
+      const r = await auth.sesionDelEnlaceDeClave(CON_TOKEN);
+      expect(r.estado).toBe("abierta");
+      expect(r.estado === "abierta" && r.identidad.email).toBe(usuario.email);
+      expect(verifyOtp).toHaveBeenCalledWith({
+        token_hash: "abc",
+        type: "recovery",
+      });
+    });
+
+    it("un token que ya no vale es 'vencido', no 'otro navegador'", async () => {
+      // El consejo importa: a quien se le gastó el enlace hay que decirle que
+      // pida otro, no que lo abra en otra parte.
+      const { auth } = doble({
+        verifyOtp: vi.fn().mockResolvedValue({
+          data: { user: null },
+          error: { message: "Token has expired or is invalid" },
+        }),
+      } as Auth);
+
+      await expect(auth.sesionDelEnlaceDeClave(CON_TOKEN)).resolves.toEqual({
+        estado: "vencido",
+      });
+    });
+
+    it("un token de otro tipo no abre esta pantalla", async () => {
+      // Escribir una contraseña no es lo que proponía ese correo.
+      const verifyOtp = vi.fn();
+      const { auth } = doble({ verifyOtp } as Auth);
+
+      await expect(
+        auth.sesionDelEnlaceDeClave(
+          "https://www.lapatoteca.cl/ingresar/clave?token_hash=abc&type=invite",
+        ),
+      ).resolves.toEqual({ estado: "sin_enlace" });
+      expect(verifyOtp).not.toHaveBeenCalled();
+    });
+
+    it("el error que viene en la propia dirección se cree, sin preguntar", async () => {
+      const verifyOtp = vi.fn();
+      const { auth } = doble({ verifyOtp } as Auth);
+
+      await expect(
+        auth.sesionDelEnlaceDeClave(
+          "https://www.lapatoteca.cl/ingresar/clave#error=access_denied&error_code=otp_expired",
+        ),
+      ).resolves.toEqual({ estado: "vencido" });
+      expect(verifyOtp).not.toHaveBeenCalled();
+    });
   });
 
-  it("si el code sigue en la barra, la sesión abierta es OTRA y no se toca", async () => {
-    // Abierto en un navegador donde no se pidió: Supabase no lo puede usar y
-    // deja la sesión que había, por ejemplo la de Administración.
-    vi.stubGlobal("location", { href: LLEGADA });
-    const { auth } = doble(
-      { getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }) } as Auth,
-      tablas({ rol: "admin" }, null),
-    );
+  describe("el camino viejo: code (PKCE)", () => {
+    // Se mantiene porque los correos ya mandados lo usan, y porque la
+    // plantilla de Supabase se cambia a mano: hasta que se cambie, este es
+    // el único enlace que llega.
+    it("si la librería usó el enlace (borró el code), es la sesión del enlace", async () => {
+      vi.stubGlobal("location", { href: LIMPIA });
+      const { auth } = doble(
+        {
+          getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }),
+        } as Auth,
+        tablas({ rol: "cliente", nombre: "Javiera" }, { id: "uuid-c" }),
+      );
 
-    await expect(auth.sesionDelEnlaceDeClave(LLEGADA)).resolves.toBeNull();
-  });
+      const r = await auth.sesionDelEnlaceDeClave(LLEGADA);
+      expect(r.estado === "abierta" && r.identidad.email).toBe(usuario.email);
+    });
 
-  it("sin nadie con sesión, tampoco", async () => {
-    vi.stubGlobal("location", { href: LIMPIA });
-    const { auth } = doble({
-      getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
-    } as Auth);
+    it("si el code sigue en la barra, la sesión abierta es OTRA y no se toca", async () => {
+      // Abierto en un navegador donde no se pidió: Supabase no lo puede usar y
+      // deja la sesión que había, por ejemplo la de Administración.
+      vi.stubGlobal("location", { href: LLEGADA });
+      const { auth } = doble(
+        {
+          getUser: vi.fn().mockResolvedValue({ data: { user: usuario } }),
+        } as Auth,
+        tablas({ rol: "admin" }, null),
+      );
 
-    await expect(auth.sesionDelEnlaceDeClave(LLEGADA)).resolves.toBeNull();
+      await expect(auth.sesionDelEnlaceDeClave(LLEGADA)).resolves.toEqual({
+        estado: "otro_navegador",
+      });
+    });
+
+    it("sin nadie con sesión, tampoco", async () => {
+      vi.stubGlobal("location", { href: LIMPIA });
+      const { auth } = doble({
+        getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
+      } as Auth);
+
+      await expect(auth.sesionDelEnlaceDeClave(LLEGADA)).resolves.toEqual({
+        estado: "otro_navegador",
+      });
+    });
   });
 });
