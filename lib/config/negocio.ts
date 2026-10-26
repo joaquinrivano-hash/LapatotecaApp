@@ -216,6 +216,10 @@ export const NEGOCIO = {
    * Dónde está la casa: Providencia, cerca de Diagonal Oriente con Manuel
    * Montt. El buscador de direcciones prioriza lo que queda cerca de acá,
    * así "Italia 1500" sugiere la avenida de Ñuñoa y no una calle de Arica.
+   *
+   * También es contra lo que se mide si alguien fichó en la casa, así que
+   * tiene que ser el punto exacto de la puerta y no el de la esquina: un
+   * punto corrido 200 metros haría que todos los fichajes salieran lejos.
    */
   ubicacion: {
     lat: -33.4436,
@@ -243,6 +247,18 @@ export const NEGOCIO = {
     horasQueSeCubren: { desde: "07:00", hasta: "21:00" },
     /** Fichar al minuto exacto no lo hace nadie. */
     minutosDeTolerancia: 10,
+    /**
+     * Hasta dónde un fichaje cuenta como "en la casa", en metros. No es
+     * cero porque el GPS adentro de una casa se corre unas decenas de
+     * metros, y una planilla que acusa a todos de fichar en la calle se
+     * deja de mirar.
+     */
+    radioDeLaCasaM: 150,
+    /**
+     * Con menos precisión que esto, el celular no sabe dónde está: un
+     * punto de ±2 km sacado de la antena no dice ni sí ni no.
+     */
+    precisionMaximaM: 150,
   },
 } as const;
 

@@ -299,6 +299,14 @@ intento_como "$STAFF" "ficha su propia entrada" "fichado" \
   "update turnos set entrada_real = now() where perfil_id = '$STAFF';
    select 'fichado' from turnos where perfil_id = '$STAFF' and entrada_real is not null;"
 
+# Dónde fichó lo escribe quien ficha, igual que la hora: el disparador
+# cuida solo el horario planificado.
+intento_como "$STAFF" "ficha con su ubicación" "con ubicación" \
+  "update turnos set entrada_ubicacion = '{\"lat\": -33.4436, \"lng\": -70.6189, \"precisionM\": 20}'
+     where perfil_id = '$STAFF';
+   select 'con ubicación' from turnos
+     where perfil_id = '$STAFF' and entrada_ubicacion->>'lat' is not null;"
+
 intento_como "$STAFF" "no se corre su hora de entrada" "lo cambia Administración" \
   "update turnos set desde = '09:00' where perfil_id = '$STAFF';"
 

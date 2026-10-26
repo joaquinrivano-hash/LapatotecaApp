@@ -39,7 +39,13 @@ import {
   minutosDelDia,
   rangoFechas,
 } from "@/lib/utils/fecha";
-import type { FechaISO, ID, OcupacionDia, Turno } from "@/lib/types";
+import type {
+  FechaISO,
+  ID,
+  OcupacionDia,
+  Turno,
+  UbicacionDeFichaje,
+} from "@/lib/types";
 
 export interface TurnoConPersona {
   turno: Turno;
@@ -216,12 +222,18 @@ export type LadoDelFichaje = "entrada" | "salida";
  * declaración de quien lo hizo, y dejar que se reescriba lo convertiría en
  * una casilla que se llena al final del día con la hora que convenga. Si
  * quedó mal, lo corrige Administración.
+ *
+ * La ubicación va con la hora y corre la misma suerte: se anota la primera
+ * vez y no se vuelve a tocar. Es lo que dijo el celular en ese momento, no
+ * una prueba —un GPS se puede falsear—, pero sí una pista que la hora sola
+ * no da.
  */
 export async function ficharTurno(
   repo: RepositorioPatoteca,
   turnoId: ID,
   lado: LadoDelFichaje,
   ahora: string = new Date().toISOString(),
+  ubicacion?: UbicacionDeFichaje,
 ): Promise<Turno> {
   const turno = await repo.turnos.obtener(turnoId);
   if (!turno) throw new Error("Ese turno ya no existe.");
@@ -231,7 +243,9 @@ export async function ficharTurno(
 
   return repo.turnos.actualizar(
     turnoId,
-    lado === "entrada" ? { entradaReal: ahora } : { salidaReal: ahora },
+    lado === "entrada"
+      ? { entradaReal: ahora, ...(ubicacion && { entradaUbicacion: ubicacion }) }
+      : { salidaReal: ahora, ...(ubicacion && { salidaUbicacion: ubicacion }) },
   );
 }
 

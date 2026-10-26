@@ -191,6 +191,58 @@ describe("ficharTurno", () => {
       /ya no existe/,
     );
   });
+
+  it("guarda la ubicación junto con la hora", async () => {
+    const enLaCasa = { lat: -33.4436, lng: -70.6189, precisionM: 20 };
+    const t = await ficharTurno(
+      repo,
+      "turno-001",
+      "entrada",
+      instanteEnHora(DIA, "07:05"),
+      enLaCasa,
+    );
+    expect(t.entradaUbicacion).toEqual(enLaCasa);
+    expect(t.salidaUbicacion).toBeUndefined();
+  });
+
+  // Sin ubicación el fichaje se guarda igual: la hora es lo que importa.
+  it("sin ubicación ficha igual y deja el motivo", async () => {
+    const t = await ficharTurno(
+      repo,
+      "turno-001",
+      "entrada",
+      instanteEnHora(DIA, "07:05"),
+      { sinUbicacion: "permiso" },
+    );
+    expect(t.entradaReal).toBe(instanteEnHora(DIA, "07:05"));
+    expect(t.entradaUbicacion).toEqual({ sinUbicacion: "permiso" });
+  });
+
+  it("la ubicación tampoco se reescribe al fichar de nuevo", async () => {
+    const primera = { lat: -33.4436, lng: -70.6189, precisionM: 20 };
+    await ficharTurno(repo, "turno-001", "entrada", instanteEnHora(DIA, "07:05"), primera);
+    const t = await ficharTurno(
+      repo,
+      "turno-001",
+      "entrada",
+      instanteEnHora(DIA, "09:00"),
+      { lat: -33.5, lng: -70.7, precisionM: 10 },
+    );
+    expect(t.entradaUbicacion).toEqual(primera);
+  });
+
+  it("la salida guarda la suya aparte", async () => {
+    await ficharTurno(repo, "turno-001", "entrada", instanteEnHora(DIA, "07:00"));
+    const t = await ficharTurno(
+      repo,
+      "turno-001",
+      "salida",
+      instanteEnHora(DIA, "15:02"),
+      { sinUbicacion: "tiempo" },
+    );
+    expect(t.salidaUbicacion).toEqual({ sinUbicacion: "tiempo" });
+    expect(t.entradaUbicacion).toBeUndefined();
+  });
 });
 
 describe("desfaseDelFichaje", () => {

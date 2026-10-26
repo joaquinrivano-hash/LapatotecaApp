@@ -44,9 +44,30 @@ export interface Turno {
   hasta: string;
   entradaReal?: InstanteISO;
   salidaReal?: InstanteISO;
+  /** Dónde estaba el celular al fichar. Vacío en lo fichado antes de pedirla. */
+  entradaUbicacion?: UbicacionDeFichaje;
+  salidaUbicacion?: UbicacionDeFichaje;
   nota?: string;
   creadoEn: InstanteISO;
 }
+
+/** Por qué un fichaje quedó sin ubicación. */
+export type MotivoSinUbicacion =
+  | "permiso"
+  | "no_disponible"
+  | "tiempo"
+  | "sin_soporte";
+
+/**
+ * Lo que dijo el celular al fichar: el punto con su precisión, o por qué no
+ * lo dio. Sin ubicación el fichaje se guarda igual —la hora es lo que
+ * importa, y un GPS que falla no puede dejar a alguien sin su entrada—,
+ * pero queda el motivo, porque "no dio permiso" y "no encontró señal" no
+ * se conversan igual.
+ */
+export type UbicacionDeFichaje =
+  | { lat: number; lng: number; precisionM: number }
+  | { sinUbicacion: MotivoSinUbicacion };
 
 export type Rol = "cliente" | "staff" | "admin";
 export type Linea = "hotel" | "jardin";
