@@ -43,6 +43,23 @@ export interface Registro {
   faltaConfirmar: boolean;
 }
 
+/**
+ * Cómo llegó alguien a la pantalla de contraseña nueva.
+ *
+ * - `abierta`: el enlace sirvió y la sesión es suya. Es el único caso en que
+ *   se puede escribir una contraseña.
+ * - `vencido`: el enlace existe pero ya no vale — duran un rato y se gastan
+ *   al usarse. Un escáner de correo que los pre-visita también los gasta.
+ * - `otro_navegador`: solo el camino viejo (PKCE). El enlace es bueno pero
+ *   le falta la mitad que quedó guardada donde se pidió el correo.
+ * - `sin_enlace`: llegó a la pantalla sin venir de un correo.
+ */
+export type EnlaceDeClave =
+  | { estado: "abierta"; identidad: Identidad }
+  | { estado: "vencido" }
+  | { estado: "otro_navegador" }
+  | { estado: "sin_enlace" };
+
 /** Lo que falló al entrar o al registrarse, ya traducido. */
 export class ErrorAutenticacion extends Error {
   constructor(mensaje: string) {
@@ -68,19 +85,21 @@ export interface Autenticacion {
    */
   cambiarClave(nueva: string): Promise<void>;
   /**
-   * Quién abrió el enlace de "olvidé mi contraseña" en ESTA carga, o null.
+   * Quién abrió el enlace de "olvidé mi contraseña" en ESTA carga.
    *
-   * No alcanza con `actual()`. Si el enlace se abre en otro navegador que el
-   * que lo pidió —lo normal: se pide en el computador y se abre desde el
-   * correo del teléfono—, Supabase no lo puede usar ahí y, a propósito, deja
-   * la sesión que hubiera. Con `actual()` la pantalla tomaba esa sesión ajena
-   * por la del enlace y le cambiaba la contraseña a OTRA cuenta: la que
-   * estaba abierta en ese navegador.
+   * No alcanza con `actual()`: la sesión que haya en el navegador puede ser
+   * de otra persona, y cambiarle la contraseña a ESA fue el bug que se vio
+   * probándolo. Lo que autoriza el cambio es el enlace, no la sesión.
+   *
+   * Devuelve el motivo y no solo un null porque la pantalla tiene que decir
+   * qué hacer, y "pídelo de nuevo" y "ábrelo donde lo pediste" son consejos
+   * distintos. Dar el equivocado manda a la persona a repetir lo que ya no
+   * funciona.
    *
    * Recibe la dirección tal como llegó, leída antes de que la librería la
    * limpie.
    */
-  sesionDelEnlaceDeClave(direccionAlLlegar: string): Promise<Identidad | null>;
+  sesionDelEnlaceDeClave(direccionAlLlegar: string): Promise<EnlaceDeClave>;
   /**
    * Abre la sesión que trae el enlace de un correo (la invitación al equipo).
    *

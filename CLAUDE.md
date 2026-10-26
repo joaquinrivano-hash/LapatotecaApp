@@ -804,9 +804,47 @@ librería **usó** el enlace. La señal es que, al usarlo, la librería borra el
 eso la pantalla lee la dirección en el render, antes de que nada la limpie.
 Y dice **de qué cuenta** es la contraseña antes de guardarla.
 
-Si el enlace se abre en otro aparato, la pantalla dice que se abre solo
-donde se pidió. Es el límite del flujo con `code_verifier` (PKCE), no un
-error: es justamente lo que impide que un enlace reenviado le sirva a otro.
+#### Y el enlace tiene que servir donde se abra
+
+Una versión anterior de este archivo decía que abrir el enlace en otro
+aparato "es el límite del flujo con `code_verifier` (PKCE), no un error".
+Eso estaba **mal**: es el límite de ESE flujo, no de recuperar contraseña.
+Y el caso raro no era: **la mayoría abre el correo en el celular**, y Gmail
+y Outlook abren su propio navegador interno, que para efectos de
+almacenamiento es otro navegador. O sea que el camino "bueno" fallaba casi
+siempre. Pasó con la cuenta de administración el 26-10 y hubo que arreglarla
+por SQL.
+
+El arreglo es el otro formato de enlace que Supabase ofrece: el correo trae
+un **`token_hash`** y la app lo canjea con `verifyOtp`. No necesita nada
+guardado en el navegador, así que el enlace sirve donde se abra.
+
+`sesionDelEnlaceDeClave` entiende **los dos**, y eso no es por simetría:
+
+- `?token_hash=…&type=recovery` → `verifyOtp`. Que responda bien ES la
+  prueba de que la sesión salió del enlace — una garantía más fuerte que la
+  del camino viejo, donde había que deducirlo mirando si la librería había
+  limpiado la barra.
+- `?code=…` → el camino PKCE de antes. Se mantiene porque los correos ya
+  mandados lo usan y porque **la plantilla se cambia a mano en Supabase**:
+  hasta que alguien la cambie, este es el único enlace que llega. Por eso el
+  código se puede publicar solo, sin coordinar con nada — lo contrario de
+  `planes_y_dia_de_prueba`.
+
+Solo se acepta `type=recovery`. Un token de otro tipo tiene su propia puerta,
+y escribir una contraseña no es lo que proponía ese correo.
+
+**Y cuando no sirve, la pantalla dice POR QUÉ.** Antes había un solo mensaje
+—"se abre donde lo pediste"— para tres causas, así que a quien se le había
+gastado el enlace lo mandaba a repetir justo lo que no iba a funcionar. Son
+tres salidas distintas: `vencido` (pide otro), `otro_navegador` (ábrelo
+donde lo pediste) y `sin_enlace` (pídelo en ingreso). El mensaje de vencido
+menciona que **algunos correos abren los enlaces solos para revisarlos** y
+los gastan: explica el caso en que falla al primer clic, que si no parece
+cosa de brujas.
+
+El token se borra de la barra apenas se usa, como ya hacía la bienvenida del
+equipo con el suyo.
 
 ### El día de prueba
 
@@ -2308,6 +2346,41 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
     (`-33.44…, -70.61…`). Hasta que se corrija, un fichaje en la casa puede
     salir "a 200 m de la casa".
 
+10. **Cambiar la plantilla del correo de "olvidé mi contraseña"** en Supabase
+    → Authentication → Emails → *Reset Password*. Es lo que hace que el
+    enlace funcione abriéndolo desde el correo del celular (ver "Y el enlace
+    tiene que servir donde se abra"). El código ya acepta los dos formatos,
+    así que esto se puede hacer en cualquier momento y nada se rompe
+    mientras tanto — lo único es que hasta que se cambie sigue fallando como
+    el 26-10.
+
+    El cuerpo, entero:
+
+    ```html
+    <h2>Elige una contraseña nueva</h2>
+    <p>
+      Toca el botón y escribe tu contraseña nueva. El enlace dura un rato y
+      sirve una sola vez.
+    </p>
+    <p>
+      <a href="{{ .SiteURL }}/ingresar/clave?token_hash={{ .TokenHash }}&type=recovery">
+        Elegir contraseña nueva
+      </a>
+    </p>
+    <p>Si no pediste esto, puedes ignorar el correo.</p>
+    ```
+
+    Dos cosas que no se pueden cambiar sin romperlo: `type=recovery` —la
+    pantalla no acepta otro tipo— y que apunte a `/ingresar/clave`. `.SiteURL`
+    es `https://lapatoteca.cl`, que Vercel manda a `www` conservando la ruta
+    y la consulta.
+
+    Con este formato el enlace va **directo a la app**, no pasa por el
+    `/auth/v1/verify` de Supabase, así que las Redirect URLs dejan de
+    importar para este correo. Se prueba pidiendo "olvidé mi contraseña" en
+    el computador y abriendo el correo en el teléfono: antes decía que el
+    enlace no servía, ahora tiene que dejar escribir la contraseña.
+
 **Decisiones de producto abiertas:**
 
 - **La tienda nace pagada** (con un "webpay" que no existe), mientras que
@@ -2396,7 +2469,10 @@ tema tiene su explicación más arriba en este archivo.
   al dueño tocar cobros, planes ni su propio veredicto (ver "Cancelar sin
   poder tocar el cobro" y "El saldo del plan y el día de prueba").
 - **"Olvidé mi contraseña"** cambia la de la cuenta del enlace y no la que
-  estaba abierta en el navegador (22-10).
+  estaba abierta en el navegador (22-10), y el enlace **sirve abriéndolo
+  donde sea** —también en el navegador interno del correo, que es donde más
+  se abre— con el formato `token_hash` (26-10). Falta cambiar la plantilla
+  en Supabase: paso 10 de "Lo que falta hacer afuera".
 - **Lo pagado del día de prueba se devuelve** al cancelar (22-10): aparece en
   "Por devolver", y la pantalla pide la cuenta antes de confirmar, con el
   mismo formulario que el día de jardín.

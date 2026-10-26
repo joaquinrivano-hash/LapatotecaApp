@@ -16,6 +16,7 @@
 
 import type { AuthError, User } from "@supabase/supabase-js";
 
+import { leerEnlaceDeCorreo } from "@/lib/auth/enlace";
 import {
   ErrorAutenticacion,
   type Autenticacion,
@@ -38,7 +39,10 @@ export function explicarAuth(error: AuthError | { message: string }): string {
   if (m.includes("email not confirmed")) {
     return "Todavía no confirmaste tu correo. Revisa tu bandeja de entrada.";
   }
-  if (m.includes("user already registered") || m.includes("already been registered")) {
+  if (
+    m.includes("user already registered") ||
+    m.includes("already been registered")
+  ) {
     return "Ya hay una cuenta con ese correo. Entra en vez de crear otra.";
   }
   if (m.includes("password should be at least")) {
@@ -86,9 +90,7 @@ function rolValido(valor: unknown): Rol {
   return ROLES.includes(valor as Rol) ? (valor as Rol) : "cliente";
 }
 
-export function crearAutenticacionSupabase(
-  sb: ClienteSupabase,
-): Autenticacion {
+export function crearAutenticacionSupabase(sb: ClienteSupabase): Autenticacion {
   /**
    * El perfil y la ficha de cliente de un usuario.
    *
@@ -184,13 +186,49 @@ export function crearAutenticacionSupabase(
       if (error) throw new ErrorAutenticacion(explicarAuth(error));
     },
 
+    /**
+     * Dos formatos de enlace, y el nuevo es el que de verdad funciona.
+     *
+     * - `?token_hash=…&type=recovery` — la app canjea el token acá mismo con
+     *   `verifyOtp`. **No necesita nada guardado en este navegador**, así que
+     *   el enlace sirve donde se abra: en otro aparato, o en el navegador
+     *   interno que usan Gmail y Outlook al tocar un link, que es donde más
+     *   se abre y donde el otro camino fallaba sin explicación.
+     * - `?code=…` — el camino PKCE. Lo sigue entendiendo porque los correos
+     *   ya mandados lo usan y porque la plantilla de Supabase se cambia a
+     *   mano: mientras no se cambie, este es el único que llega.
+     *
+     * Que `verifyOtp` responda bien ES la prueba de que la sesión salió del
+     * enlace, y es una garantía más fuerte que la del camino viejo, donde
+     * había que deducirlo mirando si la librería había limpiado la barra.
+     */
     async sesionDelEnlaceDeClave(direccionAlLlegar) {
+      const enlace = leerEnlaceDeCorreo(direccionAlLlegar);
+
+      // Supabase devuelve el motivo en la propia dirección cuando el enlace
+      // ya no vale; decirlo es mejor que deducirlo.
+      if (enlace.tipo === "error") return { estado: "vencido" };
+
+      if (enlace.tipo === "verificar") {
+        // Solo `recovery`. Esta pantalla escribe una contraseña, y el token
+        // de otro tipo tiene su propia puerta: aceptarlo acá sería ofrecer
+        // una acción que ese correo no proponía.
+        if (enlace.type !== "recovery") return { estado: "sin_enlace" };
+
+        const { data, error } = await sb.auth.verifyOtp({
+          token_hash: enlace.tokenHash,
+          type: "recovery",
+        });
+        if (error || !data.user) return { estado: "vencido" };
+        return { estado: "abierta", identidad: await identidadDe(data.user) };
+      }
+
       const codigo = new URL(direccionAlLlegar).searchParams.get("code");
-      if (!codigo) return null;
+      if (!codigo) return { estado: "sin_enlace" };
 
       // `getUser` espera a que la librería termine de leer el enlace.
       const { data, error } = await sb.auth.getUser();
-      if (error || !data.user) return null;
+      if (error || !data.user) return { estado: "otro_navegador" };
 
       // Cuando el enlace sirve, la librería borra el `code` de la barra. Si
       // sigue ahí, no se pudo usar en este navegador —le falta la mitad que
@@ -198,9 +236,9 @@ export function crearAutenticacionSupabase(
       // anterior: justo la que no hay que tocar.
       const ahora = globalThis.location?.href;
       if (!ahora || new URL(ahora).searchParams.get("code") === codigo) {
-        return null;
+        return { estado: "otro_navegador" };
       }
-      return identidadDe(data.user);
+      return { estado: "abierta", identidad: await identidadDe(data.user) };
     },
 
     async abrirDesdeEnlace(enlace) {

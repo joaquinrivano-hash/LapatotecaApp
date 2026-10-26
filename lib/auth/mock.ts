@@ -56,7 +56,7 @@ export function crearAutenticacionMock(): Autenticacion {
     // En el prototipo no hay enlaces de correo: nunca hay sesión que venga
     // de uno.
     async sesionDelEnlaceDeClave() {
-      return null;
+      return { estado: "sin_enlace" as const };
     },
 
     async salir() {
