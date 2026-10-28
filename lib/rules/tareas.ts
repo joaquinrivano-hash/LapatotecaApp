@@ -370,10 +370,16 @@ export function armarResumenDelTurno(entrada: EntradaResumen): string {
   const enCurso: string[] = [];
   const pendientes: string[] = [];
 
+  // Lo pendiente de la rutina es lo de la ronda en curso. Lo que quedó sin
+  // marcar de una ronda anterior casi siempre se hizo y no se anotó, y
+  // listarlo en la tarde ("Desayuno", "Cambiar las aguas") confunde con lo
+  // que falta ahora: el grupo nunca lo escribió así.
+  const enCursoAhora = empezadas[empezadas.length - 1];
+
   for (const paso of pasos) {
     if (paso.estado === "hecha") hechas.push(describirPasoHecho(paso, nombreDe));
     else if (paso.estado === "en_proceso") enCurso.push(paso.titulo);
-    else if (empezadas.includes(paso.ronda)) {
+    else if (paso.ronda === enCursoAhora) {
       pendientes.push(
         paso.estado === "no_se_hizo"
           ? `${paso.titulo}${entreParentesis([`no se hizo${paso.registro?.nota ? `: ${paso.registro.nota}` : ""}`])}`

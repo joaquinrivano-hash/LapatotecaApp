@@ -301,6 +301,25 @@ describe("armarResumenDelTurno", () => {
     expect(texto).toBe("Reporte lunes 26/10 (José)\n08:00");
   });
 
+  it("lo pendiente de la rutina es solo lo de la ronda en curso", () => {
+    const registros = [registro({ clave: claveDePaso("mediodia", "aguas") })];
+    const texto = armarResumenDelTurno({
+      fecha: LUNES,
+      ahora: instanteEnHora(LUNES, "14:00"),
+      autor: "Flo",
+      pasos: (["manana", "mediodia", "tarde"] as const).flatMap((r) =>
+        pasosDeLaRonda(r, registros, LUNES),
+      ),
+      tareas: [],
+      registros,
+      perros: [],
+    });
+    expect(texto).toContain("- Almuerzo");
+    expect(texto).not.toContain("Desayuno");
+    expect(texto).not.toContain("- Cambiar las aguas");
+    expect(texto).not.toContain("Cena");
+  });
+
   it("lo que no se hizo dice por qué", () => {
     const patio = tarea({ id: "t2", titulo: "Lavar patio" });
     const registros = [registro({ clave: "t2", estado: "no_se_hizo", nota: "llueve" })];

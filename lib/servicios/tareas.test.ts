@@ -13,6 +13,7 @@ import {
   anotarEnElDia,
   anotarQuienNoComio,
   archivarTarea,
+  cargarEncargos,
   cargarRutinaSugerida,
   cargarTareasDelDia,
   crearTarea,
@@ -227,5 +228,20 @@ describe("resumenDelDia", () => {
     const texto = resumenDelDia(dia, "Flo", a("10:00"));
     expect(texto.split("\n")[0]).toBe("Reporte lunes 26/10 (Flo)");
     expect(texto).toContain("✅ Desayunaron casi todos (faltó Mara)");
+  });
+});
+
+describe("cargarEncargos", () => {
+  it("primero lo que falta, del más viejo, y después lo hecho", async () => {
+    const viejo = await crearTarea(repo, "encargo", { titulo: "Pintar puertas", fecha: "2026-10-20" });
+    const nuevo = await crearTarea(repo, "encargo", { titulo: "Lijar", fecha: LUNES });
+    const hecho = await crearTarea(repo, "encargo", { titulo: "Botar escombros", fecha: "2026-10-19" });
+    await marcarTarea(repo, { fecha: LUNES, clave: hecho.id, estado: "hecha" }, FLO);
+    await marcarTarea(repo, { fecha: LUNES, clave: nuevo.id, estado: "no_se_hizo", nota: "falta lija" }, FLO);
+
+    const encargos = await cargarEncargos(repo);
+    expect(encargos.map((e) => e.tarea.id)).toEqual([viejo.id, nuevo.id, hecho.id]);
+    expect(encargos[1].ultimo?.nota).toBe("falta lija");
+    expect(encargos[2].hecho?.autorStaff).toBe("Flo");
   });
 });

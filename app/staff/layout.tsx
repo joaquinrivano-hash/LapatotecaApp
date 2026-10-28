@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   CameraIcon,
   Home,
+  ListChecks,
   LogOut,
   Search,
   ShieldCheck,
@@ -22,8 +23,9 @@ import { hoyDelStaff } from "@/lib/servicios/asistencia";
 
 const NAVEGACION = [
   { href: "/staff", etiqueta: "Hoy", icono: Home },
-  { href: "/staff/buscar", etiqueta: "Buscar", icono: Search },
+  { href: "/staff/tareas", etiqueta: "Tareas", icono: ListChecks },
   { href: "/staff/reportes", etiqueta: "Reporte", icono: CameraIcon },
+  { href: "/staff/buscar", etiqueta: "Buscar", icono: Search },
   { href: "/staff/incidentes", etiqueta: "Incidentes", icono: AlertTriangle },
 ];
 
@@ -104,7 +106,7 @@ export default function StaffLayout({
                 key={href}
                 href={href}
                 className={cn(
-                  "flex min-w-18 flex-col items-center gap-0.5 rounded-2xl px-3 py-2 text-xs font-semibold transition-colors",
+                  "flex min-w-15 flex-col items-center gap-0.5 rounded-2xl px-2 py-2 text-xs font-semibold transition-colors",
                   activo
                     ? "text-primary bg-primary/10"
                     : "text-muted-foreground hover:text-foreground",

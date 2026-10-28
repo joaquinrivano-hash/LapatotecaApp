@@ -410,3 +410,44 @@ export async function cargarRutinaSugerida(
   }
   return creadas;
 }
+
+export interface EstadoDeEncargo {
+  tarea: Tarea;
+  /** Cuándo y quién lo hizo, si ya se hizo. */
+  hecho?: RegistroDeTarea;
+  /** Lo último que se anotó, aunque no sea "hecha": "no se pudo, llueve". */
+  ultimo?: RegistroDeTarea;
+}
+
+/**
+ * Los encargos vigentes con en qué van, para Administración.
+ *
+ * Primero los que faltan, del más viejo al más nuevo —lo que se añeja es lo
+ * que se termina no haciendo—, y después los hechos, del más reciente.
+ */
+export async function cargarEncargos(
+  repo: RepositorioPatoteca,
+): Promise<EstadoDeEncargo[]> {
+  const encargos = (await repo.tareas.listar()).filter(
+    (t) => t.tipo === "encargo" && t.activa,
+  );
+  const registros = await repo.registrosDeTareas.porClaves(encargos.map((t) => t.id));
+
+  const estados = encargos.map((tarea) => {
+    const suyos = registros
+      .filter((r) => r.clave === tarea.id)
+      .sort((a, b) => a.marcadoEn.localeCompare(b.marcadoEn));
+    const hechos = suyos.filter((r) => r.estado === "hecha");
+    return {
+      tarea,
+      hecho: hechos[hechos.length - 1],
+      ultimo: suyos[suyos.length - 1],
+    };
+  });
+
+  return estados.sort((a, b) => {
+    if (!!a.hecho !== !!b.hecho) return a.hecho ? 1 : -1;
+    if (a.hecho && b.hecho) return b.hecho.marcadoEn.localeCompare(a.hecho.marcadoEn);
+    return (a.tarea.fecha ?? "").localeCompare(b.tarea.fecha ?? "");
+  });
+}
