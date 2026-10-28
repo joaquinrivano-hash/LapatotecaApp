@@ -685,6 +685,84 @@ export interface DatosDeTransferencia {
   email: string;
 }
 
+/* ── Las tareas del día ────────────────────────────────────────────── */
+
+/**
+ * Las tres pasadas del día, que son las tres comidas.
+ *
+ * Así trabaja la casa desde siempre: después del desayuno, del almuerzo y de
+ * la cena se recogen las cacas, se cambian las aguas, se mandan los reportes
+ * a los dueños y se cuenta en el grupo cómo va el turno.
+ */
+export type RondaDelDia = "manana" | "mediodia" | "tarde";
+
+/**
+ * Cómo quedó una tarea.
+ *
+ * `no_se_hizo` no es un fracaso: "lavar el patio si para de llover" o "no
+ * cambié el cubresillón porque no estaba sucio" son decisiones que el turno
+ * siguiente tiene que leer. Por eso lleva su motivo.
+ */
+export type EstadoTarea = "pendiente" | "en_proceso" | "hecha" | "no_se_hizo";
+
+/**
+ * - `rutina`: el aseo de la semana. Se repite los días marcados.
+ * - `encargo`: algo puntual que pide Administración ("lijar la puerta de la
+ *   pieza de comidas"). Aparece desde su fecha y se arrastra de un día al
+ *   otro hasta que alguien lo hace.
+ */
+export type TipoTarea = "rutina" | "encargo";
+
+/** Lo que la casa quiere que se haga. Lo arma Administración. */
+export interface Tarea {
+  id: ID;
+  titulo: string;
+  /** El cómo: "3/4 del tanque, una tapita de detergente, 59 minutos". */
+  instrucciones?: string;
+  tipo: TipoTarea;
+  /** Solo la rutina: 0 = domingo … 6 = sábado. */
+  diasDeLaSemana?: number[];
+  /** Solo el encargo: desde qué día aparece. */
+  fecha?: FechaISO;
+  /** En qué parte del día conviene hacerla, si importa. */
+  ronda?: RondaDelDia;
+  /** Archivada en vez de borrada: lo que ya se marcó sigue explicándose. */
+  activa: boolean;
+  orden: number;
+  creadaPor?: string;
+  creadaEn: InstanteISO;
+}
+
+/**
+ * Lo que alguien del equipo anotó sobre el día.
+ *
+ * `clave` dice de qué se trata:
+ * - el id de una `Tarea` (rutina o encargo);
+ * - `ronda:<ronda>:<paso>` para la rutina de cada comida
+ *   (`ronda:manana:comida`, `ronda:tarde:aguas`…);
+ * - `medicamento:<perroId>`, uno por cada vez que se le dio;
+ * - `extra`, algo que se hizo y no estaba en la lista;
+ * - `novedad`, lo que tiene que saber el turno que viene.
+ *
+ * Las tres últimas se acumulan; las otras tienen un solo registro por día,
+ * que se corrige en el lugar.
+ */
+export interface RegistroDeTarea {
+  id: ID;
+  fecha: FechaISO;
+  clave: string;
+  estado: EstadoTarea;
+  /** El motivo, el detalle o el texto de la novedad. */
+  nota?: string;
+  /** En la comida: los que no comieron. */
+  perroIds?: ID[];
+  /** El nombre con que firma, igual que en reportes e incidentes. */
+  autorStaff: string;
+  /** La cuenta. En la nube la pone la base. */
+  autorId?: ID;
+  marcadoEn: InstanteISO;
+}
+
 /* ── Avisos para Administración ────────────────────────────────────── */
 
 export interface CambioDeCampo {

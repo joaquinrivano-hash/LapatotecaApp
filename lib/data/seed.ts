@@ -72,6 +72,8 @@ Cliente,
   ServicioAgendado,
   Suscripcion,
   TipoIncidente,
+  RegistroDeTarea,
+  Tarea,
   Turno,
   Vacuna,
 } from "@/lib/types";
@@ -96,6 +98,12 @@ export interface DatosPatoteca {
   notificaciones: Notificacion[];
   /** La planilla de turnos. El seed no la llena: se arma a mano. */
   turnos: Turno[];
+  /**
+   * La rutina de aseo y los encargos. El seed tampoco los llena: la rutina
+   * se carga desde /admin/tareas, que ofrece la sugerida.
+   */
+  tareas: Tarea[];
+  registrosDeTareas: RegistroDeTarea[];
   /** Lo que Administración exige en una ficha nueva. */
   configuracion: Configuracion;
 }
@@ -976,6 +984,8 @@ export function generarSeed(
     // La planilla se arma a mano: inventar turnos de 60 días atrás sería
     // llenar la pantalla de datos que nadie escribió.
     turnos: [],
+    tareas: [],
+    registrosDeTareas: [],
     reservasHotel,
     estadiasJardin,
     planes,

@@ -206,8 +206,8 @@ app/
                · equipo/bienvenida/ (donde llega el correo de invitación)
   ingresar/    login (correo y contraseña, o el selector en el prototipo)
                · clave/ (contraseña nueva desde el correo)
-  staff/       Hoy · buscar · reportes · incidentes
-  admin/       KPIs · calendario · clientes · pagos · planes · inventario
+  staff/       Hoy · tareas · reportes · buscar · incidentes
+  admin/       KPIs · calendario · clientes · tareas · pagos · planes · inventario
                configuracion (qué se le pide a una ficha, listas, WhatsApp
                y cuenta de la casa) · equipo (turnos y accesos) · datos
   offline/     pantalla de caída del service worker
@@ -1417,6 +1417,67 @@ En la base son dos columnas `jsonb` en `turnos`
 ubicación la escribe quien ficha, igual que la hora. La prueba de
 aislamiento lo verifica.
 
+### Las tareas del día
+
+`lib/rules/tareas.ts`, `lib/servicios/tareas.ts`, `/staff/tareas` y
+`/admin/tareas`. Salen de leer el grupo de WhatsApp **"La Patoteca
+REPORTES"** de marzo a octubre de 2026 (unos 5.000 mensajes, 546
+reportes): la pantalla modela lo que el equipo ya hacía, sin inventarle
+pasos. No confundir con `/staff/reportes`, que es lo que se le manda al
+**dueño**; esto es lo que se cuenta **entre el equipo**.
+
+Lo que se vio en el grupo y cómo quedó:
+
+- **Tres rondas, una por comida** (`NEGOCIO.tareas.rondas`): después del
+  desayuno, del almuerzo y de la cena se hace siempre lo mismo —la comida
+  (y quién no comió), cacas y pipís, aguas, los reportes a los dueños—.
+  Son `pasosDeRonda`. La mañana corre desde las 00:00; las otras empiezan
+  con su ventana de `NEGOCIO.reportes.ventanas`.
+- **El aseo** es una rutina semanal (`Tarea` tipo `rutina`, con días de la
+  semana) que arma Administración. Si no se hizo, **no se arrastra**: el
+  martes que viene vuelve a tocar.
+- **Los encargos** son lo que Sivi pegaba temprano como "Tareas:" con sus
+  instrucciones. Aparecen desde su fecha y **se arrastran** hasta que
+  alguien los marca hechos, igual que la lista se volvía a pegar al día
+  siguiente con lo que faltaba. "No se pudo hoy" no los cierra.
+- **No se hizo lleva motivo, obligatorio**: "si para de llover", "no
+  estaba sucio". El que viene lo tiene que leer para no repetirlo.
+- **Remedios, extras y novedades se acumulan** (`esAcumulable`): darle el
+  remedio en la mañana y en la noche son dos registros. Lo demás tiene un
+  solo registro por día y se corrige en el lugar.
+- **El reporte para el grupo** (`armarResumenDelTurno`) sale en el formato
+  de siempre —"Reporte lunes 26/10 (Flo)", la hora, ✅, 🔜, *Medicamentos*,
+  *Pendiente*, *Novedades*— y es **acumulativo**, como el de los turnos
+  largos. Se manda con `wa.me` (o se copia) al grupo; la foto de la
+  pizarra se sigue adjuntando a mano. Lo pendiente de la rutina es solo lo
+  de la **ronda en curso**: lo que quedó sin marcar en la mañana casi
+  siempre se hizo y no se anotó, y listar "Desayuno" a las cinco de la
+  tarde confunde con lo que falta ahora.
+
+Decisiones que no son obvias:
+
+- **El avance no cuenta las rondas que no empezaron.** A las 10 la cena no
+  está pendiente; una barra que parte el día en 30% sin que nadie haya
+  fallado en nada se deja de mirar.
+- **Desmarcar guarda "pendiente", no borra.** En la nube cada uno borra
+  solo lo suyo: si José marcó las aguas y Flo las desmarca, un `delete`
+  no haría nada sin avisar y las aguas seguirían "hechas".
+- **La rutina la arma Administración, nunca el turno.** Si el turno
+  pudiera tocar la lista, "no se hizo" se arreglaría borrando la tarea.
+  Las tareas se **archivan**, no se borran: lo marcado sigue apuntando a
+  ellas.
+- **Quién no comió se toca, no se escribe**, y los botones de los perros
+  se abren solo si alguien no comió: con veinte perros en la casa,
+  mostrarlos de una tapaba el resto de la ronda (se vio al abrirla).
+- **El seed no trae rutina.** `/admin/tareas` ofrece cargar la sugerida
+  (`NEGOCIO.tareas.rutinaSugerida`, armada con lo que más se repite en el
+  grupo: la cerámica todos los días, el paseo —el pendiente más
+  frecuente—, el patio los martes, el cubresillón los viernes, con las
+  instrucciones que se dieron en el grupo). Se puede apretar dos veces:
+  compara por título y no duplica.
+- **La firma la pone la base** (`firmar_el_registro_de_tarea`), igual que
+  `firmar_la_marca`.
+
 ### El calendario y su semáforo
 
 En la tira de días el color va al revés de un semáforo de alerta: **verde desde
@@ -2029,7 +2090,7 @@ afuera, y se actualiza cuando cambia:
 | Hosting | Proyecto de Vercel **`lapatoteca`**: tiene el dominio y publica `main` como Production. |
 | Proyecto viejo | **`lapatoteca-app`** en Vercel quedó sin el dominio y está por borrarse. Ahí vive `lapatoteca-apppruebas.vercel.app`, que apuntaba a `prueba/vista-dueno`. **No se cargan variables ahí.** |
 | Base y login | Supabase, proyecto `kcxzoesspkggpchvqlnw`, plan Pro (US$25 + IVA al mes, el servidor Micro lo cubre el crédito). |
-| Migraciones corridas | **Las 16**, al 22 de octubre de 2026 — hasta `20261022170000_devolver_el_dia_de_prueba`. `cambios_de_agenda` y `planes_y_dia_de_prueba` se verificaron desde afuera después de correrlas: sus seis funciones existen y dan `401` sin sesión. La 16ª la corrió la dueña y la confirmó con la consulta de `pg_proc` (dio `true`). La 17ª, `20261026120000_ubicacion_del_fichaje`, está en `pruebas` y **sin confirmar** (paso 11 de "Lo que falta hacer afuera"): tiene que correr ANTES de pasar su código a `main`. Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
+| Migraciones corridas | **Las 16**, al 22 de octubre de 2026 — hasta `20261022170000_devolver_el_dia_de_prueba`. `cambios_de_agenda` y `planes_y_dia_de_prueba` se verificaron desde afuera después de correrlas: sus seis funciones existen y dan `401` sin sesión. La 16ª la corrió la dueña y la confirmó con la consulta de `pg_proc` (dio `true`). La 17ª, `20261026120000_ubicacion_del_fichaje`, está en `pruebas` y **sin confirmar** (paso 11 de "Lo que falta hacer afuera"): tiene que correr ANTES de pasar su código a `main`. La 18ª, `20261028120000_tareas_del_dia`, también está en `pruebas` y **sin confirmar** (paso 14). Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
 | Confirmación de correo | **Encendida.** Quien se registra recibe un enlace y hasta que no lo abre no tiene sesión. Se apaga en Authentication → Sign In → Email si alguna vez estorba. |
 | Correo saliente | **Resend**, dominio `lapatoteca.cl` verificado (región Brasil). Los tres registros DNS los puso Resend solo, con el *Auto configure* de Vercel. La API key vive en Supabase → Authentication → SMTP, con usuario `resend` y remitente `hola@lapatoteca.cl`. |
 | Buscador de direcciones | Llave de Google Cloud con el correo de la empresa, restringida a los dominios de `lapatoteca.cl`, `*.vercel.app` y `localhost:3000`, y a Maps JavaScript API + Places API (New). |
@@ -2124,6 +2185,7 @@ no tienen un orden que no rompa nada (ver más abajo): el código llegó a
 | `20261022160000_planes_y_dia_de_prueba` | Comprar y usar un plan y agendar el día de prueba, en la base; los disparadores que no dejan al dueño tocar planes, aprobarse el día de prueba ni insertar días o reservas por fuera. **Va junto con su código**: con una sin la otra, agendar el día de prueba y usar el plan fallan (ver abajo) | Corrida el 22-10-2026, verificada desde afuera |
 | `20261022170000_devolver_el_dia_de_prueba` | Redefine `cancelar_dia_de_prueba` para que lo ya pagado quede en "Por devolver". **No está acoplada**: sin ella el código nuevo funciona igual, con el comportamiento viejo (lo pagado no se devuelve), así que se puede correr después de publicar. Si alguna vez se vuelve a correr `cambios_de_agenda` suelto, hay que correr esta después | Corrida el 22-10-2026, confirmada con `pg_proc` |
 | `20261026120000_ubicacion_del_fichaje` | `turnos.entrada_ubicacion` y `turnos.salida_ubicacion`, dónde estaba el celular al fichar. **Va antes que su código**: con el código nuevo y sin estas columnas, fichar falla; al revés no rompe nada, porque el código viejo no las nombra | **Sin confirmar** |
+| `20261028120000_tareas_del_dia` | Las tablas `tareas` y `registros_de_tareas`, sus permisos y el disparador que firma lo marcado. **No está acoplada**: el código viejo no nombra estas tablas, así que se puede correr antes de publicar; sin ella, `/staff/tareas` y `/admin/tareas` fallan al cargar | **Sin confirmar** |
 
 La regla de acá en adelante:
 
@@ -2348,7 +2410,6 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
     Maps dejando apretado sobre la casa: aparecen dos números
     (`-33.44…, -70.61…`). Hasta que se corrija, un fichaje en la casa puede
     salir "a 200 m de la casa".
-
 13. **Cambiar la plantilla del correo de "olvidé mi contraseña"** en Supabase
     → Authentication → Emails → *Reset Password*. Es lo que hace que el
     enlace funcione abriéndolo desde el correo del celular (ver "Y el enlace
@@ -2356,7 +2417,6 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
     así que esto se puede hacer en cualquier momento y nada se rompe
     mientras tanto — lo único es que hasta que se cambie sigue fallando como
     el 26-10.
-
     El cuerpo, entero:
 
     ```html
@@ -2383,6 +2443,13 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
     importar para este correo. Se prueba pidiendo "olvidé mi contraseña" en
     el computador y abriendo el correo en el teléfono: antes decía que el
     enlace no servía, ahora tiene que dejar escribir la contraseña.
+
+14. **Correr `20261028120000_tareas_del_dia` en Supabase** antes de pasar
+    las tareas del día a `main`. Crea dos tablas y no toca nada de lo
+    publicado. Se confirma desde afuera con
+    `GET /rest/v1/tareas?select=id&limit=1`: `401` es que existe, `404`
+    que no corrió. Después, en `/admin/tareas` → Rutina, cargar la rutina
+    sugerida y ajustar los días.
 
 **Decisiones de producto abiertas:**
 
@@ -2485,6 +2552,10 @@ tema tiene su explicación más arriba en este archivo.
 - **El fichaje guarda dónde se hizo** (26-10): la planilla dice "en la
   casa" o "a 3 km de la casa", y sin ubicación se ficha igual (ver "Dónde
   se fichó"). En `pruebas`, esperando su migración.
+- **Las tareas del día** (28-10): las rondas de cada comida, el aseo
+  semanal, los encargos que se arrastran, remedios y novedades, y el
+  reporte para el grupo en su formato de siempre (ver "Las tareas del
+  día"). En `pruebas`, esperando su migración.
 
 ## 6. Comandos
 

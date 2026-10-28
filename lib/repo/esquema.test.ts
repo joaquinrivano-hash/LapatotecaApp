@@ -51,6 +51,8 @@ const PARES: Record<string, string> = {
   MensajeSaliente: "mensajes",
   Notificacion: "notificaciones",
   Turno: "turnos",
+  Tarea: "tareas",
+  RegistroDeTarea: "registros_de_tareas",
 };
 
 /**

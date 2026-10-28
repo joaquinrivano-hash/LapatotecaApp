@@ -47,6 +47,7 @@ import type {
   PerroRepo,
   PlanRepo,
   ProductoRepo,
+  RegistroDeTareaRepo,
   ReporteRepo,
   RepositorioPatoteca,
   ReservaHotelRepo,
@@ -54,6 +55,7 @@ import type {
   SinId,
   SistemaRepo,
   SuscripcionRepo,
+  TareaRepo,
   TurnoRepo,
 } from "@/lib/repo/tipos";
 import { configuracionPorDefecto } from "@/lib/rules/alta-perro";
@@ -73,10 +75,12 @@ import type {
   Perro,
   PlanComprado,
   Producto,
+  RegistroDeTarea,
   Reporte,
   ReservaHotel,
   ServicioAgendado,
   Suscripcion,
+  Tarea,
   Turno,
 } from "@/lib/types";
 import { fechaISO, hoyISO } from "@/lib/utils/fecha";
@@ -587,6 +591,25 @@ class TurnosSupabase extends ColeccionSupabase<Turno> implements TurnoRepo {
   }
 }
 
+class TareasSupabase extends ColeccionSupabase<Tarea> implements TareaRepo {}
+
+class RegistrosDeTareasSupabase
+  extends ColeccionSupabase<RegistroDeTarea>
+  implements RegistroDeTareaRepo
+{
+  /** `fecha` es `date`: el filtro es exacto, igual que en los turnos. */
+  enRango(desde: FechaISO, hasta: FechaISO) {
+    return this.traer((c) => c.gte("fecha", desde).lte("fecha", hasta));
+  }
+
+  async porClaves(claves: string[]) {
+    // Un `in` vacío PostgREST lo lee como error de sintaxis, y además no
+    // hay nada que buscar.
+    if (claves.length === 0) return [];
+    return this.traer((c) => c.in("clave", claves));
+  }
+}
+
 class NotificacionesSupabase
   extends ColeccionSupabase<Notificacion>
   implements NotificacionRepo
@@ -916,6 +939,8 @@ const TABLAS_DEL_DOMINIO = [
   ["mensajes", "mensajes"],
   ["notificaciones", "notificaciones"],
   ["turnos", "turnos"],
+  ["tareas", "tareas"],
+  ["registrosDeTareas", "registros_de_tareas"],
 ] as const;
 
 function sistemaDe(
@@ -1012,6 +1037,12 @@ export function crearRepositorioSupabase(
     incidentes: new IncidentesSupabase(cliente, "incidentes", "fecha"),
     mensajes: new MensajesSupabase(cliente, "mensajes", "creado_en"),
     turnos: new TurnosSupabase(cliente, "turnos", "fecha"),
+    tareas: new TareasSupabase(cliente, "tareas", "orden"),
+    registrosDeTareas: new RegistrosDeTareasSupabase(
+      cliente,
+      "registros_de_tareas",
+      "marcado_en",
+    ),
     notificaciones: new NotificacionesSupabase(
       cliente,
       "notificaciones",
