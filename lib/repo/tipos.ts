@@ -29,10 +29,12 @@ import type {
   Perro,
   PlanComprado,
   Producto,
+  RegistroDeTarea,
   Reporte,
   ReservaHotel,
   ServicioAgendado,
   Suscripcion,
+  Tarea,
   Turno,
   InstanteISO,
   Rol,
@@ -140,6 +142,16 @@ export interface MensajeRepo extends ColeccionRepo<MensajeSaliente> {
 export interface TurnoRepo extends ColeccionRepo<Turno> {
   enRango(desde: FechaISO, hasta: FechaISO): Promise<Turno[]>;
   porPersona(perfilId: ID): Promise<Turno[]>;
+}
+
+/** Lo que la casa quiere que se haga: la rutina de aseo y los encargos. */
+export type TareaRepo = ColeccionRepo<Tarea>;
+
+/** Lo que el equipo fue marcando de las tareas, día por día. */
+export interface RegistroDeTareaRepo extends ColeccionRepo<RegistroDeTarea> {
+  enRango(desde: FechaISO, hasta: FechaISO): Promise<RegistroDeTarea[]>;
+  /** Todos los días de esas claves: lo que hace falta para arrastrar un encargo. */
+  porClaves(claves: string[]): Promise<RegistroDeTarea[]>;
 }
 
 /** Utilidades que solo existen porque esto es un prototipo con datos mock. */
@@ -351,6 +363,8 @@ export interface RepositorioPatoteca {
   incidentes: IncidenteRepo;
   mensajes: MensajeRepo;
   turnos: TurnoRepo;
+  tareas: TareaRepo;
+  registrosDeTareas: RegistroDeTareaRepo;
   notificaciones: NotificacionRepo;
   agenda: AgendaRepo;
   configuracion: ConfiguracionRepo;

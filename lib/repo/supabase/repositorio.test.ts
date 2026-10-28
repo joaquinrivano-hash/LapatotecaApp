@@ -444,7 +444,7 @@ describe("sistema", () => {
     );
   });
 
-  it("exportar recorre las 16 tablas del dominio y la configuración", async () => {
+  it("exportar recorre las 18 tablas del dominio y la configuración", async () => {
     const { repo: r, llamadas } = repo(({ tabla }) =>
       tabla === "configuracion" ? { data: null } : filas({ id: "uuid-1" }),
     );
@@ -452,7 +452,7 @@ describe("sistema", () => {
     const json = await r.sistema.exportar();
     const set = JSON.parse(json) as Record<string, unknown>;
 
-    expect(llamadas).toHaveLength(17);
+    expect(llamadas).toHaveLength(19);
     expect(set.clientes).toHaveLength(1);
     expect(set.configuracion).toBeDefined();
     expect(set.hoy).toMatch(/^\d{4}-\d{2}-\d{2}$/);

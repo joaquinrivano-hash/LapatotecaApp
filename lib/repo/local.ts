@@ -34,6 +34,7 @@ import type {
   PerroRepo,
   PlanRepo,
   ProductoRepo,
+  RegistroDeTareaRepo,
   ReporteRepo,
   RepositorioPatoteca,
   ReservaHotelRepo,
@@ -41,6 +42,7 @@ import type {
   SinId,
   SistemaRepo,
   SuscripcionRepo,
+  TareaRepo,
   TurnoRepo,
 } from "@/lib/repo/tipos";
 import { fechaISO, hoyISO } from "@/lib/utils/fecha";
@@ -58,10 +60,12 @@ import type {
   Perro,
   PlanComprado,
   Producto,
+  RegistroDeTarea,
   Reporte,
   ReservaHotel,
   ServicioAgendado,
   Suscripcion,
+  Tarea,
   Turno,
 } from "@/lib/types";
 
@@ -431,6 +435,22 @@ class TurnosLocal extends ColeccionLocal<Turno> implements TurnoRepo {
   }
 }
 
+class TareasLocal extends ColeccionLocal<Tarea> implements TareaRepo {}
+
+class RegistrosDeTareasLocal
+  extends ColeccionLocal<RegistroDeTarea>
+  implements RegistroDeTareaRepo
+{
+  enRango(desde: FechaISO, hasta: FechaISO) {
+    return this.filtrar((r) => r.fecha >= desde && r.fecha <= hasta);
+  }
+
+  porClaves(claves: string[]) {
+    const buscadas = new Set(claves);
+    return this.filtrar((r) => buscadas.has(r.clave));
+  }
+}
+
 function normalizarDatos(datos: DatosPatoteca): DatosPatoteca {
   const vacias: (keyof DatosPatoteca)[] = [
     "clientes",
@@ -449,6 +469,8 @@ function normalizarDatos(datos: DatosPatoteca): DatosPatoteca {
     "mensajes",
     "notificaciones",
     "turnos",
+    "tareas",
+    "registrosDeTareas",
   ];
 
   for (const clave of vacias) {
@@ -722,6 +744,12 @@ export function crearRepositorioLocal(
     incidentes: new IncidentesLocal(ctx, "inc", (d) => d.incidentes),
     mensajes: new MensajesLocal(ctx, "msg", (d) => d.mensajes),
     turnos: new TurnosLocal(ctx, "turno", (d) => d.turnos ?? []),
+    tareas: new TareasLocal(ctx, "tarea", (d) => d.tareas ?? []),
+    registrosDeTareas: new RegistrosDeTareasLocal(
+      ctx,
+      "regtarea",
+      (d) => d.registrosDeTareas ?? [],
+    ),
     notificaciones: new NotificacionesLocal(ctx, "avi", (d) => d.notificaciones),
     agenda: crearAgendaLocal({ estadiasJardin, pagos, perros, planes }),
     configuracion,

@@ -333,6 +333,58 @@ intento_como "$ADMIN" "y sí corrige el horario" "09:00" \
   "update turnos set desde = '09:00' where perfil_id = '$STAFF';
    select desde from turnos where perfil_id = '$STAFF' limit 1;"
 
+# ── Las tareas del día ───────────────────────────────────────────────
+#
+# Qué se hace lo decide Administración; marcarlo es del equipo. Si el
+# turno pudiera tocar la lista, "no se hizo" se arreglaría borrando la
+# tarea. Y la firma la pone la base, como en las llegadas.
+echo "▸ tareas del día"
+sql "insert into tareas (id, titulo, tipo, dias_de_la_semana)
+     values ('99999999-0000-0000-0000-0000000000a1', 'Barrer y trapear cerámica', 'rutina', '{0,1,2,3,4,5,6}')
+     on conflict (id) do nothing;
+     insert into registros_de_tareas (id, fecha, clave, estado, autor_staff, autor_id)
+     values ('99999999-0000-0000-0000-0000000000b1', current_date, 'ronda:manana:aguas', 'hecha', 'Admin', '$ADMIN')
+     on conflict (id) do nothing;" >/dev/null
+
+intento_como "$STAFF" "el equipo ve la rutina" "1" \
+  "select count(*) from tareas;"
+
+intento_como "$STAFF" "el equipo no arma la rutina" "violates row-level security" \
+  "insert into tareas (titulo, tipo, dias_de_la_semana) values ('Inventada', 'rutina', '{1}');"
+
+intento_como "$STAFF" "el equipo no archiva una tarea" "0" \
+  "with x as (update tareas set activa = false returning 1) select count(*) from x;"
+
+intento_como "$STAFF" "marca, y la firma es suya aunque mande otra" "firma $STAFF" \
+  "insert into registros_de_tareas (fecha, clave, estado, autor_staff, autor_id)
+     values (current_date, 'ronda:manana:cacas', 'hecha', 'Flo', '$ADMIN');
+   select 'firma ' || autor_id from registros_de_tareas where clave = 'ronda:manana:cacas';"
+
+intento_como "$STAFF" "corrige un paso que marcó otro" "pendiente" \
+  "update registros_de_tareas set estado = 'pendiente' where clave = 'ronda:manana:aguas';
+   select estado from registros_de_tareas where clave = 'ronda:manana:aguas';"
+
+intento_como "$STAFF" "no borra lo que anotó otro" "1" \
+  "delete from registros_de_tareas where clave = 'ronda:manana:aguas';
+   select count(*) from registros_de_tareas where clave = 'ronda:manana:aguas';"
+
+intento "el dueño no ve las tareas" "0" \
+  "select count(*) from tareas;"
+
+intento "el dueño no ve lo marcado" "0" \
+  "select count(*) from registros_de_tareas;"
+
+intento "el dueño no marca" "violates row-level security" \
+  "insert into registros_de_tareas (fecha, clave, estado, autor_staff)
+     values (current_date, 'novedad', 'hecha', 'Ana');"
+
+intento_como "$ADMIN" "Administración arma la rutina" "2" \
+  "insert into tareas (titulo, tipo, fecha) values ('Lijar la puerta', 'encargo', current_date);
+   select count(*) from tareas;"
+
+intento_como "$ADMIN" "un encargo sin fecha no entra" "violates check constraint" \
+  "insert into tareas (titulo, tipo) values ('Sin fecha', 'encargo');"
+
 # ── Quién firma la marca ─────────────────────────────────────────────
 #
 # El equipo ya puede actualizar estas filas —marcar llegadas es su

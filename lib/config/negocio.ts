@@ -198,6 +198,88 @@ export const NEGOCIO = {
   },
 
   /**
+   * Las tareas del día, sacadas de cómo trabaja la casa en el grupo de
+   * WhatsApp "La Patoteca REPORTES" (marzo a octubre de 2026).
+   */
+  tareas: {
+    /**
+     * Las tres pasadas del día. Cada una empieza con la ventana de reportes
+     * del mismo orden (`reportes.ventanas`), y la de la mañana desde que
+     * abre la casa: el desayuno se sirve antes de las 8.
+     */
+    rondas: [
+      { clave: "manana", nombre: "Mañana", comida: "Desayuno", comieron: "Desayunaron" },
+      { clave: "mediodia", nombre: "Mediodía", comida: "Almuerzo", comieron: "Almorzaron" },
+      { clave: "tarde", nombre: "Tarde", comida: "Cena", comieron: "Cenaron" },
+    ],
+    /**
+     * Lo que se hace en cada ronda, en el orden en que aparece en los
+     * reportes. `conHora` es porque el grupo lo anota con la hora
+     * ("Se limpiaron cacas (14:30)"): el turno siguiente quiere saber
+     * cuánto hace.
+     */
+    pasosDeRonda: [
+      { clave: "comida", titulo: "Comida", hecho: "Comieron", conHora: false },
+      {
+        clave: "cacas",
+        titulo: "Recoger cacas y limpiar pipís",
+        hecho: "Se recogieron cacas y limpiaron pipís",
+        conHora: true,
+      },
+      {
+        clave: "aguas",
+        titulo: "Cambiar las aguas",
+        hecho: "Se cambiaron las aguas",
+        conHora: true,
+      },
+      {
+        clave: "reportes",
+        titulo: "Mandar los reportes a los dueños",
+        hecho: "Se mandaron todos los reportes",
+        conHora: false,
+      },
+    ],
+    /**
+     * La rutina de aseo que se ofrece cargar cuando todavía no hay ninguna.
+     * Es un punto de partida armado con lo que más aparece en los reportes
+     * —la cerámica casi todos los días, el paseo como el pendiente que más
+     * se repite— y con las instrucciones que se fueron dando en el grupo.
+     * Administración la ajusta después: los días, el orden, el texto.
+     *
+     * Días: 0 = domingo … 6 = sábado.
+     */
+    rutinaSugerida: [
+      { titulo: "Barrer y trapear cerámica", dias: [0, 1, 2, 3, 4, 5, 6], ronda: "manana",
+        instrucciones: "Lavar el trapero y trapear dos veces. No echar tanto lavapiso por vez." },
+      { titulo: "Paseo de la mañana", dias: [0, 1, 2, 3, 4, 5, 6], ronda: "manana" },
+      { titulo: "Barrer patio y hojas", dias: [0, 1, 2, 3, 4, 5, 6] },
+      { titulo: "Cambiar bolsas de basura", dias: [0, 1, 2, 3, 4, 5, 6] },
+      { titulo: "Cambiar sabanillas sucias", dias: [0, 1, 2, 3, 4, 5, 6] },
+      { titulo: "Paseo de la tarde", dias: [0, 1, 2, 3, 4, 5, 6], ronda: "tarde" },
+      { titulo: "Lavandería: lavar y colgar", dias: [1, 3, 5],
+        instrucciones: "Llenar 3/4 del tanque, una tapita de detergente y 1/4 de suavizante. 45 a 59 minutos según lo gruesas que sean las cosas. Todo lo que está en el suelo de la lavandería se lava." },
+      { titulo: "Barrer y trapear madera (entrada y piezas)", dias: [1, 4] },
+      { titulo: "Limpiar paredes del living", dias: [1],
+        instrucciones: "Patas marcadas en ventanas, pipís, guardapolvos y puertas, sobre todo abajo y alrededor de las manillas." },
+      { titulo: "Lavar y enjuagar patio", dias: [2],
+        instrucciones: "Mojar el piso, poco detergente (hace mucha espuma), refregar y enjuagar. Después enzimático en gotitas por todos lados, refregar de nuevo y enjuagar bien. Si llueve, queda para cuando pare." },
+      { titulo: "Limpiar cocina", dias: [2, 6],
+        instrucciones: "Mover todos los muebles que se puedan y barrer y trapear por debajo. Limpiar el microondas por dentro y por abajo." },
+      { titulo: "Limpiar baños", dias: [3] },
+      { titulo: "Limpiar ventanas", dias: [3] },
+      { titulo: "Lavar pérgola y zona techo verde", dias: [4],
+        instrucciones: "Echar el enzimático antes de enjuagar. Sacar los pelos del desagüe de la pérgola." },
+      { titulo: "Cambiar y lavar cubresillón", dias: [5],
+        instrucciones: "59 minutos de lavado. Si tiene hoyos, se cosen: hilo y aguja en el primer cajón de la sala de comidas." },
+      { titulo: "Barrer y trapear frontis y vereda", dias: [5] },
+      { titulo: "Pasto: vinagre y bicarbonato", dias: [6],
+        instrucciones: "Sacar primero los pelos del pasto, sobre todo cerca de la cerámica y alrededor de la manguera." },
+      { titulo: "Trapear pieza de comidas y camas", dias: [0],
+        instrucciones: "Sin perros adentro." },
+    ],
+  },
+
+  /**
    * Datos para transferir de fábrica. Van vacíos a propósito: son de la
    * cuenta real del negocio y los completa Administración en
    * /admin/configuracion (`Configuracion.transferencia`). Mientras estén
