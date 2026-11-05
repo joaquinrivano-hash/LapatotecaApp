@@ -104,6 +104,7 @@ export interface EntradaReservaHotel {
   inicio: InstanteISO;
   fin: InstanteISO;
   paseosContratados?: number;
+  paseosCortosContratados?: number;
 }
 
 export interface CotizacionHotel extends Disponibilidad {
@@ -141,6 +142,7 @@ export async function cotizarReservaHotel(
     inicio: entrada.inicio,
     fin: entrada.fin,
     paseosContratados: entrada.paseosContratados,
+    paseosCortosContratados: entrada.paseosCortosContratados,
     conPlanDeJardin,
     indicePerro,
   });
@@ -204,6 +206,7 @@ export async function crearReservaHotel(
     inicioProgramado: entrada.inicio,
     finProgramado: entrada.fin,
     paseosContratados: entrada.paseosContratados ?? 0,
+    paseosCortosContratados: entrada.paseosCortosContratados ?? 0,
     estado: "pendiente",
     cotizacion: previa.cotizacion,
     abonoPagado: false,

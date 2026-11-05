@@ -475,6 +475,7 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
   const [entrada, setEntrada] = useState(sumarDias(hoy, 3));
   const [salida, setSalida] = useState(sumarDias(hoy, 6));
   const [paseos, setPaseos] = useState(0);
+  const [paseosCortos, setPaseosCortos] = useState(0);
   const { ocupado, ejecutar } = useAccion();
 
   const inicio = instanteEnHora(entrada, "10:00");
@@ -489,9 +490,10 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
             inicio,
             fin,
             paseosContratados: paseos,
+            paseosCortosContratados: paseosCortos,
           })
         : Promise.resolve(null),
-    [perro.id, inicio, fin, paseos, rangoValido],
+    [perro.id, inicio, fin, paseos, paseosCortos, rangoValido],
   );
 
   async function reservar() {
@@ -502,6 +504,7 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
           inicio,
           fin,
           paseosContratados: paseos,
+          paseosCortosContratados: paseosCortos,
         }),
       );
       toast.success("Reserva tomada", {
@@ -558,37 +561,6 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
           </div>
         </div>
 
-        <div className="bg-secondary/50 flex items-center justify-between gap-3 rounded-xl p-3">
-          <span className="text-sm font-semibold">
-            Paseos
-            <span className="text-muted-foreground block text-xs font-normal">
-              {formatearCLP(PRECIOS.hotel.paseo)} cada uno, de 30 min
-            </span>
-          </span>
-          <span className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Un paseo menos"
-              disabled={paseos === 0}
-              onClick={() => setPaseos((p) => Math.max(0, p - 1))}
-            >
-              <Minus />
-            </Button>
-            <span className="min-w-6 text-center font-bold tabular-nums">
-              {paseos}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Un paseo más"
-              onClick={() => setPaseos((p) => p + 1)}
-            >
-              <Plus />
-            </Button>
-          </span>
-        </div>
-
         {!rangoValido ? (
           <p className="text-warning text-sm">
             La salida tiene que ser después de la entrada.
@@ -604,6 +576,64 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
               </Badge>
             )}
             <Desglose cotizacion={datos.cotizacion} />
+
+            {/* Los paseos van DEBAJO de la cotización porque se deciden
+                mirándola: "ya que son $96.000, agrégale un paseo". Arriba,
+                antes de saber cuánto sale la estadía, la pregunta no tiene
+                contra qué compararse.
+
+                Cada botón suma uno, y el que ya tiene algo ofrece sacarlo:
+                si solo se pudiera sumar, un toque de más no se arregla. */}
+            <div className="space-y-2">
+              {(
+                [
+                  {
+                    minutos: 15,
+                    cuantos: paseosCortos,
+                    poner: setPaseosCortos,
+                    precio: PRECIOS.hotel.paseoCorto,
+                  },
+                  {
+                    minutos: 30,
+                    cuantos: paseos,
+                    poner: setPaseos,
+                    precio: PRECIOS.hotel.paseo,
+                  },
+                ] as const
+              ).map(({ minutos, cuantos, poner, precio }) => (
+                <div key={minutos} className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className="h-auto flex-1 flex-col gap-0 py-2.5"
+                    onClick={() => poner((n) => n + 1)}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Plus className="size-4" />
+                      Agregar paseo {minutos} min
+                    </span>
+                    <span className="text-muted-foreground text-xs font-normal">
+                      {formatearCLP(precio)}
+                    </span>
+                  </Button>
+                  {cuantos > 0 && (
+                    <span className="flex items-center gap-2">
+                      <span className="min-w-6 text-center font-bold tabular-nums">
+                        {cuantos}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Quitar un paseo de ${minutos} min`}
+                        onClick={() => poner((n) => Math.max(0, n - 1))}
+                      >
+                        <Minus />
+                      </Button>
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+
             <p className="bg-secondary/60 flex items-baseline justify-between gap-3 rounded-xl p-3 text-sm">
               <span className="font-semibold">
                 Pagas ahora (abono {PORCENTAJE_ABONO}%)

@@ -51,6 +51,13 @@ export const PRECIOS = {
     horaExtra: 1_000,
     /** Adicional opcional por paseo de 30 min durante la estadía. */
     paseo: 4_000,
+    /**
+     * El mismo adicional, en 15 min.
+     *
+     * No es la mitad del de 30: salir y volver cuesta lo mismo en los dos,
+     * lo que cambia es la vuelta larga.
+     */
+    paseoCorto: 3_000,
   },
 
   spa: {

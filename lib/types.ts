@@ -300,8 +300,11 @@ export interface ReservaHotel {
   finMarcadoEn?: InstanteISO;
   /** Quién apretó el botón. Lo firma la base, no el navegador. */
   finMarcadoPor?: ID;
-  /** Cantidad de paseos contratados durante la estadía, a $4.000 cada uno. */
+  /** Paseos de 30 min contratados durante la estadía. */
   paseosContratados: number;
+  /** Paseos de 15 min. Va aparte y no reemplaza al de arriba: las estadías
+   *  ya guardadas tienen sus paseos de 30 min en ese campo. */
+  paseosCortosContratados?: number;
   estado: EstadoReserva;
   cotizacion: Cotizacion;
   abonoPagado: boolean;
