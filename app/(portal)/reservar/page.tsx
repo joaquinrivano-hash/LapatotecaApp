@@ -640,6 +640,7 @@ function ServicioSpot({ perro }: { perro: Perro }) {
   const [hora, setHora] = useState("11:00");
   const [nivelSpa, setNivelSpa] = useState<"express" | "premium">("express");
   const [duracion, setDuracion] = useState<30 | 60>(30);
+  const [cantidadPaseos, setCantidadPaseos] = useState(1);
   const [km, setKm] = useState(4);
   const [conRegreso, setConRegreso] = useState(false);
   const [otraDireccion, setOtraDireccion] = useState(false);
@@ -696,10 +697,20 @@ function ServicioSpot({ perro }: { perro: Perro }) {
         tipo,
         nivelSpa,
         duracionMin: duracion,
+        cantidad: cantidadPaseos,
         km,
         conRegreso,
       }),
-    [perro.id, fechaHora, tipo, nivelSpa, duracion, km, conRegreso],
+    [
+      perro.id,
+      fechaHora,
+      tipo,
+      nivelSpa,
+      duracion,
+      cantidadPaseos,
+      km,
+      conRegreso,
+    ],
   );
 
   async function agendar() {
@@ -712,6 +723,7 @@ function ServicioSpot({ perro }: { perro: Perro }) {
           tipo,
           nivelSpa,
           duracionMin: duracion,
+          cantidad: cantidadPaseos,
           km,
           conRegreso,
         }),
@@ -749,6 +761,10 @@ function ServicioSpot({ perro }: { perro: Perro }) {
           ))}
         </div>
 
+        {/* El paseo no pide día ni hora: se compra por cantidad y el equipo
+            lo reparte durante la estadía, porque el paseo se hace cuando el
+            perro está acá y cuando el día lo permite. */}
+        {tipo !== "paseo" && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="fecha-servicio">Día</Label>
@@ -783,6 +799,7 @@ function ServicioSpot({ perro }: { perro: Perro }) {
             )}
           </div>
         </div>
+        )}
 
         {tipo === "spa" && (
           <div className="grid grid-cols-2 gap-2">
@@ -801,6 +818,40 @@ function ServicioSpot({ perro }: { perro: Perro }) {
                 Baño {nivel}
               </button>
             ))}
+          </div>
+        )}
+
+        {tipo === "paseo" && (
+          <div className="space-y-1.5">
+            <Label>¿Cuántos paseos?</Label>
+            <div className="flex items-center gap-3">
+              <Button
+                size="icon"
+                variant="outline"
+                aria-label="Un paseo menos"
+                disabled={cantidadPaseos <= 1}
+                onClick={() => setCantidadPaseos((n) => Math.max(1, n - 1))}
+              >
+                <Minus />
+              </Button>
+              <span className="font-display min-w-24 text-center text-2xl font-bold">
+                {cantidadPaseos}
+                <span className="text-muted-foreground ml-1.5 text-sm font-semibold">
+                  {cantidadPaseos === 1 ? "paseo" : "paseos"}
+                </span>
+              </span>
+              <Button
+                size="icon"
+                variant="outline"
+                aria-label="Un paseo más"
+                onClick={() => setCantidadPaseos((n) => n + 1)}
+              >
+                <Plus />
+              </Button>
+            </div>
+            <p className="text-muted-foreground text-xs text-pretty">
+              Los repartimos durante la estadía de tu perrito.
+            </p>
           </div>
         )}
 

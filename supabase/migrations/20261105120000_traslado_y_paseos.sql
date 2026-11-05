@@ -1,5 +1,5 @@
 /*
- * Traslado de ida y vuelta.
+ * Traslado de ida y vuelta, y paseos por cantidad.
  *
  * El mismo tramo dos veces: el precio se calcula en la app con la matriz de
  * siempre, acá solo se guarda qué se cotizó. Sin esta columna el traslado
@@ -14,3 +14,15 @@ alter table servicios
 
 comment on column servicios.con_regreso is
   'Traslado de ida y vuelta: dos viajes del mismo tramo.';
+
+/*
+ * Los paseos se compran por cantidad y el equipo los reparte durante la
+ * estadía. Sin esta columna un pack de cinco paseos se guarda como uno
+ * solo y el equipo no sabe cuántos debe.
+ */
+
+alter table servicios
+  add column if not exists cantidad integer;
+
+comment on column servicios.cantidad is
+  'Solo paseo: cuántos se compraron de una vez.';

@@ -66,17 +66,30 @@ export function cotizarSpa(entrada: EntradaSpa): Cotizacion {
 
 export interface EntradaPaseo {
   duracionMin: DuracionPaseo;
+  /** Cuántos se compran de una vez. Por omisión, uno. */
+  cantidad?: number;
   esClienteActivo?: boolean;
   indicePerro?: number;
 }
 
+/**
+ * Los paseos se compran por cantidad y el equipo los reparte durante la
+ * estadía: el dueño no elige el día y la hora de cada uno, porque el paseo
+ * se hace cuando el perro está acá y cuando el día lo permite.
+ *
+ * Los descuentos se aplican al total del pack, no a cada paseo: en cascada
+ * sobre el subtotal dan lo mismo, y una línea por paseo convertiría el
+ * desglose de cinco paseos en quince líneas.
+ */
 export function cotizarPaseo(entrada: EntradaPaseo): Cotizacion {
+  const cantidad = Math.max(1, Math.round(entrada.cantidad ?? 1));
+
   return construirCotizacion(
     [
       {
-        concepto: "Paseo",
+        concepto: cantidad === 1 ? "Paseo" : `${cantidad} paseos`,
         detalle: formatearDuracion(entrada.duracionMin),
-        monto: PRECIOS.paseo[entrada.duracionMin],
+        monto: PRECIOS.paseo[entrada.duracionMin] * cantidad,
       },
     ],
     soloAplicables([

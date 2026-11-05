@@ -127,6 +127,20 @@ describe("cotizarTraslado", () => {
     expect(c.lineas.reduce((s, l) => s + l.monto, 0)).toBe(c.total);
   });
 
+  it("un pack de paseos multiplica, y el descuento va al total", () => {
+    const uno = cotizarPaseo({ duracionMin: 30, esClienteActivo: true });
+    const cinco = cotizarPaseo({
+      duracionMin: 30,
+      cantidad: 5,
+      esClienteActivo: true,
+    });
+
+    expect(cinco.lineas[0].concepto).toBe("5 paseos");
+    expect(cinco.total).toBe(uno.total * 5);
+    // Una línea por paseo convertiría el desglose de cinco en quince.
+    expect(cinco.lineas).toHaveLength(uno.lineas.length);
+  });
+
   it("ida y vuelta son dos viajes del mismo tramo", () => {
     const ida = cotizarTraslado({ km: 3, fechaHora: "2026-09-28T14:00:00.000Z" });
     const vuelta = cotizarTraslado({

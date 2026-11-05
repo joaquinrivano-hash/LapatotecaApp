@@ -586,6 +586,8 @@ export interface EntradaServicio {
   tipo: "spa" | "paseo" | "traslado";
   nivelSpa?: NivelSpa;
   duracionMin?: DuracionPaseo;
+  /** Solo paseo: cuántos se compran de una vez. */
+  cantidad?: number;
   km?: number;
   conRegreso?: boolean;
 }
@@ -621,6 +623,7 @@ export async function cotizarServicio(
   if (entrada.tipo === "paseo") {
     return cotizarPaseo({
       duracionMin: entrada.duracionMin ?? 30,
+      cantidad: entrada.cantidad,
       esClienteActivo: activo,
     });
   }
@@ -646,6 +649,7 @@ export async function agendarServicio(
     fechaHora: entrada.fechaHora,
     nivelSpa: entrada.nivelSpa,
     duracionMin: entrada.duracionMin,
+    cantidad: entrada.cantidad,
     km: entrada.km,
     conRegreso: entrada.conRegreso,
     estado: "agendado",

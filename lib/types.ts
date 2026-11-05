@@ -411,6 +411,8 @@ export interface ServicioAgendado {
   nivelSpa?: NivelSpa;
   /** Solo paseo. */
   duracionMin?: DuracionPaseo;
+  /** Solo paseo: cuántos se compraron. El equipo los reparte. */
+  cantidad?: number;
   /** Solo traslado. */
   km?: number;
   /** Solo traslado: el mismo tramo de ida y de vuelta. */
