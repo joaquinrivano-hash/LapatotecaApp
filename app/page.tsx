@@ -288,7 +288,11 @@ export default function Landing() {
                 <MapPin className="text-primary mt-0.5 size-4 shrink-0" />
                 Providencia, cerca de Av. Diagonal Oriente con Manuel Montt.
               </p>
-              <div className="space-y-1 text-sm">
+              {/* Los dos horarios son distintos y confundirlos cuesta plata:
+                  el de atención dice cuándo se puede entrar a la casa, el del
+                  jardín cuándo empieza a correr el valor hotel. Por eso van
+                  los dos a la vista y no en letra chica al final. */}
+              <div className="space-y-3 text-sm">
                 <p className="flex items-start gap-2">
                   <Clock className="text-primary mt-0.5 size-4 shrink-0" />
                   <span>
@@ -297,13 +301,28 @@ export default function Landing() {
                     Lunes a viernes de 07:00 a 21:00
                     <br />
                     Sábado y domingo de 08:30 a 21:00
+                    <br />
+                    <span className="text-muted-foreground text-pretty">
+                      La casa funciona 24/7, pero fuera de ese horario no
+                      hacemos entregas ni retiros.
+                    </span>
                   </span>
                 </p>
-                <p className="text-muted-foreground text-xs text-pretty">
-                  La casa funciona 24/7, pero fuera de ese horario no hacemos
-                  entregas ni retiros. El jardín cierra a las{" "}
-                  {NEGOCIO.jardin.horaCierre}:00 y después se cobra{" "}
-                  {formatearCLP(PRECIOS.jardin.horaFueraDeHorario)} por hora.
+                <p className="flex items-start gap-2">
+                  <Sun className="text-primary mt-0.5 size-4 shrink-0" />
+                  <span>
+                    <strong>Jardín</strong>
+                    <br />
+                    Todos los días de {NEGOCIO.jardin.horaApertura}:00 a{" "}
+                    {NEGOCIO.jardin.horaCierre}:00
+                    <br />
+                    <span className="text-muted-foreground text-pretty">
+                      Después de las {NEGOCIO.jardin.horaCierre}:00 se cobra
+                      valor hotel:{" "}
+                      {formatearCLP(PRECIOS.jardin.horaFueraDeHorario)} por
+                      hora.
+                    </span>
+                  </span>
                 </p>
               </div>
               <BotonAgendar size="lg" className="w-full">
