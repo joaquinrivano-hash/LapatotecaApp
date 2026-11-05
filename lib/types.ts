@@ -413,6 +413,8 @@ export interface ServicioAgendado {
   duracionMin?: DuracionPaseo;
   /** Solo traslado. */
   km?: number;
+  /** Solo traslado: el mismo tramo de ida y de vuelta. */
+  conRegreso?: boolean;
   estado: EstadoServicio;
   cotizacion: Cotizacion;
   creadoEn: InstanteISO;

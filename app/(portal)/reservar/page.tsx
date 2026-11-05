@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -641,9 +641,52 @@ function ServicioSpot({ perro }: { perro: Perro }) {
   const [nivelSpa, setNivelSpa] = useState<"express" | "premium">("express");
   const [duracion, setDuracion] = useState<30 | 60>(30);
   const [km, setKm] = useState(4);
+  const [conRegreso, setConRegreso] = useState(false);
+  const [otraDireccion, setOtraDireccion] = useState(false);
+  const [direccion, setDireccion] = useState("");
+  /** `null` mientras no se sabe; `false` cuando la distancia no llegó. */
+  const [midiendo, setMidiendo] = useState(false);
+  const [kmMedidos, setKmMedidos] = useState<number | null>(null);
   const { ocupado, ejecutar } = useAccion();
+  const { datos: datosCliente } = useCliente();
 
   const fechaHora = instanteEnHora(fecha, hora);
+
+  /** La que se usa: la registrada, o la que escribió si eligió otra. */
+  const direccionDelViaje = otraDireccion
+    ? direccion
+    : (datosCliente?.cliente?.direccion ?? "");
+
+  // Los kilómetros los mide el servidor contra Google. Si no hay llave, o la
+  // dirección no se pudo resolver, vuelve `null` y el campo de km queda a
+  // mano, que es como funcionaba antes: una distancia que no llega no puede
+  // dejar sin cotizar un traslado.
+  useEffect(() => {
+    let vigente = true;
+
+    async function medir() {
+      if (tipo !== "traslado" || !direccionDelViaje.trim()) {
+        setKmMedidos(null);
+        return;
+      }
+      setMidiendo(true);
+      const { kmHastaLaDireccion } = await import(
+        "@/lib/integraciones/distancias/cliente"
+      );
+      const medidos = await kmHastaLaDireccion(direccionDelViaje);
+      // Si la dirección cambió mientras se medía, lo que volvió es de la
+      // anterior: escribirlo pondría los km de un viaje que ya no se cotiza.
+      if (!vigente) return;
+      setKmMedidos(medidos);
+      if (medidos !== null) setKm(medidos);
+      setMidiendo(false);
+    }
+
+    void medir();
+    return () => {
+      vigente = false;
+    };
+  }, [tipo, direccionDelViaje]);
 
   const previa = useConsulta(
     (repo) =>
@@ -654,8 +697,9 @@ function ServicioSpot({ perro }: { perro: Perro }) {
         nivelSpa,
         duracionMin: duracion,
         km,
+        conRegreso,
       }),
-    [perro.id, fechaHora, tipo, nivelSpa, duracion, km],
+    [perro.id, fechaHora, tipo, nivelSpa, duracion, km, conRegreso],
   );
 
   async function agendar() {
@@ -669,6 +713,7 @@ function ServicioSpot({ perro }: { perro: Perro }) {
           nivelSpa,
           duracionMin: duracion,
           km,
+          conRegreso,
         }),
       );
       toast.success("Servicio agendado", {
@@ -780,16 +825,90 @@ function ServicioSpot({ perro }: { perro: Perro }) {
         )}
 
         {tipo === "traslado" && (
-          <div className="space-y-1.5">
-            <Label htmlFor="km">Distancia (km)</Label>
-            <Input
-              id="km"
-              type="number"
-              inputMode="decimal"
-              min={1}
-              value={km}
-              onChange={(e) => setKm(Number(e.target.value) || 0)}
-            />
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { valor: false, texto: "Solo ida" },
+                { valor: true, texto: "Ida y vuelta" },
+              ].map(({ valor, texto }) => (
+                <button
+                  key={texto}
+                  type="button"
+                  onClick={() => setConRegreso(valor)}
+                  className={cn(
+                    "rounded-xl border-2 py-3 text-sm font-semibold transition-all",
+                    conRegreso === valor
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground",
+                  )}
+                >
+                  {texto}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>¿Dónde lo pasamos a buscar?</Label>
+              {/* La dirección registrada viene cargada: el dueño ya la
+                  eligió de la lista de Google al crear su cuenta, así que
+                  volver a pedírsela es hacerle escribir lo que ya dijo. */}
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { valor: false, texto: "Mi dirección" },
+                  { valor: true, texto: "Otra dirección" },
+                ].map(({ valor, texto }) => (
+                  <button
+                    key={texto}
+                    type="button"
+                    onClick={() => setOtraDireccion(valor)}
+                    className={cn(
+                      "rounded-xl border-2 py-2.5 text-sm font-semibold transition-all",
+                      otraDireccion === valor
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground",
+                    )}
+                  >
+                    {texto}
+                  </button>
+                ))}
+              </div>
+
+              {otraDireccion ? (
+                <Input
+                  id="direccion-traslado"
+                  value={direccion}
+                  placeholder="Calle, número y comuna"
+                  onChange={(e) => setDireccion(e.target.value)}
+                />
+              ) : (
+                <p className="text-muted-foreground text-sm text-pretty">
+                  {direccionDelViaje ||
+                    "No tenemos tu dirección registrada. Elige \"Otra dirección\"."}
+                </p>
+              )}
+            </div>
+
+            {/* Los km son el dato que decide el tramo, así que se muestran
+                siempre: medidos quedan de solo lectura con su explicación, y
+                sin medir se escriben, que es como funcionaba antes. */}
+            <div className="space-y-1.5">
+              <Label htmlFor="km">Distancia (km)</Label>
+              <Input
+                id="km"
+                type="number"
+                inputMode="decimal"
+                min={1}
+                value={km}
+                onChange={(e) => setKm(Number(e.target.value) || 0)}
+              />
+              <p className="text-muted-foreground text-xs text-pretty">
+                {midiendo
+                  ? "Calculando la distancia…"
+                  : kmMedidos !== null
+                    ? "Calculada desde la casa. Puedes corregirla."
+                    : "Escríbela tú: no pudimos calcularla."}
+              </p>
+            </div>
           </div>
         )}
 

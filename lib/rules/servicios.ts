@@ -98,26 +98,37 @@ export function esHorarioPunta(instante: InstanteISO): boolean {
 export interface EntradaTraslado {
   km: number;
   fechaHora: InstanteISO;
+  /** Ida y vuelta: el mismo tramo dos veces. */
+  conRegreso?: boolean;
 }
 
 /**
  * Traslado: matriz de tramo de distancia por horario, tal como el folleto.
  * No hay precio por kilómetro; hay tramos con precio fijo.
+ *
+ * Ida y vuelta son DOS viajes del mismo tramo, así que son dos veces el
+ * precio. El horario se mira una sola vez, el de la hora agendada: la vuelta
+ * podría caer en otra banda, pero de esa hora no sabemos nada todavía y
+ * adivinarla sería cobrar por un supuesto.
  */
 export function cotizarTraslado(entrada: EntradaTraslado): Cotizacion {
   const enPunta = esHorarioPunta(entrada.fechaHora);
   const tramos = PRECIOS.traslado.tramos;
   const tramo = tramos.find((t) => entrada.km <= t.hastaKm) ?? tramos.at(-1)!;
-  const monto = enPunta ? tramo.punta : tramo.normal;
+  const porViaje = enPunta ? tramo.punta : tramo.normal;
+  const viajes = entrada.conRegreso ? 2 : 1;
 
   const indice = tramos.indexOf(tramo);
   const desdeKm = indice === 0 ? 0 : tramos[indice - 1].hastaKm;
+  const horario = enPunta ? "horario punta" : "horario normal";
 
   return construirCotizacion([
     {
-      concepto: "Traslado",
-      detalle: `${desdeKm} a ${tramo.hastaKm} km · ${enPunta ? "horario punta" : "horario normal"}`,
-      monto,
+      concepto: entrada.conRegreso ? "Traslado ida y vuelta" : "Traslado",
+      detalle: entrada.conRegreso
+        ? `${desdeKm} a ${tramo.hastaKm} km · ${horario} · 2 viajes`
+        : `${desdeKm} a ${tramo.hastaKm} km · ${horario}`,
+      monto: porViaje * viajes,
     },
   ]);
 }

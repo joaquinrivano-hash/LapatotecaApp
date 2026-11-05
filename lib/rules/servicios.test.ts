@@ -127,6 +127,18 @@ describe("cotizarTraslado", () => {
     expect(c.lineas.reduce((s, l) => s + l.monto, 0)).toBe(c.total);
   });
 
+  it("ida y vuelta son dos viajes del mismo tramo", () => {
+    const ida = cotizarTraslado({ km: 3, fechaHora: "2026-09-28T14:00:00.000Z" });
+    const vuelta = cotizarTraslado({
+      km: 3,
+      fechaHora: "2026-09-28T14:00:00.000Z",
+      conRegreso: true,
+    });
+
+    expect(vuelta.total).toBe(ida.total * 2);
+    expect(vuelta.lineas[0].concepto).toBe("Traslado ida y vuelta");
+  });
+
   it("los traslados no tienen descuento de cliente", () => {
     expect(cotizarTraslado({ km: 3, fechaHora: en("13:00") }).descuentos).toEqual(
       [],

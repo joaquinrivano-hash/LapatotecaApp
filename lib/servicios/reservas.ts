@@ -587,6 +587,7 @@ export interface EntradaServicio {
   nivelSpa?: NivelSpa;
   duracionMin?: DuracionPaseo;
   km?: number;
+  conRegreso?: boolean;
 }
 
 export async function cotizarServicio(
@@ -623,7 +624,11 @@ export async function cotizarServicio(
       esClienteActivo: activo,
     });
   }
-  return cotizarTraslado({ km: entrada.km ?? 0, fechaHora: entrada.fechaHora });
+  return cotizarTraslado({
+    km: entrada.km ?? 0,
+    fechaHora: entrada.fechaHora,
+    conRegreso: entrada.conRegreso,
+  });
 }
 
 export async function agendarServicio(
@@ -642,6 +647,7 @@ export async function agendarServicio(
     nivelSpa: entrada.nivelSpa,
     duracionMin: entrada.duracionMin,
     km: entrada.km,
+    conRegreso: entrada.conRegreso,
     estado: "agendado",
     cotizacion,
     creadoEn: ahora,
