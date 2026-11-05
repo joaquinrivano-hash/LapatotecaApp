@@ -68,24 +68,17 @@ export function CabeceraPublica() {
 }
 
 /**
- * Los dos botones de la portada. Con sesión de cliente el segundo deja de
- * ofrecer "ya soy cliente" —ya lo es— y lleva derecho a su cuenta.
+ * La acción de la portada.
+ *
+ * Es una sola: lo que un visitante nuevo tiene que hacer es su día de prueba,
+ * y quien ya tiene sesión entra por la barra de arriba, que lo saluda por su
+ * nombre y lo lleva a la parte que le toca. Un segundo botón acá repetiría ese
+ * camino y le quitaría peso al único que importa.
  */
 export function AccionesPortada() {
-  const montado = useMontado();
-  const rol = useSesion((s) => s.rol);
-  const destino = montado && rol ? DESTINO_POR_ROL[rol] : null;
-
   return (
     <div className="flex flex-wrap justify-center gap-3 lg:justify-start">
-      <BotonAgendar>Reservar</BotonAgendar>
-      <Button asChild size="xl" variant="outline">
-        {destino ? (
-          <Link href={destino.href}>{destino.etiqueta}</Link>
-        ) : (
-          <Link href="/ingresar">Ya soy cliente</Link>
-        )}
-      </Button>
+      <BotonAgendar>¡Quiero mi día de prueba!</BotonAgendar>
     </div>
   );
 }

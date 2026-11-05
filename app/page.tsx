@@ -5,10 +5,8 @@ import {
   Check,
   Clock,
   Footprints,
-  Heart,
   Home as Casa,
   MapPin,
-  MessageCircle,
   Moon,
   Sun,
 } from "lucide-react";
@@ -108,23 +106,29 @@ const REQUISITOS = [
   `Día de prueba aprobado (${formatearCLP(PRECIOS.diaDePrueba)})`,
 ];
 
+/**
+ * Los tres beneficios de la portada.
+ *
+ * El emoji viene con el texto y hace de icono: no se le suma uno de la
+ * librería encima, que sería decir lo mismo dos veces.
+ */
 const PROMESAS = [
   {
-    icono: Casa,
+    emoji: "🏠",
     titulo: "Sin jaulas ni caniles",
     texto:
-      "Andan sueltos por la casa y el patio. Sillones, camas y sombra a libre disposición.",
+      "los perritos andan libres por la casa y el patio, con acceso a sillones, camas y zonas de descanso.",
   },
   {
-    icono: Heart,
-    titulo: "Siempre con alguien",
-    texto: `Máximo ${NEGOCIO.capacidad.maximoSimultaneo} perritos a la vez, para que a cada uno le toque cariño de verdad.`,
-  },
-  {
-    icono: MessageCircle,
-    titulo: "Reportes al día",
+    emoji: "💗",
+    titulo: "Siempre acompañados",
     texto:
-      "Dos o tres veces al día te llegan fotos y noticias por WhatsApp. Sabes cómo va sin tener que preguntar.",
+      "somos un equipo de 4 personas que rotan para que nunca queden solos.",
+  },
+  {
+    emoji: "💬",
+    titulo: "Reportes diarios",
+    texto: "fotos y novedades por WhatsApp dos o tres veces al día.",
   },
 ];
 
@@ -142,11 +146,14 @@ export default function Landing() {
               Providencia · sin jaulas
             </Badge>
             <h1 className="font-display text-4xl font-bold text-balance sm:text-5xl">
-              Tu perro en una casa, no en una jaula
+              ¡El segundo hogar de tu peludo!
             </h1>
             <p className="text-muted-foreground max-w-xl text-lg text-pretty">
-              Hotel y guardería para perros. Sillones, camas y patio a libre
-              disposición, siempre con un humano cuidándolos.
+              Somos un hotel y guardería canina enfocados en brindar un cuidado
+              hogareño, cercano y personalizado 🐾. Nuestra casa está
+              completamente adaptada para los perritos, con cómodas zonas de
+              descanso, camas, sillones, amplios espacios de juego y patio para
+              que disfruten y se sientan como en casa 💛
             </p>
             <AccionesPortada />
           </div>
@@ -182,60 +189,18 @@ export default function Landing() {
 
         {/* ── Promesas ────────────────────────────────────────────── */}
         <section className="mx-auto grid w-full max-w-5xl gap-4 px-4 pt-6 pb-12 sm:grid-cols-3">
-          {PROMESAS.map(({ icono: Icono, titulo, texto }) => (
+          {PROMESAS.map(({ emoji, titulo, texto }) => (
             <div key={titulo} className="flex flex-col items-center gap-2 text-center">
-              <span className="bg-secondary text-primary rounded-full p-3">
-                <Icono className="size-6" />
+              <span
+                aria-hidden
+                className="bg-secondary rounded-full p-3 text-2xl leading-none"
+              >
+                {emoji}
               </span>
               <h2 className="font-display text-lg font-bold">{titulo}</h2>
               <p className="text-muted-foreground text-sm text-pretty">{texto}</p>
             </div>
           ))}
-        </section>
-
-        {/* ── La casa ─────────────────────────────────────────────── */}
-        <section className="bg-secondary/40 border-y border-border/60">
-          <div className="mx-auto grid w-full max-w-5xl items-center gap-8 px-4 py-12 lg:grid-cols-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="relative aspect-3/4 overflow-hidden rounded-3xl shadow-sm">
-                <Image
-                  src="/fotos/patio.jpg"
-                  alt="Varios perros sueltos en el patio de la casa"
-                  fill
-                  sizes="(min-width: 1024px) 240px, 45vw"
-                  className="object-cover"
-                />
-              </div>
-              <div className="relative mt-8 aspect-3/4 overflow-hidden rounded-3xl shadow-sm">
-                <Image
-                  src="/fotos/cuidado.jpg"
-                  alt="Una cuidadora en cuclillas acariciando a un perro con chaleco"
-                  fill
-                  sizes="(min-width: 1024px) 240px, 45vw"
-                  className="object-cover"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h2 className="font-display text-3xl font-bold text-balance">
-                Una casa de verdad, con patio y con gente
-              </h2>
-              <p className="text-muted-foreground text-pretty">
-                Acá no hay pabellones ni turnos. Los perritos pasan el día
-                juntos, salen al patio cuando quieren y duermen adentro. Si tu
-                perro es de los que se meten a la cama, va a estar como en la
-                suya.
-              </p>
-              <p className="text-muted-foreground text-pretty">
-                Antes de la primera estadía viene el{" "}
-                <strong className="text-foreground">día de prueba</strong> (
-                {formatearCLP(PRECIOS.diaDePrueba)}): pasa un día con nosotros y
-                vemos juntos cómo le va.
-              </p>
-              <BotonAgendar size="lg">Agendar el día de prueba</BotonAgendar>
-            </div>
-          </div>
         </section>
 
         {/* ── Servicios ───────────────────────────────────────────── */}
