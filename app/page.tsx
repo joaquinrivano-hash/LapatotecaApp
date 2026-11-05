@@ -41,7 +41,6 @@ const SERVICIOS = [
       ],
       [`Más de ${NEGOCIO.jardin.horasJornadaMedia} h`, PRECIOS.jardin.jornadaLarga],
     ] as const,
-    nota: `Con plan mensual el día sale desde ${formatearCLP(PRECIOS.planes.tramosPorDia.at(-1)!.precioPorDia)}.`,
   },
   {
     icono: Moon,
@@ -73,19 +72,21 @@ const SERVICIOS = [
     titulo: "Paseos",
     foto: "/fotos/paseos.jpg",
     alt: "Perro paseando por la vereda entre hojas de otoño",
-    bajada: "Más ejercicio, más felicidad. Sector Providencia.",
+    bajada:
+      "Más ejercicio, más felicidad. Sector Providencia. Puedes agregar paseos a la estadía de tu perrito.",
     filas: [
       ["Media hora", PRECIOS.paseo[30]],
       ["Una hora", PRECIOS.paseo[60]],
     ] as const,
-    nota: "20% de descuento para clientes de La Patoteca.",
+    nota: "Enviamos comprobantes de tiempo y distancia recorrida. 20% de descuento para clientes de La Patoteca.",
   },
   {
     icono: Car,
     titulo: "Traslados",
     foto: "/fotos/traslados.jpg",
     alt: "Perro con arnés y cinturón de seguridad en el asiento del auto",
-    bajada: "Cada perrito viaja solo, con cinturón.",
+    bajada:
+      "Cada perrito viaja solo, junto a su debido cinturón de seguridad.",
     filas: PRECIOS.traslado.tramos.map(
       (t, i) =>
         [
@@ -206,7 +207,9 @@ export default function Landing() {
         {/* ── Servicios ───────────────────────────────────────────── */}
         <section className="mx-auto w-full max-w-5xl space-y-5 px-4 py-12">
           <div className="space-y-1">
-            <h2 className="font-display text-3xl font-bold">Qué hacemos</h2>
+            <h2 className="font-display text-3xl font-bold">
+              Conoce nuestros servicios
+            </h2>
             <p className="text-muted-foreground">
               Precios al día de hoy, sin letra chica.
             </p>
@@ -248,9 +251,11 @@ export default function Landing() {
                         </div>
                       ))}
                     </dl>
-                    <p className="text-muted-foreground text-xs text-pretty">
-                      {nota}
-                    </p>
+                    {nota && (
+                      <p className="text-muted-foreground text-xs text-pretty">
+                        {nota}
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               ),
