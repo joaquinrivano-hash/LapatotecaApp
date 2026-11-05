@@ -230,6 +230,18 @@ export const NEGOCIO = {
     radioSugerenciasM: 25_000,
   },
 
+  /**
+   * La tienda está escondida: no aparece en la navegación y su ruta manda
+   * a Reservar.
+   *
+   * Es un interruptor y no un borrado porque el código sirve y vuelve: la
+   * pantalla, el carrito y la compra siguen enteros, y encenderla es
+   * cambiar este `false`. Borrarla obligaría a escribirla de nuevo.
+   */
+  tienda: {
+    visible: false,
+  },
+
   cobroMensual: {
     /** Día del mes en que se emite la cuenta unificada. */
     diaDelMes: 1,
