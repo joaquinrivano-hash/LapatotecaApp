@@ -88,7 +88,20 @@ function exige(configuracion: Configuracion, campo: CampoDeAlta): boolean {
 }
 
 function alimentacionCompleta(alimentacion: Alimentacion | undefined): boolean {
-  if (!alimentacion?.marca?.trim() || !alimentacion.unidad) return false;
+  if (!alimentacion) return false;
+
+  // Que no coma acá es una respuesta, no un campo en blanco: el equipo
+  // necesita leerla tanto como leería la ración. Exigirle además la marca y
+  // las tazas sería exigirle datos de una comida que no va a servir.
+  if (alimentacion.noComeAca) return true;
+
+  // Sin pellet lo que vale es con qué se reemplaza. Pedirle igual la marca
+  // del pellet dejaría el alta trancada sin salida.
+  if (alimentacion.noComePellet) {
+    return Boolean(alimentacion.mezclarCon?.trim());
+  }
+
+  if (!alimentacion.marca?.trim() || !alimentacion.unidad) return false;
 
   const raciones = alimentacion.raciones ?? [];
   // Todas las raciones tienen que estar completas, no solo la primera: media

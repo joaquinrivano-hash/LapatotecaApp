@@ -140,6 +140,41 @@ describe("describirAlimentacion", () => {
     ).toBe("Proplan · 1 taza en almuerzo y cena");
   });
 
+  it("dice primero que no come acá, y no dice nada más", () => {
+    // Si fuera al final de la línea, se leería después de haber ido a buscar
+    // el pellet.
+    expect(
+      describirAlimentacion({
+        marca: "Proplan",
+        unidad: "taza",
+        raciones: [{ cantidad: 1, comidas: ["almuerzo"] }],
+        noComeAca: true,
+      }),
+    ).toBe("No come en La Patoteca.");
+  });
+
+  it("sin pellet no nombra la marca del pellet", () => {
+    expect(
+      describirAlimentacion({
+        marca: "Proplan",
+        raciones: [],
+        noComePellet: true,
+        mezclarCon: "133 g de lata",
+      }),
+    ).toBe("133 g de lata");
+  });
+
+  it("con pellet, lo que se mezcla va enganchado a la ración", () => {
+    expect(
+      describirAlimentacion({
+        marca: "Proplan",
+        unidad: "taza",
+        raciones: [{ cantidad: 1, comidas: ["cena"] }],
+        mezclarCon: "30 g de carne",
+      }),
+    ).toBe("Proplan · 1 taza en cena · con 30 g de carne");
+  });
+
   it("junta las porciones distintas en una sola línea", () => {
     expect(
       describirAlimentacion({

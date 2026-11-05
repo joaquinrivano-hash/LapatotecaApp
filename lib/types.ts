@@ -133,6 +133,19 @@ export interface Alimentacion {
   unidad?: UnidadRacion;
   raciones: Racion[];
   notas?: string;
+  /**
+   * No come pellet. Lo que sí come va en `mezclarCon`: hay perros con dieta
+   * casera o con comida húmeda, y preguntarles la marca de pellet y cuántas
+   * tazas es preguntarles por algo que no existe.
+   */
+  noComePellet?: boolean;
+  /** Lo que se le agrega, en palabras del dueño: "133 g de lata". */
+  mezclarCon?: string;
+  /**
+   * No come en La Patoteca. Es distinto de no haber anotado nada: acá la
+   * respuesta es "no se le sirve", y el equipo tiene que poder leerla.
+   */
+  noComeAca?: boolean;
 }
 
 export interface Medicamento {

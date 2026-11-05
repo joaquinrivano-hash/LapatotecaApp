@@ -296,14 +296,29 @@ export function describirAlimentacion(
 ): string | null {
   if (!alimentacion) return null;
 
+  // Lo primero que tiene que saber quien sirve la comida es si hay que
+  // servirla. Dejarlo al final de la línea haría que se leyera después de
+  // haber ido a buscar el pellet.
+  if (alimentacion.noComeAca) return "No come en La Patoteca.";
+
   const partesTexto: string[] = [];
-  if (alimentacion.marca) partesTexto.push(alimentacion.marca);
+  if (!alimentacion.noComePellet && alimentacion.marca) {
+    partesTexto.push(alimentacion.marca);
+  }
 
   const raciones = (alimentacion.raciones ?? [])
     .map((racion) => describirRacion(racion, alimentacion.unidad))
     .filter((texto): texto is string => texto !== null);
 
   if (raciones.length > 0) partesTexto.push(raciones.join(", "));
+
+  if (alimentacion.mezclarCon?.trim()) {
+    partesTexto.push(
+      alimentacion.noComePellet
+        ? alimentacion.mezclarCon.trim()
+        : `con ${alimentacion.mezclarCon.trim()}`,
+    );
+  }
 
   const linea = partesTexto.join(" · ");
   if (!linea) return alimentacion.notas ?? null;

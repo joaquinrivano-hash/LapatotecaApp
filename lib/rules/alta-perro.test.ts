@@ -165,6 +165,36 @@ describe("revisarAltaDePerro", () => {
     ).toContain("alimentacion");
   });
 
+  it("no comer acá es una respuesta, no una ficha a medias", () => {
+    // Exigirle además la marca y las tazas sería pedirle los datos de una
+    // comida que nadie va a servir, y dejaría el alta trancada.
+    expect(
+      campos(completo({ alimentacion: { raciones: [], noComeAca: true } })),
+    ).not.toContain("alimentacion");
+  });
+
+  it("sin pellet, lo que vale es con qué se reemplaza", () => {
+    expect(
+      campos(
+        completo({
+          alimentacion: { raciones: [], noComePellet: true, mezclarCon: "" },
+        }),
+      ),
+    ).toContain("alimentacion");
+
+    expect(
+      campos(
+        completo({
+          alimentacion: {
+            raciones: [],
+            noComePellet: true,
+            mezclarCon: "133 g de lata",
+          },
+        }),
+      ),
+    ).not.toContain("alimentacion");
+  });
+
   it("acepta varias porciones, pero todas tienen que estar completas", () => {
     const base = { marca: "Proplan", unidad: "taza" as const };
 

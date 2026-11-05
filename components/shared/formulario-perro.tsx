@@ -16,7 +16,7 @@
 import { useRef, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { Camera, FileImage, Plus, X } from "lucide-react";
+import { Camera, Check, FileImage, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputClave } from "@/components/shared/input-clave";
@@ -59,11 +59,18 @@ const NOMBRE_UNIDAD: Record<UnidadRacion, string> = {
   taza: "taza",
 };
 
-/** "¿Cuántas tazas?" pero "¿Cuántos gramos?": la taza es femenina. */
+/** "Cuántas tazas" pero "Cuántos gramos": la taza es femenina. */
 const CUANTOS: Record<UnidadRacion, string> = {
-  medida: "¿Cuántas medidas?",
-  g: "¿Cuántos gramos?",
-  taza: "¿Cuántas tazas?",
+  medida: "Cuántas medidas",
+  g: "Cuántos gramos",
+  taza: "Cuántas tazas",
+};
+
+/** El artículo lo pide la comida: "en el desayuno" pero "en la cena". */
+const EN_LA_COMIDA: Record<Comida, string> = {
+  desayuno: "en el desayuno",
+  almuerzo: "en el almuerzo",
+  cena: "en la cena",
 };
 
 export interface EstadoPerro {
@@ -89,6 +96,9 @@ export interface EstadoPerro {
     unidad: UnidadRacion | null;
     raciones: { cantidad: string; comidas: Comida[] }[];
     notas: string;
+    noComePellet: boolean;
+    mezclarCon: string;
+    noComeAca: boolean;
   };
   medicamentos: Medicamento[];
   alergias: { tiene: boolean | null; detalle: string };
@@ -114,8 +124,11 @@ export function estadoVacio(): EstadoPerro {
     alimentacion: {
       marca: "",
       unidad: null,
-      raciones: [{ cantidad: "", comidas: [] }],
+      raciones: [],
       notas: "",
+      noComePellet: false,
+      mezclarCon: "",
+      noComeAca: false,
     },
     medicamentos: [],
     alergias: { tiene: null, detalle: "" },
@@ -151,17 +164,22 @@ export function estadoDesde(perro: Perro): EstadoPerro {
     alimentacion: {
       marca: perro.alimentacion?.marca ?? "",
       unidad: perro.alimentacion?.unidad ?? null,
-      raciones:
-        perro.alimentacion?.raciones?.length
-          ? perro.alimentacion.raciones.map((racion) => ({
-              cantidad:
-                racion.cantidad === undefined
-                  ? ""
-                  : formatearCantidad(racion.cantidad),
-              comidas: racion.comidas,
-            }))
-          : vacio.alimentacion.raciones,
+      // Una ración vieja podía cubrir varias comidas de una vez; ahora cada
+      // comida trae la suya, así que al cargar se abren. Es sin pérdida: la
+      // misma cantidad queda repetida en cada comida que tenía.
+      raciones: (perro.alimentacion?.raciones ?? []).flatMap((racion) =>
+        racion.comidas.map((comida) => ({
+          cantidad:
+            racion.cantidad === undefined
+              ? ""
+              : formatearCantidad(racion.cantidad),
+          comidas: [comida],
+        })),
+      ),
       notas: perro.alimentacion?.notas ?? "",
+      noComePellet: perro.alimentacion?.noComePellet ?? false,
+      mezclarCon: perro.alimentacion?.mezclarCon ?? "",
+      noComeAca: perro.alimentacion?.noComeAca ?? false,
     },
     medicamentos: perro.medicamentos ?? [],
     alergias: {
@@ -214,6 +232,9 @@ export function aBorrador(estado: EstadoPerro): BorradorDePerro {
           comidas: racion.comidas,
         })),
       notas: estado.alimentacion.notas.trim() || undefined,
+      noComePellet: estado.alimentacion.noComePellet || undefined,
+      mezclarCon: estado.alimentacion.mezclarCon.trim() || undefined,
+      noComeAca: estado.alimentacion.noComeAca || undefined,
     },
   };
 }
@@ -228,7 +249,13 @@ export function aDatosDePerro(estado: EstadoPerro): DatosDePerro {
   const borrador = aBorrador(estado);
   const comida = borrador.alimentacion;
   const tieneComida =
-    comida && (comida.marca || comida.raciones.length > 0 || comida.notas);
+    comida &&
+    (comida.marca ||
+      comida.raciones.length > 0 ||
+      comida.notas ||
+      comida.mezclarCon ||
+      comida.noComePellet ||
+      comida.noComeAca);
 
   return {
     nombre: borrador.nombre ?? "",
@@ -338,12 +365,12 @@ export function FormularioPerro({
 
   // La marca se pregunta recién cuando ya sabemos cuánto come y cuándo: antes
   // es un campo más en una lista, después es la última pregunta.
-  const primera = estado.alimentacion.raciones[0];
   const comidaServida = Boolean(
     estado.alimentacion.unidad &&
-      primera &&
-      parsearCantidad(primera.cantidad) !== undefined &&
-      primera.comidas.length > 0,
+      estado.alimentacion.raciones.length > 0 &&
+      estado.alimentacion.raciones.every(
+        (racion) => parsearCantidad(racion.cantidad) !== undefined,
+      ),
   );
 
   const vigenciaBicho = estado.antiparasitario.ultimaAplicacion
@@ -359,7 +386,6 @@ export function FormularioPerro({
         valor={estado.fotoUrl}
         onCambio={(fotoUrl) => cambiar({ fotoUrl })}
         etiqueta={exige("foto") ? "Su foto" : "Su foto (opcional)"}
-        ayuda="Así el equipo lo reconoce apenas llega."
         error={error("fotoUrl")}
       />
 
@@ -437,10 +463,7 @@ export function FormularioPerro({
         </p>
       )}
 
-      <Seccion
-        titulo="Vacunas"
-        ayuda="Anota cuándo se la pusieron, tal como aparece en el carnet. Nosotros calculamos hasta cuándo le vale."
-      >
+      <Seccion titulo="Vacunas" grande>
         <SelectorDeHojas
           valores={estado.carnetVacunasUrls}
           onCambio={(carnetVacunasUrls) => cambiar({ carnetVacunasUrls })}
@@ -459,7 +482,7 @@ export function FormularioPerro({
             <div key={tipo} className="space-y-1.5">
               <Campo
                 id={`vacuna-${tipo}`}
-                etiqueta={`${nombreVacuna(tipo)}: cuándo se la pusieron`}
+                etiqueta={`${nombreVacuna(tipo)}: fecha de administración`}
                 tipo="date"
                 valor={fecha}
                 onCambio={(valor) =>
@@ -482,6 +505,7 @@ export function FormularioPerro({
 
       <Seccion
         titulo="Antiparasitario"
+        grande
         ayuda="Interna y externa. Con esto calculamos hasta cuándo está cubierto."
       >
         <ConOtra
@@ -497,7 +521,7 @@ export function FormularioPerro({
         />
         <Campo
           id="antiparasitario-fecha"
-          etiqueta="Última vez que se lo diste"
+          etiqueta="Última administración"
           tipo="date"
           valor={estado.antiparasitario.ultimaAplicacion}
           onCambio={(ultimaAplicacion) =>
@@ -507,7 +531,7 @@ export function FormularioPerro({
           }
         />
         <Opciones
-          etiqueta="Cuánto le dura"
+          etiqueta="Duración"
           opciones={NEGOCIO.antiparasitario.duracionesEnMeses.map((meses) => ({
             valor: meses,
             texto: describirDuracion(meses),
@@ -529,56 +553,111 @@ export function FormularioPerro({
         )}
       </Seccion>
 
-      <Seccion titulo="Qué come" ayuda="Dinos cómo le gusta comer a tu perrito.">
-        {/* El orden es el de las preguntas: con qué se mide, cuánto y cuándo,
-            de qué marca y si hay algo especial. Cada paso aparece cuando el
-            anterior está contestado, así nadie ve diez campos de golpe. */}
-        <Opciones
-          etiqueta="¿Con qué se mide su porción?"
-          opciones={UNIDADES.map((valor) => ({
-            valor,
-            texto: NOMBRE_UNIDAD[valor],
-          }))}
-          elegida={estado.alimentacion.unidad}
-          onElegir={(unidad) =>
-            cambiar({ alimentacion: { ...estado.alimentacion, unidad } })
+      <Seccion
+        titulo="COMIDA"
+        grande
+        ayuda="Cuéntanos cuánto y cuándo debemos darle de comer a tu perrito en La Patoteca"
+      >
+        {/* La primera pregunta es si hay que servirle algo. Preguntarle
+            cuánto come y recién al final si come acá sería hacerle llenar
+            media sección para después descartarla. */}
+        <Marca
+          activa={estado.alimentacion.noComeAca}
+          onCambio={(noComeAca) =>
+            cambiar({ alimentacion: { ...estado.alimentacion, noComeAca } })
           }
-        />
+        >
+          No comerá en La Patoteca
+        </Marca>
 
-        {estado.alimentacion.unidad && (
-          <Porciones
-            unidad={estado.alimentacion.unidad}
-            raciones={estado.alimentacion.raciones}
-            onCambio={(raciones) =>
-              cambiar({ alimentacion: { ...estado.alimentacion, raciones } })
-            }
-          />
-        )}
+        {!estado.alimentacion.noComeAca && (
+          <>
+            {/* Las comidas van antes que la medida: primero cuándo come, y
+                cada comida elegida abre la suya. Hay perros que desayunan
+                media taza y cenan una entera. */}
+            <Comidas
+              raciones={estado.alimentacion.raciones}
+              onCambio={(raciones) =>
+                cambiar({ alimentacion: { ...estado.alimentacion, raciones } })
+              }
+            />
 
-        {comidaServida && (
-          <ConOtra
-            id="comida-marca"
-            etiqueta="¿Qué marca come?"
-            opciones={configuracion.catalogos.marcasComida}
-            valor={estado.alimentacion.marca}
-            onCambio={(marca) =>
-              cambiar({ alimentacion: { ...estado.alimentacion, marca } })
-            }
-            textoOtra="Otra (escríbela)"
-            placeholder="¿Cuál come?"
-          />
-        )}
+            <Marca
+              activa={estado.alimentacion.noComePellet}
+              onCambio={(noComePellet) =>
+                cambiar({
+                  alimentacion: { ...estado.alimentacion, noComePellet },
+                })
+              }
+            >
+              No come pellet
+            </Marca>
 
-        {comidaServida && estado.alimentacion.marca && (
-          <Campo
-            id="comida-notas"
-            etiqueta="¿Alguna instrucción especial? (opcional)"
-            valor={estado.alimentacion.notas}
-            onCambio={(notas) =>
-              cambiar({ alimentacion: { ...estado.alimentacion, notas } })
-            }
-            ayuda="Ej: si no come al almuerzo, no insistir."
-          />
+            {!estado.alimentacion.noComePellet &&
+              estado.alimentacion.raciones.length > 0 && (
+                <>
+                  <Opciones
+                    etiqueta="¿Con qué se mide su porción?"
+                    opciones={UNIDADES.map((valor) => ({
+                      valor,
+                      texto: NOMBRE_UNIDAD[valor],
+                    }))}
+                    elegida={estado.alimentacion.unidad}
+                    onElegir={(unidad) =>
+                      cambiar({
+                        alimentacion: { ...estado.alimentacion, unidad },
+                      })
+                    }
+                  />
+
+                  {estado.alimentacion.unidad && (
+                    <Porciones
+                      unidad={estado.alimentacion.unidad}
+                      raciones={estado.alimentacion.raciones}
+                      onCambio={(raciones) =>
+                        cambiar({
+                          alimentacion: { ...estado.alimentacion, raciones },
+                        })
+                      }
+                    />
+                  )}
+                </>
+              )}
+
+            <Campo
+              id="comida-mezclar"
+              etiqueta="Mezclar con:"
+              valor={estado.alimentacion.mezclarCon}
+              onCambio={(mezclarCon) =>
+                cambiar({ alimentacion: { ...estado.alimentacion, mezclarCon } })
+              }
+              ayuda="ej. 133 g de lata, 1 sobre, 30 g de carne"
+            />
+
+            {!estado.alimentacion.noComePellet && comidaServida && (
+              <ConOtra
+                id="comida-marca"
+                etiqueta="¿Qué marca come?"
+                opciones={configuracion.catalogos.marcasComida}
+                valor={estado.alimentacion.marca}
+                onCambio={(marca) =>
+                  cambiar({ alimentacion: { ...estado.alimentacion, marca } })
+                }
+                textoOtra="Otra (escríbela)"
+                placeholder="¿Cuál come?"
+              />
+            )}
+
+            <Campo
+              id="comida-notas"
+              etiqueta="¿Alguna instrucción especial? (opcional)"
+              valor={estado.alimentacion.notas}
+              onCambio={(notas) =>
+                cambiar({ alimentacion: { ...estado.alimentacion, notas } })
+              }
+              ayuda="Ej: si no come al almuerzo, no insistir."
+            />
+          </>
         )}
 
         {error("alimentacion") && (
@@ -606,9 +685,9 @@ export function FormularioPerro({
             </div>
             {(
               [
-                ["nombre", "Cuál"],
+                ["nombre", "Nombre"],
                 ["dosis", "Dosis"],
-                ["frecuencia", "Cada cuánto"],
+                ["frecuencia", "Horarios"],
               ] as const
             ).map(([clave, etiqueta]) => (
               <Campo
@@ -668,23 +747,14 @@ export function FormularioPerro({
       </Seccion>
 
       <div className="space-y-1.5">
-        <Label htmlFor="indicaciones">Cuidados especiales (opcional)</Label>
-        <Textarea
-          id="indicaciones"
-          value={estado.indicaciones}
-          onChange={(e) => cambiar({ indicaciones: e.target.value })}
-          placeholder="Ej: usa arnés, no collar. Se suelta."
-          rows={2}
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="notas">Cualquier otra cosa (opcional)</Label>
+        <Label htmlFor="notas">
+          (Opcional) ¡Cuéntanos más de tu perrito!
+        </Label>
         <Textarea
           id="notas"
           value={estado.notas}
           onChange={(e) => cambiar({ notas: e.target.value })}
-          placeholder="Lo que nos sirva saber."
+          placeholder="Ej.: mañas, qué le gusta, qué no le gusta, etc."
           rows={2}
         />
       </div>
@@ -701,6 +771,104 @@ export function FormularioPerro({
  * una sola fila y el "+" aparece al lado de las comidas, que es donde se nota
  * la diferencia ("media taza en la mañana, una entera en la noche").
  */
+/**
+ * Una marca de sí/no, para las respuestas que CANCELAN una pregunta en vez
+ * de contestarla: "no come pellet", "no comerá en La Patoteca".
+ *
+ * Lleva el visto adentro y no un interruptor al lado porque es una sola
+ * cosa y no un par de opciones: un interruptor en "no" se lee igual que un
+ * interruptor que nadie tocó.
+ */
+function Marca({
+  activa,
+  onCambio,
+  children,
+}: {
+  activa: boolean;
+  onCambio: (activa: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={activa}
+      onClick={() => onCambio(!activa)}
+      className={`flex w-full items-center gap-2 rounded-xl border-2 px-3 py-2 text-left text-sm font-semibold transition-all ${
+        activa
+          ? "border-primary bg-primary/5 text-foreground"
+          : "border-border text-muted-foreground"
+      }`}
+    >
+      <span
+        className={`flex size-5 shrink-0 items-center justify-center rounded-[0.3rem] border-2 ${
+          activa ? "border-primary bg-primary text-primary-foreground" : "border-border"
+        }`}
+      >
+        {activa && <Check className="size-3.5" />}
+      </span>
+      {children}
+    </button>
+  );
+}
+
+/**
+ * En qué comidas come.
+ *
+ * Va antes que la medida porque es la pregunta que el dueño sabe contestar
+ * de memoria; la cantidad se piensa mirando el tarro. Cada comida elegida
+ * abre después su propia medición, que es lo que deja anotar media taza en
+ * la mañana y una entera en la noche.
+ */
+function Comidas({
+  raciones,
+  onCambio,
+}: {
+  raciones: { cantidad: string; comidas: Comida[] }[];
+  onCambio: (raciones: { cantidad: string; comidas: Comida[] }[]) => void;
+}) {
+  const elegidas = new Set(raciones.flatMap((r) => r.comidas));
+
+  const alternar = (comida: Comida) => {
+    if (elegidas.has(comida)) {
+      onCambio(raciones.filter((r) => !r.comidas.includes(comida)));
+      return;
+    }
+    // Se guardan en el orden del día y no en el que las tocaron: la ficha
+    // se lee de la mañana a la noche.
+    const conLaNueva = [...raciones, { cantidad: "", comidas: [comida] }];
+    onCambio(
+      COMIDAS.flatMap((c) => conLaNueva.filter((r) => r.comidas.includes(c))),
+    );
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <Label>¿En qué comidas?</Label>
+      <div className="flex flex-wrap gap-1.5">
+        {COMIDAS.map((comida) => (
+          <Chip
+            key={comida}
+            activo={elegidas.has(comida)}
+            onClick={() => alternar(comida)}
+          >
+            {ETIQUETA_COMIDA[comida]}
+          </Chip>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Cuánto come en cada comida que eligió.
+ *
+ * Una medición por comida, con el nombre de la comida como etiqueta: la
+ * pregunta "cuánto en el desayuno" se contesta sola, y no hay que acordarse
+ * de a qué porción correspondía cuál.
+ *
+ * La medida es una sola para todas: un perro no come media taza en la
+ * mañana y 200 gramos en la noche.
+ */
 function Porciones({
   unidad,
   raciones,
@@ -710,104 +878,32 @@ function Porciones({
   raciones: { cantidad: string; comidas: Comida[] }[];
   onCambio: (raciones: { cantidad: string; comidas: Comida[] }[]) => void;
 }) {
-  const cambiarUna = (
-    i: number,
-    cambios: Partial<{ cantidad: string; comidas: Comida[] }>,
-  ) => onCambio(raciones.map((r, j) => (j === i ? { ...r, ...cambios } : r)));
-
-  /** Las comidas que ya tomó otra ración: nadie come dos veces al almuerzo. */
-  const tomadas = (salvo: number) =>
-    new Set(raciones.flatMap((r, j) => (j === salvo ? [] : r.comidas)));
-
   return (
     <div className="space-y-2">
       {raciones.map((racion, i) => {
-        const ocupadas = tomadas(i);
+        const comida = racion.comidas[0];
 
         return (
-          <div
-            key={i}
-            className="bg-background/60 space-y-3 rounded-xl border border-border/70 p-3"
-          >
-            <div className="flex items-end gap-2">
-              <div className="flex-1">
-                <Campo
-                  id={`comida-cantidad-${i}`}
-                  etiqueta={CUANTOS[unidad]}
-                  valor={racion.cantidad}
-                  onCambio={(cantidad) => cambiarUna(i, { cantidad })}
-                  ayuda={ayudaDeCantidad(racion.cantidad, unidad)}
-                  error={
-                    racion.cantidad !== "" &&
-                    parsearCantidad(racion.cantidad) === undefined
-                      ? "No entendimos esa cantidad. Prueba 1, ½ o 1/2."
-                      : undefined
-                  }
-                />
-              </div>
-              {raciones.length > 1 && (
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  aria-label={`Quitar la porción ${i + 1}`}
-                  onClick={() => onCambio(raciones.filter((_, j) => j !== i))}
-                >
-                  <X />
-                </Button>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <Label>En qué comidas</Label>
-                {i === raciones.length - 1 && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    aria-label="Agregar otra porción"
-                    onClick={() =>
-                      onCambio([...raciones, { cantidad: "", comidas: [] }])
-                    }
-                  >
-                    <Plus />
-                    Otra porción
-                  </Button>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-1.5">
-                {COMIDAS.map((comida) => {
-                  const activa = racion.comidas.includes(comida);
-                  const enOtra = ocupadas.has(comida);
-
-                  return (
-                    <Chip
-                      key={comida}
-                      activo={activa}
-                      deshabilitado={enOtra}
-                      onClick={() =>
-                        cambiarUna(i, {
-                          comidas: activa
-                            ? racion.comidas.filter((c) => c !== comida)
-                            : [...racion.comidas, comida],
-                        })
-                      }
-                    >
-                      {ETIQUETA_COMIDA[comida]}
-                    </Chip>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+          <Campo
+            key={comida ?? i}
+            id={`comida-cantidad-${comida ?? i}`}
+            etiqueta={`¿${CUANTOS[unidad]} ${EN_LA_COMIDA[comida]}?`}
+            valor={racion.cantidad}
+            onCambio={(cantidad) =>
+              onCambio(
+                raciones.map((r, j) => (j === i ? { ...r, cantidad } : r)),
+              )
+            }
+            ayuda={ayudaDeCantidad(racion.cantidad, unidad)}
+            error={
+              racion.cantidad !== "" &&
+              parsearCantidad(racion.cantidad) === undefined
+                ? "No entendimos esa cantidad. Prueba 1, ½ o 1/2."
+                : undefined
+            }
+          />
         );
       })}
-
-      <p className="text-muted-foreground text-xs text-pretty">
-        {raciones.length === 1
-          ? "Si come distinto según la hora, agrega otra porción."
-          : "Cada porción tiene sus propias comidas."}
-      </p>
     </div>
   );
 }
@@ -831,16 +927,25 @@ function ayudaDeCantidad(texto: string, unidad: UnidadRacion): string {
 function Seccion({
   titulo,
   ayuda,
+  grande,
   children,
 }: {
   titulo: string;
   ayuda?: string;
+  /** Para las secciones que son su propio tema y no un campo más. */
+  grande?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <section className="space-y-3 rounded-2xl bg-secondary/40 p-3">
       <div>
-        <h3 className="text-sm font-semibold">{titulo}</h3>
+        <h3
+          className={
+            grande ? "font-display text-base font-bold" : "text-sm font-semibold"
+          }
+        >
+          {titulo}
+        </h3>
         {ayuda && (
           <p className="text-muted-foreground text-xs text-pretty">{ayuda}</p>
         )}
@@ -1010,7 +1115,7 @@ function SelectorDeFoto({
   valor?: string;
   onCambio: (valor: string | undefined) => void;
   etiqueta: string;
-  ayuda: string;
+  ayuda?: string;
   error?: string;
 }) {
   const archivo = useRef<HTMLInputElement>(null);
@@ -1047,7 +1152,7 @@ function SelectorDeFoto({
         >
           <Camera className="size-6" />
           <span className="text-sm font-semibold">{etiqueta}</span>
-          <span className="text-xs text-pretty">{ayuda}</span>
+          {ayuda && <span className="text-xs text-pretty">{ayuda}</span>}
         </button>
       )}
       <input
