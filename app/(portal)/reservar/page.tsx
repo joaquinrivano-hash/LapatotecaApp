@@ -171,13 +171,19 @@ export default function Reservar() {
             </TabsTrigger>
           </TabsList>
 
+          {/* Los servicios van también al final de las otras dos pestañas:
+              el baño y el traslado se piensan junto con la estadía, no en
+              una visita aparte a otra pestaña. Es el mismo componente y no
+              una copia, así que no se pueden ir separando. */}
           <TabsContent value="jardin" className="mt-4 space-y-4">
             <DiaDeJardin perro={perro} />
             <ComprarPlan perro={perro} />
+            <ServicioSpot perro={perro} />
           </TabsContent>
 
-          <TabsContent value="hotel" className="mt-4">
+          <TabsContent value="hotel" className="mt-4 space-y-4">
             <ReservaDeHotel perro={perro} />
+            <ServicioSpot perro={perro} />
           </TabsContent>
 
           <TabsContent value="servicios" className="mt-4">
@@ -379,7 +385,7 @@ function ComprarPlan({ perro }: { perro: Perro }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle>O compra un plan del mes</CardTitle>
+        <CardTitle className="font-display text-2xl">PLANES</CardTitle>
         <p className="text-muted-foreground text-sm text-pretty">
           Se paga por adelantado y vale hasta fin de mes. Los días no usados no
           pasan al mes siguiente.
@@ -622,7 +628,7 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
 }
 
 const TIPOS_SERVICIO = [
-  { valor: "spa", etiqueta: "Spa", icono: Bath },
+  { valor: "spa", etiqueta: "Baño", icono: Bath },
   { valor: "paseo", etiqueta: "Paseo", icono: Footprints },
   { valor: "traslado", etiqueta: "Traslado", icono: Car },
 ] as const;
@@ -713,13 +719,23 @@ function ServicioSpot({ perro }: { perro: Perro }) {
             </p>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="hora-servicio">Hora</Label>
+            {/* En el baño la hora no es cuándo se hace sino cuándo lo pasan a
+                buscar: el equipo lo organiza para tenerlo listo antes. En los
+                otros dos la hora es la hora, así que la etiqueta cambia. */}
+            <Label htmlFor="hora-servicio">
+              {tipo === "spa" ? "Hora en que retirarás a tu perro" : "Hora"}
+            </Label>
             <Input
               id="hora-servicio"
               type="time"
               value={hora}
               onChange={(e) => setHora(e.target.value)}
             />
+            {tipo === "spa" && (
+              <p className="text-muted-foreground text-xs">
+                Así lo tenemos listo antes de esa hora.
+              </p>
+            )}
           </div>
         </div>
 
