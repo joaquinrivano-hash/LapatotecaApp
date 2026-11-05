@@ -33,7 +33,7 @@ import { autenticacion, hayAuthReal } from "@/lib/auth";
 import { registrarDueno } from "@/lib/servicios/alta-de-cuenta";
 import { useSesion } from "@/lib/store/sesion";
 import { formatearCLP } from "@/lib/utils/moneda";
-import { esTelefonoValido } from "@/lib/utils/telefono";
+import { esTelefonoValido, formatearTelefono } from "@/lib/utils/telefono";
 
 /** El mínimo que exige Supabase. */
 const LARGO_MINIMO_CLAVE = 6;
@@ -50,6 +50,7 @@ export default function CrearCuenta() {
   // cuentas, así que el campo ni aparece.
   const conCuentaReal = hayAuthReal();
   const [clave, setClave] = useState("");
+  const [confirmacion, setConfirmacion] = useState("");
   const [porConfirmar, setPorConfirmar] = useState<string | null>(null);
   const [falloAlCrear, setFalloAlCrear] = useState<string | null>(null);
 
@@ -80,7 +81,8 @@ export default function CrearCuenta() {
     cuenta.email.trim() !== "" &&
     esTelefonoValido(cuenta.telefono) &&
     direccionValida &&
-    (!conCuentaReal || clave.length >= LARGO_MINIMO_CLAVE);
+    (!conCuentaReal ||
+      (clave.length >= LARGO_MINIMO_CLAVE && confirmacion === clave));
 
   async function crear() {
     if (!configuracion.datos) return;
@@ -177,8 +179,9 @@ export default function CrearCuenta() {
             ¡Queremos conocerte! Completa la siguiente información para poder
             agendar tu <strong className="text-foreground">día de prueba</strong>{" "}
             con nosotros. El día de prueba consiste en media jornada en La
-            Patoteca con un valor de {formatearCLP(PRECIOS.diaDePrueba)} pesos,
-            donde confirmaremos que es el lugar perfecto para ti y tu perrito.
+            Patoteca y nos permite observar cómo se relaciona tu perrito con los
+            demás y cómo se adapta sin su tutor (valor{" "}
+            {formatearCLP(PRECIOS.diaDePrueba)})
           </p>
         </div>
 
@@ -223,10 +226,28 @@ export default function CrearCuenta() {
                 valor={clave}
                 onCambio={setClave}
                 autoComplete="new-password"
-                ayuda={`Con esta entras después a ver las reservas y los reportes. Al menos ${LARGO_MINIMO_CLAVE} caracteres.`}
                 error={
                   clave !== "" && clave.length < LARGO_MINIMO_CLAVE
                     ? `Necesita al menos ${LARGO_MINIMO_CLAVE} caracteres.`
+                    : undefined
+                }
+              />
+            )}
+
+            {/* Una contraseña mal tecleada en el celular se descubre recién
+                cuando el login la rechaza, y para entonces la persona ya no
+                sabe cuál escribió. Escribirla dos veces lo dice ahora. */}
+            {conCuentaReal && (
+              <Campo
+                id="confirmacion"
+                etiqueta="Confirma tu contraseña"
+                tipo="password"
+                valor={confirmacion}
+                onCambio={setConfirmacion}
+                autoComplete="new-password"
+                error={
+                  confirmacion !== "" && confirmacion !== clave
+                    ? "Las dos contraseñas no son iguales."
                     : undefined
                 }
               />
@@ -239,7 +260,11 @@ export default function CrearCuenta() {
               valor={cuenta.telefono}
               onCambio={(v) => setCuenta({ ...cuenta, telefono: v })}
               autoComplete="tel"
-              ayuda="Acá te mandaremos los reportes diarios. Ej: 9 8765 4321."
+              ayuda={
+                esTelefonoValido(cuenta.telefono)
+                  ? `Lo guardamos como ${formatearTelefono(cuenta.telefono)}.`
+                  : "Acá te mandaremos los reportes diarios. Empieza con +569. Ej: +569 8765 4321."
+              }
               error={
                 cuenta.telefono.trim() !== "" &&
                 !esTelefonoValido(cuenta.telefono)
