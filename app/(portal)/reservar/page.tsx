@@ -421,31 +421,41 @@ function ComprarPlan({ perro }: { perro: Perro }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <Button
-            size="xl"
-            disabled={ocupado}
-            onClick={() => comprar("dias")}
-            className="flex-col gap-0 py-3"
-          >
-            <span>Plan de {dias} días</span>
-            <span className="text-sm font-normal opacity-90">
-              {formatearCLP(precio)}
-            </span>
-          </Button>
-          <Button
-            size="xl"
-            variant="outline"
-            disabled={ocupado}
-            onClick={() => comprar("pase_libre")}
-            className="flex-col gap-0 py-3"
-          >
-            <span>Pase libre</span>
-            <span className="text-sm font-normal opacity-80">
+        <Button
+          size="xl"
+          disabled={ocupado}
+          onClick={() => comprar("dias")}
+          className="w-full flex-col gap-0 py-3"
+        >
+          <span>Plan de {dias} días</span>
+          <span className="text-sm font-normal opacity-90">
+            {formatearCLP(precio)}
+          </span>
+        </Button>
+
+        {/* El pase libre va abajo y aparte: no es un plan más de la lista,
+            es el que los reemplaza a todos. Al lado del otro, en el mismo
+            tamaño, se leía como la segunda de dos opciones iguales.
+
+            El ámbar es el color de dato de la marca y acá hace de destaque
+            sin competir con el fucsia, que es el color de acción. */}
+        <button
+          type="button"
+          disabled={ocupado}
+          onClick={() => comprar("pase_libre")}
+          className="bg-accent text-foreground w-full rounded-2xl px-4 py-4 text-left transition-opacity disabled:opacity-60"
+        >
+          <span className="font-display flex items-baseline justify-between gap-3 text-lg font-bold">
+            Pase libre
+            <span className="text-base tabular-nums">
               {formatearCLP(PRECIOS.planes.paseLibre)} al mes
             </span>
-          </Button>
-        </div>
+          </span>
+          <span className="mt-0.5 block text-sm text-pretty opacity-80">
+            Asistencia libre todos los días hábiles, con tope a las{" "}
+            {NEGOCIO.jardin.horaCierre}:00.
+          </span>
+        </button>
       </CardContent>
     </Card>
   );
