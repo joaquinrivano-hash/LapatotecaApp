@@ -74,9 +74,15 @@ export const NEGOCIO = {
      * (7:00-19:00) y el día de prueba es la mitad.
      */
     horasDeEstadia: 6,
-    /** Primera y última hora a la que puede llegar. */
-    horaPrimeraEntrada: 7,
-    horaUltimaEntrada: 13,
+    /**
+     * Primera y última hora a la que puede llegar, en HH:MM.
+     *
+     * Van en HH:MM y no en horas enteras porque la primera entrada es a las
+     * 8:30: con un número redondo habría que elegir entre ofrecer las 8:00,
+     * que no se recibe, o partir a las 9:00 y perder media hora de agenda.
+     */
+    primeraEntrada: "08:30",
+    ultimaEntrada: "13:00",
     /**
      * Las llegadas se espacian: dos perros nuevos entrando juntos es una
      * presentación que nadie alcanza a acompañar.

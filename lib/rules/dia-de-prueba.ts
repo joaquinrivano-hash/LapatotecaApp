@@ -13,7 +13,7 @@
 import { NEGOCIO } from "@/lib/config/negocio";
 import { PRECIOS } from "@/lib/config/precios";
 import { verificarCapacidad, type OcupanteRango } from "@/lib/rules/capacidad";
-import { horasEntre, instanteEn } from "@/lib/utils/fecha";
+import { horasEntre, instanteEn, minutosDesdeHHMM } from "@/lib/utils/fecha";
 import type { FechaISO, ID, InstanteISO, Pago } from "@/lib/types";
 
 export type MotivoNoDisponible = "pasado" | "tomado" | "sin_cupo";
@@ -35,13 +35,13 @@ export const MOTIVO_EN_PALABRAS: Record<MotivoNoDisponible, string> = {
 
 /** Los minutos a los que se puede llegar, según la configuración. */
 export function minutosDeEntrada(): number[] {
-  const { horaPrimeraEntrada, horaUltimaEntrada, minutosEntreEntradas } =
+  const { primeraEntrada, ultimaEntrada, minutosEntreEntradas } =
     NEGOCIO.diaDePrueba;
 
   const minutos: number[] = [];
   for (
-    let minuto = horaPrimeraEntrada * 60;
-    minuto <= horaUltimaEntrada * 60;
+    let minuto = minutosDesdeHHMM(primeraEntrada);
+    minuto <= minutosDesdeHHMM(ultimaEntrada);
     minuto += minutosEntreEntradas
   ) {
     minutos.push(minuto);
