@@ -5,7 +5,6 @@ import {
   Check,
   Clock,
   Footprints,
-  Home as Casa,
   MapPin,
   Moon,
   Sun,
@@ -118,18 +117,18 @@ const PROMESAS = [
     emoji: "🏠",
     titulo: "Sin jaulas ni caniles",
     texto:
-      "los perritos andan libres por la casa y el patio, con acceso a sillones, camas y zonas de descanso.",
+      "Los perritos andan libres por la casa y el patio, con acceso a sillones, camas y zonas de descanso.",
   },
   {
     emoji: "💗",
     titulo: "Siempre acompañados",
     texto:
-      "somos un equipo de 4 personas que rotan para que nunca queden solos.",
+      "Tenemos un equipo dedicado que los acompaña durante toda la jornada: nunca quedan solos y siempre hay alguien cuidándolos.",
   },
   {
     emoji: "💬",
     titulo: "Reportes diarios",
-    texto: "fotos y novedades por WhatsApp dos o tres veces al día.",
+    texto: "Te mandamos fotos y novedades por WhatsApp, dos o tres veces al día.",
   },
 ];
 
@@ -142,9 +141,12 @@ export default function Landing() {
         {/* ── Portada ─────────────────────────────────────────────── */}
         <section className="mx-auto grid w-full max-w-5xl items-center gap-8 px-4 pt-8 pb-12 lg:grid-cols-2 lg:gap-12 lg:pt-14">
           <div className="flex flex-col items-center gap-5 text-center lg:items-start lg:text-left">
+            {/* Solo dónde estamos. "Sin jaulas" ya lo dice el primer
+                beneficio, y repetirlo acá arriba le quitaba a la etiqueta lo
+                único que aporta de un vistazo: la comuna. */}
             <Badge variant="secondary" className="gap-1.5">
-              <Casa className="size-3.5" />
-              Providencia · sin jaulas
+              <MapPin className="size-3.5" />
+              Providencia
             </Badge>
             <h1 className="font-display text-4xl font-bold text-balance sm:text-5xl">
               ¡El segundo hogar de tu peludo!
