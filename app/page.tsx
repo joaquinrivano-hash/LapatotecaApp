@@ -391,7 +391,9 @@ export default function Landing() {
 
           <Card>
             <CardContent className="space-y-4 p-5">
-              <h2 className="font-display text-xl font-bold">Dónde y cuándo</h2>
+              <h2 className="font-display text-xl font-bold">
+                Horarios y dirección
+              </h2>
               <p className="flex items-start gap-2 text-sm">
                 <MapPin className="text-primary mt-0.5 size-4 shrink-0" />
                 Providencia, cerca de Av. Diagonal Oriente con Manuel Montt.
