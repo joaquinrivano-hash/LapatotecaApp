@@ -141,7 +141,7 @@ export function revisarAltaDePerro(
   const faltan: FaltanteDeAlta[] = [];
 
   if (!borrador.nombre?.trim()) {
-    faltan.push({ campo: "nombre", mensaje: "¿Cómo se llama?" });
+    faltan.push({ campo: "nombre", mensaje: "Falta su nombre." });
   }
   if (!borrador.raza?.trim()) {
     faltan.push({ campo: "raza", mensaje: "Falta la raza." });
