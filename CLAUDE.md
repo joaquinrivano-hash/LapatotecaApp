@@ -759,6 +759,29 @@ sobrepeso la cuenta se crea igual, el botón dice "Crear cuenta" y no "Crear
 cuenta y agendar", y en vez del calendario va a su cuenta, que explica que lo
 conversamos.
 
+#### Si no deja crearla, dice por qué
+
+El botón "Crear cuenta" **no se apaga** cuando falta algo. Apagado no decía
+por qué: el dueño llenaba el formulario, tocaba el botón y no pasaba nada —
+lo reportó la dueña el 06-11—. Y la ficha del perro avisaba solo lo
+**primero** que faltaba, en un aviso flotante que se iba solo.
+
+Ahora el toque responde siempre. Si falta algo, abajo del botón aparece
+**todo** lo que falta, separado en "Tus datos", "La ficha de Trufa" y, aparte,
+lo que no tiene vuelta (la castración), y la pantalla baja hasta ahí. Cada
+grupo trae "Ir a corregirlo", porque el formulario es largo y un campo en
+rojo tres pantallas más arriba no se ve. El aviso se recalcula en cada render:
+se achica a medida que se corrige y desaparece cuando ya se puede crear.
+
+Lo del dueño lo revisa `revisarDatosDelDueno` (`lib/rules/alta-cuenta.ts`),
+igual que `revisarAltaDePerro` revisa al perro: antes era un sí/no suelto en
+la pantalla, que alcanzaba para apagar el botón y no para decir qué faltaba.
+Ahora también ataja un email sin arroba, que antes llegaba hasta Supabase.
+
+Sigue valiendo que lo que falta se marca **recién al intentar**: ir marcando
+en rojo lo que todavía no alcanza a escribir es hostil. La excepción son el
+WhatsApp y las contraseñas, que ya avisaban apenas tenían algo escrito.
+
 ### La dirección se elige, no se escribe
 
 `components/shared/campo-direccion.tsx` y `lib/integraciones/direcciones/`.
@@ -2029,7 +2052,7 @@ afuera, y se actualiza cuando cambia:
 | Hosting | Proyecto de Vercel **`lapatoteca`**: tiene el dominio y publica `main` como Production. |
 | Proyecto viejo | **`lapatoteca-app`** en Vercel quedó sin el dominio y está por borrarse. Ahí vive `lapatoteca-apppruebas.vercel.app`, que apuntaba a `prueba/vista-dueno`. **No se cargan variables ahí.** |
 | Base y login | Supabase, proyecto `kcxzoesspkggpchvqlnw`, plan Pro (US$25 + IVA al mes, el servidor Micro lo cubre el crédito). |
-| Migraciones corridas | **Las 16**, al 22 de octubre de 2026 — hasta `20261022170000_devolver_el_dia_de_prueba`. `cambios_de_agenda` y `planes_y_dia_de_prueba` se verificaron desde afuera después de correrlas: sus seis funciones existen y dan `401` sin sesión. La 16ª la corrió la dueña y la confirmó con la consulta de `pg_proc` (dio `true`). La 17ª, `20261026120000_ubicacion_del_fichaje`, está en `pruebas` y **sin confirmar** (paso 11 de "Lo que falta hacer afuera"): tiene que correr ANTES de pasar su código a `main`. Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
+| Migraciones corridas | **Las 17**, al 5 de noviembre de 2026 — hasta `20261105120000_traslado_y_paseos`. `cambios_de_agenda` y `planes_y_dia_de_prueba` se verificaron desde afuera después de correrlas: sus seis funciones existen y dan `401` sin sesión. La 16ª la corrió la dueña y la confirmó con la consulta de `pg_proc` (dio `true`). `20261026120000_ubicacion_del_fichaje` está en `pruebas` y **sin confirmar** (paso 11 de "Lo que falta hacer afuera"): tiene que correr ANTES de pasar su código a `main`, y se puede correr aunque tenga marca anterior a `traslado_y_paseos`, porque solo agrega columnas a otra tabla. Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
 | Confirmación de correo | **Encendida.** Quien se registra recibe un enlace y hasta que no lo abre no tiene sesión. Se apaga en Authentication → Sign In → Email si alguna vez estorba. |
 | Correo saliente | **Resend**, dominio `lapatoteca.cl` verificado (región Brasil). Los tres registros DNS los puso Resend solo, con el *Auto configure* de Vercel. La API key vive en Supabase → Authentication → SMTP, con usuario `resend` y remitente `hola@lapatoteca.cl`. |
 | Buscador de direcciones | Llave de Google Cloud con el correo de la empresa, restringida a los dominios de `lapatoteca.cl`, `*.vercel.app` y `localhost:3000`, y a Maps JavaScript API + Places API (New). |
@@ -2124,6 +2147,7 @@ no tienen un orden que no rompa nada (ver más abajo): el código llegó a
 | `20261022160000_planes_y_dia_de_prueba` | Comprar y usar un plan y agendar el día de prueba, en la base; los disparadores que no dejan al dueño tocar planes, aprobarse el día de prueba ni insertar días o reservas por fuera. **Va junto con su código**: con una sin la otra, agendar el día de prueba y usar el plan fallan (ver abajo) | Corrida el 22-10-2026, verificada desde afuera |
 | `20261022170000_devolver_el_dia_de_prueba` | Redefine `cancelar_dia_de_prueba` para que lo ya pagado quede en "Por devolver". **No está acoplada**: sin ella el código nuevo funciona igual, con el comportamiento viejo (lo pagado no se devuelve), así que se puede correr después de publicar. Si alguna vez se vuelve a correr `cambios_de_agenda` suelto, hay que correr esta después | Corrida el 22-10-2026, confirmada con `pg_proc` |
 | `20261026120000_ubicacion_del_fichaje` | `turnos.entrada_ubicacion` y `turnos.salida_ubicacion`, dónde estaba el celular al fichar. **Va antes que su código**: con el código nuevo y sin estas columnas, fichar falla; al revés no rompe nada, porque el código viejo no las nombra | **Sin confirmar** |
+| `20261105120000_traslado_y_paseos` | `servicios.con_regreso`, `servicios.cantidad` y `reservas_hotel.paseos_cortos_contratados`: el traslado de ida y vuelta, los paseos sueltos por cantidad y el paseo de 15 min del hotel. **No está acoplada**: sin ella, agendar un traslado con regreso, un pack de paseos o una reserva con paseo de 15 min falla al guardar (columna que no existe), pero todo lo demás sigue igual, así que se puede correr después de publicar | Corrida el 5-11-2026, verificada desde afuera: las tres columnas dan `401` |
 
 La regla de acá en adelante:
 

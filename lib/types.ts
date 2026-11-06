@@ -122,7 +122,13 @@ export type Comida = "desayuno" | "almuerzo" | "cena";
  * "medida" es el medidor que viene en el saco, que es como lo dice la gente;
  * antes se llamaba "scoop" y nadie en Chile pide un scoop de comida.
  */
-export type UnidadRacion = "medida" | "g" | "taza";
+/**
+ * Con qué se mide la porción. Con "otra" no se mide: el dueño lo cuenta
+ * con sus palabras en `queCome`. Ninguna lista cubre todo —hay quien da
+ * sobres, latas o comida casera pesada a ojo— y quedarse fuera de la lista
+ * no puede dejar la ficha a medias.
+ */
+export type UnidadRacion = "medida" | "g" | "taza" | "otra";
 
 /**
  * Una ración: cuánto come y en qué comidas de esas.
@@ -152,8 +158,23 @@ export interface Racion {
 export interface Alimentacion {
   marca?: string;
   unidad?: UnidadRacion;
+  /** Solo con `unidad: "otra"`: qué come, en palabras del dueño. */
+  queCome?: string;
   raciones: Racion[];
   notas?: string;
+  /**
+   * No come pellet. Lo que sí come va en `mezclarCon`: hay perros con dieta
+   * casera o con comida húmeda, y preguntarles la marca de pellet y cuántas
+   * tazas es preguntarles por algo que no existe.
+   */
+  noComePellet?: boolean;
+  /** Lo que se le agrega, en palabras del dueño: "133 g de lata". */
+  mezclarCon?: string;
+  /**
+   * No come en La Patoteca. Es distinto de no haber anotado nada: acá la
+   * respuesta es "no se le sirve", y el equipo tiene que poder leerla.
+   */
+  noComeAca?: boolean;
 }
 
 export interface Medicamento {
@@ -308,8 +329,11 @@ export interface ReservaHotel {
   finMarcadoEn?: InstanteISO;
   /** Quién apretó el botón. Lo firma la base, no el navegador. */
   finMarcadoPor?: ID;
-  /** Cantidad de paseos contratados durante la estadía, a $4.000 cada uno. */
+  /** Paseos de 30 min contratados durante la estadía. */
   paseosContratados: number;
+  /** Paseos de 15 min. Va aparte y no reemplaza al de arriba: las estadías
+   *  ya guardadas tienen sus paseos de 30 min en ese campo. */
+  paseosCortosContratados?: number;
   estado: EstadoReserva;
   cotizacion: Cotizacion;
   abonoPagado: boolean;
@@ -419,8 +443,12 @@ export interface ServicioAgendado {
   nivelSpa?: NivelSpa;
   /** Solo paseo. */
   duracionMin?: DuracionPaseo;
+  /** Solo paseo: cuántos se compraron. El equipo los reparte. */
+  cantidad?: number;
   /** Solo traslado. */
   km?: number;
+  /** Solo traslado: el mismo tramo de ida y de vuelta. */
+  conRegreso?: boolean;
   estado: EstadoServicio;
   cotizacion: Cotizacion;
   creadoEn: InstanteISO;

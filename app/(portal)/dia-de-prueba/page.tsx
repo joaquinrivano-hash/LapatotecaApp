@@ -207,10 +207,15 @@ export default function DiaDePrueba() {
       <div className="space-y-1">
         <h1 className="font-display text-2xl font-bold">El día de prueba</h1>
         <p className="text-muted-foreground text-sm text-pretty">
-          Es <strong className="text-foreground">media jornada</strong> de un
-          día de jardín normal: {NEGOCIO.diaDePrueba.horasDeEstadia} horas desde
-          la hora que elijas. Así vemos cómo se lleva con los demás sin que sea
-          un día entero de golpe.
+          🐶 El día de prueba dura {NEGOCIO.diaDePrueba.horasDeEstadia} horas y
+          nos permite ver cómo se relaciona tu perrito con el grupo y cómo se
+          adapta sin su tutor 😊
+        </p>
+        {/* Lo que no se acepta se dice ACÁ y no después de pagar: enterarse
+            al llegar es enterarse tarde, y además es plata ya gastada. */}
+        <p className="text-muted-foreground text-sm text-pretty">
+          No se aceptarán perritos con ansiedad por separación severa, ladrido
+          excesivo, juego bruto, agresivos, miedo excesivo…
         </p>
       </div>
 
@@ -363,7 +368,7 @@ export default function DiaDePrueba() {
                       <span
                         className={`text-[11px] ${lleno ? "text-muted-foreground" : "text-success"}`}
                       >
-                        {lleno ? "lleno" : `${disponible.libres} horas`}
+                        {lleno ? "lleno" : "Disponible"}
                       </span>
                     </button>
                   );
@@ -378,7 +383,7 @@ export default function DiaDePrueba() {
           <div className="space-y-2">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <Clock className="size-4" />
-              A qué hora llega
+              ¿A qué hora deseas traerlo?
             </h2>
 
             {dia ? (

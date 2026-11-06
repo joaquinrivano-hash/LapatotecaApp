@@ -9,11 +9,15 @@ import { LogoPatoteca } from "@/components/shared/logo";
 import { useMontado } from "@/lib/hooks/use-montado";
 import { useSalir } from "@/lib/hooks/use-salir";
 import { useSesion } from "@/lib/store/sesion";
+import { NEGOCIO } from "@/lib/config/negocio";
 import { cn } from "@/lib/utils";
 
 const SECCIONES = [
   { href: "/reservar", etiqueta: "Reservar", icono: CalendarPlus },
-  { href: "/tienda", etiqueta: "Tienda", icono: ShoppingBag },
+  // La tienda aparece acá solo si está encendida: ver NEGOCIO.tienda.
+  ...(NEGOCIO.tienda.visible
+    ? [{ href: "/tienda", etiqueta: "Tienda", icono: ShoppingBag }]
+    : []),
   { href: "/mi-cuenta", etiqueta: "Mi cuenta", icono: PawPrint },
 ];
 

@@ -78,6 +78,26 @@ describe("calcularPrecioHotel", () => {
     expect(c.total).toBe(80_000);
   });
 
+  it("los paseos de 15 y de 30 van en líneas separadas", () => {
+    const c = calcularPrecioHotel({
+      inicio: en("15", "10:00"),
+      fin: en("18", "10:00"),
+      paseosContratados: 2,
+      paseosCortosContratados: 1,
+    });
+
+    // Juntos en una sola línea, "3 paseos $11.000" no se puede comprobar
+    // mirándolo.
+    const lineas = c.lineas.filter((l) => l.concepto === "Paseos");
+    expect(lineas).toHaveLength(2);
+    expect(lineas.map((l) => l.monto)).toEqual([
+      PRECIOS.hotel.paseoCorto,
+      2 * PRECIOS.hotel.paseo,
+    ]);
+    expect(lineas[0].detalle).toContain("15 min");
+    expect(lineas[1].detalle).toContain("30 min");
+  });
+
   it("calcula el abono al reservar", () => {
     const c = calcularPrecioHotel({
       inicio: en("15", "10:00"),

@@ -1,10 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Dog, MailCheck, PawPrint, TriangleAlert, User } from "lucide-react";
+import {
+  ArrowUp,
+  Dog,
+  MailCheck,
+  PawPrint,
+  TriangleAlert,
+  User,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,6 +33,7 @@ import {
   revisarAltaDePerro,
   type FaltanteDeAlta,
 } from "@/lib/rules/alta-perro";
+import { revisarDatosDelDueno } from "@/lib/rules/alta-cuenta";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { hoyDelStaff } from "@/lib/servicios/asistencia";
 import { crearCuenta, RegistroRechazado } from "@/lib/servicios/registro";
@@ -33,10 +41,7 @@ import { autenticacion, hayAuthReal } from "@/lib/auth";
 import { registrarDueno } from "@/lib/servicios/alta-de-cuenta";
 import { useSesion } from "@/lib/store/sesion";
 import { formatearCLP } from "@/lib/utils/moneda";
-import { esTelefonoValido } from "@/lib/utils/telefono";
-
-/** El mínimo que exige Supabase. */
-const LARGO_MINIMO_CLAVE = 6;
+import { esTelefonoValido, formatearTelefono } from "@/lib/utils/telefono";
 
 export default function CrearCuenta() {
   const router = useRouter();
@@ -50,6 +55,7 @@ export default function CrearCuenta() {
   // cuentas, así que el campo ni aparece.
   const conCuentaReal = hayAuthReal();
   const [clave, setClave] = useState("");
+  const [confirmacion, setConfirmacion] = useState("");
   const [porConfirmar, setPorConfirmar] = useState<string | null>(null);
   const [falloAlCrear, setFalloAlCrear] = useState<string | null>(null);
 
@@ -63,9 +69,12 @@ export default function CrearCuenta() {
   });
   const [direccionValida, setDireccionValida] = useState(false);
   const [perro, setPerro] = useState<EstadoPerro>(estadoVacio);
-  // Los reparos del formulario se muestran recién cuando intenta guardar: ir
-  // marcando en rojo lo que todavía no alcanza a escribir es hostil.
-  const [faltantes, setFaltantes] = useState<FaltanteDeAlta[]>([]);
+  // Lo que falta se muestra recién cuando intenta crear la cuenta: ir
+  // marcando en rojo lo que todavía no alcanza a escribir es hostil. Desde
+  // ahí se recalcula en cada render, así que el aviso se achica a medida
+  // que corrige, en vez de quedarse con la foto del primer intento.
+  const [intento, setIntento] = useState(false);
+  const avisoDeLoQueFalta = useRef<HTMLDivElement>(null);
 
   const borrador = aBorrador(perro);
   const reparos = configuracion.datos
@@ -74,24 +83,51 @@ export default function CrearCuenta() {
   const bloqueos = reparos.filter((r) => r.bloquea);
   const conversar = reparos.some((r) => r.conversar);
 
-  const datosDelDueno =
-    cuenta.nombre.trim() !== "" &&
-    cuenta.apellido.trim() !== "" &&
-    cuenta.email.trim() !== "" &&
-    esTelefonoValido(cuenta.telefono) &&
-    direccionValida &&
-    (!conCuentaReal || clave.length >= LARGO_MINIMO_CLAVE);
+  const faltaDelDueno = revisarDatosDelDueno({
+    ...cuenta,
+    direccionValida,
+    clave: conCuentaReal ? { clave, confirmacion } : undefined,
+  });
+  const faltaDelPerro = configuracion.datos
+    ? revisarAltaDePerro(borrador, configuracion.datos, hoy)
+    : [];
+  const sePuedeCrear =
+    faltaDelDueno.length === 0 &&
+    faltaDelPerro.length === 0 &&
+    bloqueos.length === 0;
+
+  /** El mensaje de un campo del dueño, si falta. */
+  const faltaEn = (campo: string) =>
+    faltaDelDueno.find((f) => f.campo === campo)?.mensaje;
+  /**
+   * Los campos que se revisan solos mientras se escriben —el WhatsApp y las
+   * contraseñas, que ya lo hacían— avisan apenas tienen algo; los demás,
+   * recién al intentar.
+   */
+  const errorEn = (campo: string, valor: string) =>
+    intento || valor !== "" ? faltaEn(campo) : undefined;
 
   async function crear() {
     if (!configuracion.datos) return;
     setFalloAlCrear(null);
 
-    const revision = revisarAltaDePerro(borrador, configuracion.datos, hoy);
-    setFaltantes(revision);
-    if (revision.length > 0) {
-      toast.error("Falta completar la ficha.", {
-        description: revision[0].mensaje,
-      });
+    /*
+     * El botón ya no se apaga cuando falta algo.
+     *
+     * Apagado no decía por qué: el dueño llenaba el formulario, tocaba
+     * "Crear cuenta" y no pasaba nada. Y la ficha del perro avisaba solo lo
+     * PRIMERO que faltaba, en un aviso flotante que se iba solo. Ahora el
+     * toque responde siempre: si falta algo, abajo del botón aparece TODO
+     * lo que falta, y la pantalla lo lleva hasta ahí.
+     */
+    if (!sePuedeCrear) {
+      setIntento(true);
+      requestAnimationFrame(() =>
+        avisoDeLoQueFalta.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        }),
+      );
       return;
     }
 
@@ -177,12 +213,13 @@ export default function CrearCuenta() {
             ¡Queremos conocerte! Completa la siguiente información para poder
             agendar tu <strong className="text-foreground">día de prueba</strong>{" "}
             con nosotros. El día de prueba consiste en media jornada en La
-            Patoteca con un valor de {formatearCLP(PRECIOS.diaDePrueba)} pesos,
-            donde confirmaremos que es el lugar perfecto para ti y tu perrito.
+            Patoteca y nos permite observar cómo se relaciona tu perrito con los
+            demás y cómo se adapta sin su tutor (valor{" "}
+            {formatearCLP(PRECIOS.diaDePrueba)})
           </p>
         </div>
 
-        <Card>
+        <Card id="tus-datos" className="scroll-mt-4">
           <CardContent className="space-y-3 p-5">
             <h2 className="font-display flex items-center gap-2 text-lg font-bold">
               <User className="size-5" />
@@ -196,6 +233,7 @@ export default function CrearCuenta() {
                 valor={cuenta.nombre}
                 onCambio={(v) => setCuenta({ ...cuenta, nombre: v })}
                 autoComplete="given-name"
+                error={intento ? faltaEn("nombre") : undefined}
               />
               <Campo
                 id="apellido"
@@ -203,6 +241,7 @@ export default function CrearCuenta() {
                 valor={cuenta.apellido}
                 onCambio={(v) => setCuenta({ ...cuenta, apellido: v })}
                 autoComplete="family-name"
+                error={intento ? faltaEn("apellido") : undefined}
               />
             </div>
 
@@ -213,6 +252,7 @@ export default function CrearCuenta() {
               valor={cuenta.email}
               onCambio={(v) => setCuenta({ ...cuenta, email: v })}
               autoComplete="email"
+              error={intento ? faltaEn("email") : undefined}
             />
 
             {conCuentaReal && (
@@ -223,12 +263,22 @@ export default function CrearCuenta() {
                 valor={clave}
                 onCambio={setClave}
                 autoComplete="new-password"
-                ayuda={`Con esta entras después a ver las reservas y los reportes. Al menos ${LARGO_MINIMO_CLAVE} caracteres.`}
-                error={
-                  clave !== "" && clave.length < LARGO_MINIMO_CLAVE
-                    ? `Necesita al menos ${LARGO_MINIMO_CLAVE} caracteres.`
-                    : undefined
-                }
+                error={errorEn("clave", clave)}
+              />
+            )}
+
+            {/* Una contraseña mal tecleada en el celular se descubre recién
+                cuando el login la rechaza, y para entonces la persona ya no
+                sabe cuál escribió. Escribirla dos veces lo dice ahora. */}
+            {conCuentaReal && (
+              <Campo
+                id="confirmacion"
+                etiqueta="Confirma tu contraseña"
+                tipo="password"
+                valor={confirmacion}
+                onCambio={setConfirmacion}
+                autoComplete="new-password"
+                error={errorEn("confirmacion", confirmacion)}
               />
             )}
 
@@ -239,16 +289,16 @@ export default function CrearCuenta() {
               valor={cuenta.telefono}
               onCambio={(v) => setCuenta({ ...cuenta, telefono: v })}
               autoComplete="tel"
-              ayuda="Acá te mandaremos los reportes diarios. Ej: 9 8765 4321."
-              error={
-                cuenta.telefono.trim() !== "" &&
-                !esTelefonoValido(cuenta.telefono)
-                  ? "Revisa el número: tiene que ser un celular chileno."
-                  : undefined
+              ayuda={
+                esTelefonoValido(cuenta.telefono)
+                  ? `Lo guardamos como ${formatearTelefono(cuenta.telefono)}.`
+                  : "Ej: +569 8765 4321."
               }
+              error={errorEn("telefono", cuenta.telefono.trim())}
             />
 
             <CampoDireccion
+              error={intento ? faltaEn("direccion") : undefined}
               onCambio={({ direccion, comuna, valida }) => {
                 // Funcional: la dirección llega después de esperar a Google,
                 // y para entonces `cuenta` pudo cambiar en otro campo.
@@ -259,7 +309,7 @@ export default function CrearCuenta() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="tu-perro" className="scroll-mt-4">
           <CardContent className="space-y-4 p-5">
             <div className="space-y-1">
               <h2 className="font-display flex items-center gap-2 text-lg font-bold">
@@ -277,7 +327,7 @@ export default function CrearCuenta() {
                 estado={perro}
                 onCambio={setPerro}
                 configuracion={configuracion.datos}
-                faltantes={faltantes}
+                faltantes={intento ? faltaDelPerro : []}
                 hoy={hoy}
               />
             ) : (
@@ -299,13 +349,11 @@ export default function CrearCuenta() {
               <TriangleAlert className="mt-0.5 size-4 shrink-0" />
               {reparo.mensaje}
             </p>
-            {reparo.bloquea && (
-              <p className="text-muted-foreground text-xs text-pretty">
-                Escríbenos igual: a veces hay vuelta, pero no queremos
-                prometerte un cupo que no podemos cumplir.
-              </p>
-            )}
-            {(reparo.bloquea || reparo.conversar) && (
+            {/* El WhatsApp va SOLO en lo que se conversa, que hoy es el
+                peso. Lo que bloquea es la castración, y ahí no hay vuelta:
+                ofrecer escribirnos promete una excepción que no existe y
+                deja al dueño esperando una respuesta que va a ser que no. */}
+            {reparo.conversar && (
               <ContactoCasa
                 mensaje={`Hola, quiero inscribir a mi perro${perro.nombre ? ` ${perro.nombre}` : ""}${borrador.pesoKg ? ` (${borrador.pesoKg} kg)` : ""} en La Patoteca.`}
               />
@@ -316,7 +364,7 @@ export default function CrearCuenta() {
         <Button
           size="xl"
           className="w-full"
-          disabled={!datosDelDueno || bloqueos.length > 0 || ocupado}
+          disabled={ocupado || !configuracion.datos}
           onClick={crear}
         >
           <PawPrint />
@@ -326,6 +374,16 @@ export default function CrearCuenta() {
               ? "Crear cuenta"
               : "Crear cuenta y agendar"}
         </Button>
+
+        {intento && !sePuedeCrear && (
+          <LoQueFalta
+            ref={avisoDeLoQueFalta}
+            delDueno={faltaDelDueno}
+            delPerro={faltaDelPerro}
+            bloqueos={bloqueos.map((b) => b.mensaje)}
+            nombrePerro={perro.nombre.trim()}
+          />
+        )}
 
         {/* El motivo queda a la vista bajo el botón. El aviso flotante se
             va solo, y este formulario es largo: si se fue antes de que lo
@@ -352,6 +410,98 @@ export default function CrearCuenta() {
         </p>
       </main>
     </>
+  );
+}
+
+/**
+ * Todo lo que falta para crear la cuenta, junto y abajo del botón.
+ *
+ * Va abajo del botón porque es donde la persona está mirando cuando lo
+ * toca, y junto porque el formulario es largo: cada campo ya se marca en
+ * rojo, pero un rojo que quedó tres pantallas más arriba no se ve. Separado
+ * en tus datos y la ficha del perro, con un atajo a cada parte.
+ *
+ * Lo que no tiene vuelta —la castración— va aparte y sin atajo: no es un
+ * campo que se llene, es lo que impide recibirlo.
+ */
+function LoQueFalta({
+  ref,
+  delDueno,
+  delPerro,
+  bloqueos,
+  nombrePerro,
+}: {
+  ref: React.Ref<HTMLDivElement>;
+  delDueno: FaltanteDeAlta[];
+  delPerro: FaltanteDeAlta[];
+  bloqueos: string[];
+  nombrePerro: string;
+}) {
+  return (
+    <div
+      ref={ref}
+      role="alert"
+      className="bg-destructive/10 text-destructive space-y-3 rounded-xl p-4 text-sm"
+    >
+      <p className="flex items-start gap-2 font-semibold text-pretty">
+        <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+        Todavía no podemos crear tu cuenta. Revisa esto:
+      </p>
+
+      {bloqueos.length > 0 && (
+        <GrupoQueFalta titulo="Lo que no nos deja recibirlo" mensajes={bloqueos} />
+      )}
+      {delDueno.length > 0 && (
+        <GrupoQueFalta
+          titulo="Tus datos"
+          mensajes={delDueno.map((f) => f.mensaje)}
+          irA="tus-datos"
+        />
+      )}
+      {delPerro.length > 0 && (
+        <GrupoQueFalta
+          titulo={nombrePerro ? `La ficha de ${nombrePerro}` : "La ficha de tu perrito"}
+          mensajes={delPerro.map((f) => f.mensaje)}
+          irA="tu-perro"
+        />
+      )}
+    </div>
+  );
+}
+
+function GrupoQueFalta({
+  titulo,
+  mensajes,
+  irA,
+}: {
+  titulo: string;
+  mensajes: string[];
+  /** El id de la sección donde se corrige. */
+  irA?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-foreground font-semibold">{titulo}</p>
+      <ul className="list-disc space-y-0.5 pl-5 text-pretty">
+        {mensajes.map((mensaje) => (
+          <li key={mensaje}>{mensaje}</li>
+        ))}
+      </ul>
+      {irA && (
+        <button
+          type="button"
+          onClick={() =>
+            document
+              .getElementById(irA)
+              ?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }
+          className="text-foreground inline-flex items-center gap-1 pt-1 font-semibold underline underline-offset-2"
+        >
+          <ArrowUp className="size-4" />
+          Ir a corregirlo
+        </button>
+      )}
+    </div>
   );
 }
 

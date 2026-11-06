@@ -25,6 +25,7 @@ export interface EntradaPrecioHotel {
   fin: InstanteISO;
   /** Paseos contratados, a $4.000 cada uno. */
   paseosContratados?: number;
+  paseosCortosContratados?: number;
   /** Posición del perro en la reserva del dueño: 0 = primero, sin descuento. */
   indicePerro?: number;
   /** Suma un 10% adicional si el cliente tiene plan de jardín vigente. */
@@ -139,12 +140,25 @@ export function calcularPrecioHotel(entrada: EntradaPrecioHotel): Cotizacion {
     });
   }
 
-  const paseos = entrada.paseosContratados ?? 0;
-  if (paseos > 0) {
+  // Las dos duraciones van en líneas separadas: juntas en una sola, "3
+  // paseos $11.000" no se puede comprobar mirándolo.
+  for (const { cuantos, minutos, precio } of [
+    {
+      cuantos: entrada.paseosCortosContratados ?? 0,
+      minutos: 15,
+      precio: PRECIOS.hotel.paseoCorto,
+    },
+    {
+      cuantos: entrada.paseosContratados ?? 0,
+      minutos: 30,
+      precio: PRECIOS.hotel.paseo,
+    },
+  ]) {
+    if (cuantos === 0) continue;
     lineas.push({
       concepto: "Paseos",
-      detalle: `${paseos} ${paseos === 1 ? "paseo" : "paseos"}`,
-      monto: paseos * PRECIOS.hotel.paseo,
+      detalle: `${cuantos} ${cuantos === 1 ? "paseo" : "paseos"} de ${minutos} min`,
+      monto: cuantos * precio,
     });
   }
 

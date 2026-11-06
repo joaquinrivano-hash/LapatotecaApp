@@ -88,7 +88,34 @@ function exige(configuracion: Configuracion, campo: CampoDeAlta): boolean {
 }
 
 function alimentacionCompleta(alimentacion: Alimentacion | undefined): boolean {
-  if (!alimentacion?.marca?.trim() || !alimentacion.unidad) return false;
+  if (!alimentacion) return false;
+
+  // Que no coma acá es una respuesta, no un campo en blanco: el equipo
+  // necesita leerla tanto como leería la ración. Exigirle además la marca y
+  // las tazas sería exigirle datos de una comida que no va a servir.
+  if (alimentacion.noComeAca) return true;
+
+  // Sin pellet lo que vale es con qué se reemplaza. Pedirle igual la marca
+  // del pellet dejaría el alta trancada sin salida.
+  if (alimentacion.noComePellet) {
+    return Boolean(alimentacion.mezclarCon?.trim());
+  }
+
+  if (!alimentacion.unidad) return false;
+
+  // Con "otra" lo cuenta todo con sus palabras, y la marca va ahí dentro si
+  // importa ("un sobre de Pedigree…"). Exigirle además elegir una del
+  // catálogo —que la pantalla ni siquiera le muestra, porque no hay
+  // cantidades que mostrar— dejaría el alta trancada pidiendo algo que no
+  // se puede llenar.
+  if (alimentacion.unidad === "otra") {
+    return (
+      Boolean(alimentacion.queCome?.trim()) &&
+      (alimentacion.raciones ?? []).some((r) => r.comidas.length > 0)
+    );
+  }
+
+  if (!alimentacion.marca?.trim()) return false;
 
   const raciones = alimentacion.raciones ?? [];
   // Todas las raciones tienen que estar completas, no solo la primera: media
@@ -114,7 +141,7 @@ export function revisarAltaDePerro(
   const faltan: FaltanteDeAlta[] = [];
 
   if (!borrador.nombre?.trim()) {
-    faltan.push({ campo: "nombre", mensaje: "¿Cómo se llama?" });
+    faltan.push({ campo: "nombre", mensaje: "Falta su nombre." });
   }
   if (!borrador.raza?.trim()) {
     faltan.push({ campo: "raza", mensaje: "Falta la raza." });
@@ -253,7 +280,7 @@ export function reparosDeAlta(
     )
   ) {
     reparos.push({
-      mensaje: `Desde los ${NEGOCIO.admision.mesesParaExigirCastracion} meses los machos tienen que estar castrados para quedarse con nosotros.`,
+      mensaje: "Los machos deben estar castrados.",
       bloquea: true,
     });
   }

@@ -13,12 +13,20 @@ import {
   rangoDelBloque,
 } from "@/lib/rules/dia-de-prueba";
 import type { OcupanteRango } from "@/lib/rules/capacidad";
+import { minutosDesdeHHMM } from "@/lib/utils/fecha";
 import type { Pago } from "@/lib/types";
 
 const LUNES = "2026-09-28";
 
+/**
+ * El primer bloque de llegada, sacado de la configuración y no escrito a
+ * mano: estas pruebas son sobre el cupo, no sobre a qué hora abre la agenda,
+ * y con la hora fija se caían cada vez que esa hora se movía.
+ */
+const PRIMER_BLOQUE = minutosDeEntrada()[0];
+
 function llenarLaCasa(cantidad: number): OcupanteRango[] {
-  const { inicio, fin } = rangoDelBloque(LUNES, 7 * 60);
+  const { inicio, fin } = rangoDelBloque(LUNES, PRIMER_BLOQUE);
   return Array.from({ length: cantidad }, (_, i) => ({
     perroId: `otro-${i}`,
     linea: "jardin" as const,
@@ -38,8 +46,8 @@ describe("minutosDeEntrada", () => {
   it("va de la primera a la última hora, cada media hora", () => {
     const minutos = minutosDeEntrada();
 
-    expect(minutos[0]).toBe(NEGOCIO.diaDePrueba.horaPrimeraEntrada * 60);
-    expect(minutos.at(-1)).toBe(NEGOCIO.diaDePrueba.horaUltimaEntrada * 60);
+    expect(minutos[0]).toBe(minutosDesdeHHMM(NEGOCIO.diaDePrueba.primeraEntrada));
+    expect(minutos.at(-1)).toBe(minutosDesdeHHMM(NEGOCIO.diaDePrueba.ultimaEntrada));
     expect(minutos[1] - minutos[0]).toBe(
       NEGOCIO.diaDePrueba.minutosEntreEntradas,
     );
@@ -68,17 +76,21 @@ describe("bloquesDeEntrada", () => {
   it("no deja dos días de prueba en el mismo bloque", () => {
     const bloques = bloquesDeEntrada({
       ...base,
-      diasDePruebaTomados: [8 * 60],
+      diasDePruebaTomados: [PRIMER_BLOQUE],
     });
 
-    const ocho = bloques.find((b) => b.minutoDelDia === 8 * 60)!;
-    expect(ocho.disponible).toBe(false);
-    expect(ocho.motivo).toBe("tomado");
+    const tomado = bloques.find((b) => b.minutoDelDia === PRIMER_BLOQUE)!;
+    expect(tomado.disponible).toBe(false);
+    expect(tomado.motivo).toBe("tomado");
 
     // El de al lado, media hora después, sigue libre.
-    expect(bloques.find((b) => b.minutoDelDia === 8 * 60 + 30)!.disponible).toBe(
-      true,
-    );
+    expect(
+      bloques.find(
+        (b) =>
+          b.minutoDelDia ===
+          PRIMER_BLOQUE + NEGOCIO.diaDePrueba.minutosEntreEntradas,
+      )!.disponible,
+    ).toBe(true);
   });
 
   it("cierra los bloques donde la casa ya está llena", () => {
@@ -87,9 +99,9 @@ describe("bloquesDeEntrada", () => {
       ocupantes: llenarLaCasa(NEGOCIO.capacidad.maximoSimultaneo),
     });
 
-    const siete = bloques.find((b) => b.minutoDelDia === 7 * 60)!;
-    expect(siete.disponible).toBe(false);
-    expect(siete.motivo).toBe("sin_cupo");
+    const primero = bloques.find((b) => b.minutoDelDia === PRIMER_BLOQUE)!;
+    expect(primero.disponible).toBe(false);
+    expect(primero.motivo).toBe("sin_cupo");
   });
 
   it("un cupo libre alcanza para entrar", () => {
@@ -98,7 +110,9 @@ describe("bloquesDeEntrada", () => {
       ocupantes: llenarLaCasa(NEGOCIO.capacidad.maximoSimultaneo - 1),
     });
 
-    expect(bloques.find((b) => b.minutoDelDia === 7 * 60)!.disponible).toBe(true);
+    expect(
+      bloques.find((b) => b.minutoDelDia === PRIMER_BLOQUE)!.disponible,
+    ).toBe(true);
   });
 
   it("marca como pasados los bloques de hoy que ya fueron", () => {

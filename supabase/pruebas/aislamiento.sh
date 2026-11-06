@@ -518,11 +518,18 @@ intento "compra 12 días: precio por tramo, cobro pendiente" "12 168000 pendient
   "$COMPRAR_12
    select p.dias_totales || ' ' || p.precio || ' ' || g.estado || ' ' || g.monto
      from planes p join pagos g on g.referencia_id = p.id where p.perro_id = '$LOLA';"
+# El día se cuenta en SANTIAGO, igual que la función. Con current_date la
+# comprobación usa la fecha del contenedor, que va en UTC: entre las 21:00 y
+# la medianoche de Santiago ya es el día siguiente allá, y entonces la cuenta
+# de días hábiles no calza aunque la función esté perfecta. Pasó el 5-11-2026
+# a las 22:00 de Santiago.
 intento "el pase libre cubre los días hábiles del mes" "ok" \
   "select comprar_plan_de_jardin('$LOLA', 'pase_libre', null);
    select case when precio = 220000 and dias_totales = (
-       select count(*) from generate_series(current_date,
-         (date_trunc('month', current_date) + interval '1 month - 1 day')::date,
+       select count(*) from generate_series(
+         (now() at time zone 'America/Santiago')::date,
+         (date_trunc('month', (now() at time zone 'America/Santiago')::date)
+           + interval '1 month - 1 day')::date,
          interval '1 day') d where extract(isodow from d) < 6)
      then 'ok' else dias_totales || ' ' || precio end
      from planes where perro_id = '$LOLA';"

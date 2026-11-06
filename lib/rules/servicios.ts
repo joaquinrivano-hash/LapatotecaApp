@@ -6,10 +6,9 @@
  */
 
 import { NEGOCIO } from "@/lib/config/negocio";
-import { PRECIOS } from "@/lib/config/precios";
+import { PASEOS_POR_PACK, PRECIOS } from "@/lib/config/precios";
 import {
   construirCotizacion,
-  descuentoClienteActivo,
   descuentoSegundoPerro,
   soloAplicables,
 } from "@/lib/rules/descuentos";
@@ -18,6 +17,7 @@ import {
   minutosDelDia,
   minutosDesdeHHMM,
 } from "@/lib/utils/fecha";
+import { formatearCLP } from "@/lib/utils/moneda";
 import type {
   Cotizacion,
   DuracionPaseo,
@@ -34,55 +34,91 @@ export function tamanoSpa(pesoKg: number): TamanoSpa {
 
 export interface EntradaSpa {
   pesoKg: number;
+  /** Pelo corto o largo: es lo que decide el precio, con el tamaño. */
   nivel: NivelSpa;
-  esClienteActivo?: boolean;
   indicePerro?: number;
 }
 
+/**
+ * El baño, con los precios del afiche.
+ *
+ * **No lleva descuento de cliente.** Los cuatro valores del afiche son los
+ * finales: antes el 20% existía solo en el premium porque el express era un
+ * precio de entrada, y ese par dejó de existir. Sigue el descuento por
+ * segundo perro, que es de la casa y no del afiche.
+ */
 export function cotizarSpa(entrada: EntradaSpa): Cotizacion {
   const tamano = tamanoSpa(entrada.pesoKg);
-  const monto = PRECIOS.spa[entrada.nivel][tamano];
-
-  // El 20% a clientes aplica SOLO al baño premium: el express ya está al
-  // precio de entrada y no lleva descuento.
-  const aplicaDescuento =
-    (entrada.esClienteActivo ?? false) &&
-    (!NEGOCIO.spa.descuentoSoloEnPremium || entrada.nivel === "premium");
 
   return construirCotizacion(
     [
       {
-        concepto: entrada.nivel === "express" ? "Baño express" : "Baño premium",
+        concepto: `Baño ${NOMBRE_PELO[entrada.nivel]}`,
         detalle: `Perro ${tamano === "chico" ? "pequeño" : "mediano"} (${entrada.pesoKg} kg)`,
-        monto,
+        monto: PRECIOS.spa[entrada.nivel][tamano],
       },
     ],
-    soloAplicables([
-      descuentoSegundoPerro(entrada.indicePerro),
-      descuentoClienteActivo(aplicaDescuento),
-    ]),
+    soloAplicables([descuentoSegundoPerro(entrada.indicePerro)]),
   );
 }
 
+export const NOMBRE_PELO: Record<NivelSpa, string> = {
+  peloCorto: "pelo corto",
+  peloLargo: "pelo largo",
+};
+
 export interface EntradaPaseo {
   duracionMin: DuracionPaseo;
-  esClienteActivo?: boolean;
+  /** Cuántos se compran de una vez. Por omisión, uno. */
+  cantidad?: number;
   indicePerro?: number;
 }
 
+/**
+ * Los paseos se compran por cantidad y el equipo los reparte durante la
+ * estadía: el dueño no elige el día y la hora de cada uno, porque el paseo
+ * se hace cuando el perro está acá y cuando el día lo permite.
+ *
+ * **Cada tres sale la promo del flyer**, y por eso el cálculo no es una
+ * multiplicación: cinco paseos son un pack de tres más dos sueltos. El
+ * ahorro va en su propia línea porque es lo que hace comprar tres en vez
+ * de uno, y en un total no se ve.
+ *
+ * Los precios del flyer son los finales, así que no llevan descuento de
+ * cliente. Sigue el de segundo perro, que es de la casa.
+ */
 export function cotizarPaseo(entrada: EntradaPaseo): Cotizacion {
+  const cantidad = Math.max(1, Math.round(entrada.cantidad ?? 1));
+  const packs = Math.floor(cantidad / PASEOS_POR_PACK);
+  const sueltos = cantidad % PASEOS_POR_PACK;
+
+  const suelto = PRECIOS.paseo[entrada.duracionMin];
+  const lineas = [];
+
+  if (sueltos > 0) {
+    lineas.push({
+      concepto: sueltos === 1 ? "Paseo" : `${sueltos} paseos`,
+      detalle: formatearDuracion(entrada.duracionMin),
+      monto: sueltos * suelto,
+    });
+  }
+  if (packs > 0) {
+    const porPack = PRECIOS.paseoPack3[entrada.duracionMin];
+    lineas.push({
+      concepto:
+        packs === 1
+          ? `Promo ${PASEOS_POR_PACK} paseos`
+          : `${packs} packs de ${PASEOS_POR_PACK} paseos`,
+      detalle: `${formatearDuracion(entrada.duracionMin)} · ahorras ${formatearCLP(
+        packs * (PASEOS_POR_PACK * suelto - porPack),
+      )}`,
+      monto: packs * porPack,
+    });
+  }
+
   return construirCotizacion(
-    [
-      {
-        concepto: "Paseo",
-        detalle: formatearDuracion(entrada.duracionMin),
-        monto: PRECIOS.paseo[entrada.duracionMin],
-      },
-    ],
-    soloAplicables([
-      descuentoSegundoPerro(entrada.indicePerro),
-      descuentoClienteActivo(entrada.esClienteActivo ?? false),
-    ]),
+    lineas,
+    soloAplicables([descuentoSegundoPerro(entrada.indicePerro)]),
   );
 }
 
@@ -98,26 +134,37 @@ export function esHorarioPunta(instante: InstanteISO): boolean {
 export interface EntradaTraslado {
   km: number;
   fechaHora: InstanteISO;
+  /** Ida y vuelta: el mismo tramo dos veces. */
+  conRegreso?: boolean;
 }
 
 /**
  * Traslado: matriz de tramo de distancia por horario, tal como el folleto.
  * No hay precio por kilómetro; hay tramos con precio fijo.
+ *
+ * Ida y vuelta son DOS viajes del mismo tramo, así que son dos veces el
+ * precio. El horario se mira una sola vez, el de la hora agendada: la vuelta
+ * podría caer en otra banda, pero de esa hora no sabemos nada todavía y
+ * adivinarla sería cobrar por un supuesto.
  */
 export function cotizarTraslado(entrada: EntradaTraslado): Cotizacion {
   const enPunta = esHorarioPunta(entrada.fechaHora);
   const tramos = PRECIOS.traslado.tramos;
   const tramo = tramos.find((t) => entrada.km <= t.hastaKm) ?? tramos.at(-1)!;
-  const monto = enPunta ? tramo.punta : tramo.normal;
+  const porViaje = enPunta ? tramo.punta : tramo.normal;
+  const viajes = entrada.conRegreso ? 2 : 1;
 
   const indice = tramos.indexOf(tramo);
   const desdeKm = indice === 0 ? 0 : tramos[indice - 1].hastaKm;
+  const horario = enPunta ? "horario punta" : "horario normal";
 
   return construirCotizacion([
     {
-      concepto: "Traslado",
-      detalle: `${desdeKm} a ${tramo.hastaKm} km · ${enPunta ? "horario punta" : "horario normal"}`,
-      monto,
+      concepto: entrada.conRegreso ? "Traslado ida y vuelta" : "Traslado",
+      detalle: entrada.conRegreso
+        ? `${desdeKm} a ${tramo.hastaKm} km · ${horario} · 2 viajes`
+        : `${desdeKm} a ${tramo.hastaKm} km · ${horario}`,
+      monto: porViaje * viajes,
     },
   ]);
 }

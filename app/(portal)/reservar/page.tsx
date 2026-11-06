@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -28,7 +28,9 @@ import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import { PrecioCLP } from "@/components/shared/precio";
 import { NEGOCIO } from "@/lib/config/negocio";
-import { PRECIOS } from "@/lib/config/precios";
+import { NOMBRE_PELO } from "@/lib/rules/servicios";
+import type { DuracionPaseo, NivelSpa } from "@/lib/types";
+import { PASEOS_POR_PACK, PRECIOS } from "@/lib/config/precios";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { useCliente } from "@/lib/hooks/use-cliente";
 import { hoyDelStaff } from "@/lib/servicios/asistencia";
@@ -171,13 +173,19 @@ export default function Reservar() {
             </TabsTrigger>
           </TabsList>
 
+          {/* Los servicios van también al final de las otras dos pestañas:
+              el baño y el traslado se piensan junto con la estadía, no en
+              una visita aparte a otra pestaña. Es el mismo componente y no
+              una copia, así que no se pueden ir separando. */}
           <TabsContent value="jardin" className="mt-4 space-y-4">
             <DiaDeJardin perro={perro} />
             <ComprarPlan perro={perro} />
+            <ServicioSpot perro={perro} />
           </TabsContent>
 
-          <TabsContent value="hotel" className="mt-4">
+          <TabsContent value="hotel" className="mt-4 space-y-4">
             <ReservaDeHotel perro={perro} />
+            <ServicioSpot perro={perro} />
           </TabsContent>
 
           <TabsContent value="servicios" className="mt-4">
@@ -379,7 +387,7 @@ function ComprarPlan({ perro }: { perro: Perro }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle>O compra un plan del mes</CardTitle>
+        <CardTitle className="font-display text-2xl">PLANES</CardTitle>
         <p className="text-muted-foreground text-sm text-pretty">
           Se paga por adelantado y vale hasta fin de mes. Los días no usados no
           pasan al mes siguiente.
@@ -415,31 +423,41 @@ function ComprarPlan({ perro }: { perro: Perro }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <Button
-            size="xl"
-            disabled={ocupado}
-            onClick={() => comprar("dias")}
-            className="flex-col gap-0 py-3"
-          >
-            <span>Plan de {dias} días</span>
-            <span className="text-sm font-normal opacity-90">
-              {formatearCLP(precio)}
-            </span>
-          </Button>
-          <Button
-            size="xl"
-            variant="outline"
-            disabled={ocupado}
-            onClick={() => comprar("pase_libre")}
-            className="flex-col gap-0 py-3"
-          >
-            <span>Pase libre</span>
-            <span className="text-sm font-normal opacity-80">
+        <Button
+          size="xl"
+          disabled={ocupado}
+          onClick={() => comprar("dias")}
+          className="w-full flex-col gap-0 py-3"
+        >
+          <span>Plan de {dias} días</span>
+          <span className="text-sm font-normal opacity-90">
+            {formatearCLP(precio)}
+          </span>
+        </Button>
+
+        {/* El pase libre va abajo y aparte: no es un plan más de la lista,
+            es el que los reemplaza a todos. Al lado del otro, en el mismo
+            tamaño, se leía como la segunda de dos opciones iguales.
+
+            El ámbar es el color de dato de la marca y acá hace de destaque
+            sin competir con el fucsia, que es el color de acción. */}
+        <button
+          type="button"
+          disabled={ocupado}
+          onClick={() => comprar("pase_libre")}
+          className="bg-accent text-foreground w-full rounded-2xl px-4 py-4 text-left transition-opacity disabled:opacity-60"
+        >
+          <span className="font-display flex items-baseline justify-between gap-3 text-lg font-bold">
+            Pase libre
+            <span className="text-base tabular-nums">
               {formatearCLP(PRECIOS.planes.paseLibre)} al mes
             </span>
-          </Button>
-        </div>
+          </span>
+          <span className="mt-0.5 block text-sm text-pretty opacity-80">
+            Asistencia libre todos los días hábiles, con tope a las{" "}
+            {NEGOCIO.jardin.horaCierre}:00.
+          </span>
+        </button>
       </CardContent>
     </Card>
   );
@@ -459,6 +477,7 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
   const [entrada, setEntrada] = useState(sumarDias(hoy, 3));
   const [salida, setSalida] = useState(sumarDias(hoy, 6));
   const [paseos, setPaseos] = useState(0);
+  const [paseosCortos, setPaseosCortos] = useState(0);
   const { ocupado, ejecutar } = useAccion();
 
   const inicio = instanteEnHora(entrada, "10:00");
@@ -473,9 +492,10 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
             inicio,
             fin,
             paseosContratados: paseos,
+            paseosCortosContratados: paseosCortos,
           })
         : Promise.resolve(null),
-    [perro.id, inicio, fin, paseos, rangoValido],
+    [perro.id, inicio, fin, paseos, paseosCortos, rangoValido],
   );
 
   async function reservar() {
@@ -486,6 +506,7 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
           inicio,
           fin,
           paseosContratados: paseos,
+          paseosCortosContratados: paseosCortos,
         }),
       );
       toast.success("Reserva tomada", {
@@ -542,37 +563,6 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
           </div>
         </div>
 
-        <div className="bg-secondary/50 flex items-center justify-between gap-3 rounded-xl p-3">
-          <span className="text-sm font-semibold">
-            Paseos
-            <span className="text-muted-foreground block text-xs font-normal">
-              {formatearCLP(PRECIOS.hotel.paseo)} cada uno, de 30 min
-            </span>
-          </span>
-          <span className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Un paseo menos"
-              disabled={paseos === 0}
-              onClick={() => setPaseos((p) => Math.max(0, p - 1))}
-            >
-              <Minus />
-            </Button>
-            <span className="min-w-6 text-center font-bold tabular-nums">
-              {paseos}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Un paseo más"
-              onClick={() => setPaseos((p) => p + 1)}
-            >
-              <Plus />
-            </Button>
-          </span>
-        </div>
-
         {!rangoValido ? (
           <p className="text-warning text-sm">
             La salida tiene que ser después de la entrada.
@@ -588,6 +578,64 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
               </Badge>
             )}
             <Desglose cotizacion={datos.cotizacion} />
+
+            {/* Los paseos van DEBAJO de la cotización porque se deciden
+                mirándola: "ya que son $96.000, agrégale un paseo". Arriba,
+                antes de saber cuánto sale la estadía, la pregunta no tiene
+                contra qué compararse.
+
+                Cada botón suma uno, y el que ya tiene algo ofrece sacarlo:
+                si solo se pudiera sumar, un toque de más no se arregla. */}
+            <div className="space-y-2">
+              {(
+                [
+                  {
+                    minutos: 15,
+                    cuantos: paseosCortos,
+                    poner: setPaseosCortos,
+                    precio: PRECIOS.hotel.paseoCorto,
+                  },
+                  {
+                    minutos: 30,
+                    cuantos: paseos,
+                    poner: setPaseos,
+                    precio: PRECIOS.hotel.paseo,
+                  },
+                ] as const
+              ).map(({ minutos, cuantos, poner, precio }) => (
+                <div key={minutos} className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className="h-auto flex-1 flex-col gap-0 py-2.5"
+                    onClick={() => poner((n) => n + 1)}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Plus className="size-4" />
+                      Agregar paseo {minutos} min
+                    </span>
+                    <span className="text-muted-foreground text-xs font-normal">
+                      {formatearCLP(precio)}
+                    </span>
+                  </Button>
+                  {cuantos > 0 && (
+                    <span className="flex items-center gap-2">
+                      <span className="min-w-6 text-center font-bold tabular-nums">
+                        {cuantos}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Quitar un paseo de ${minutos} min`}
+                        onClick={() => poner((n) => Math.max(0, n - 1))}
+                      >
+                        <Minus />
+                      </Button>
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+
             <p className="bg-secondary/60 flex items-baseline justify-between gap-3 rounded-xl p-3 text-sm">
               <span className="font-semibold">
                 Pagas ahora (abono {PORCENTAJE_ABONO}%)
@@ -622,7 +670,7 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
 }
 
 const TIPOS_SERVICIO = [
-  { valor: "spa", etiqueta: "Spa", icono: Bath },
+  { valor: "spa", etiqueta: "Baño", icono: Bath },
   { valor: "paseo", etiqueta: "Paseo", icono: Footprints },
   { valor: "traslado", etiqueta: "Traslado", icono: Car },
 ] as const;
@@ -632,12 +680,56 @@ function ServicioSpot({ perro }: { perro: Perro }) {
   const [tipo, setTipo] = useState<"spa" | "paseo" | "traslado">("spa");
   const [fecha, setFecha] = useState(sumarDias(hoy, 2));
   const [hora, setHora] = useState("11:00");
-  const [nivelSpa, setNivelSpa] = useState<"express" | "premium">("express");
-  const [duracion, setDuracion] = useState<30 | 60>(30);
+  const [nivelSpa, setNivelSpa] = useState<NivelSpa>("peloCorto");
+  const [duracion, setDuracion] = useState<DuracionPaseo>(15);
+  const [cantidadPaseos, setCantidadPaseos] = useState(1);
   const [km, setKm] = useState(4);
+  const [conRegreso, setConRegreso] = useState(false);
+  const [otraDireccion, setOtraDireccion] = useState(false);
+  const [direccion, setDireccion] = useState("");
+  /** `null` mientras no se sabe; `false` cuando la distancia no llegó. */
+  const [midiendo, setMidiendo] = useState(false);
+  const [kmMedidos, setKmMedidos] = useState<number | null>(null);
   const { ocupado, ejecutar } = useAccion();
+  const { datos: datosCliente } = useCliente();
 
   const fechaHora = instanteEnHora(fecha, hora);
+
+  /** La que se usa: la registrada, o la que escribió si eligió otra. */
+  const direccionDelViaje = otraDireccion
+    ? direccion
+    : (datosCliente?.cliente?.direccion ?? "");
+
+  // Los kilómetros los mide el servidor contra Google. Si no hay llave, o la
+  // dirección no se pudo resolver, vuelve `null` y el campo de km queda a
+  // mano, que es como funcionaba antes: una distancia que no llega no puede
+  // dejar sin cotizar un traslado.
+  useEffect(() => {
+    let vigente = true;
+
+    async function medir() {
+      if (tipo !== "traslado" || !direccionDelViaje.trim()) {
+        setKmMedidos(null);
+        return;
+      }
+      setMidiendo(true);
+      const { kmHastaLaDireccion } = await import(
+        "@/lib/integraciones/distancias/cliente"
+      );
+      const medidos = await kmHastaLaDireccion(direccionDelViaje);
+      // Si la dirección cambió mientras se medía, lo que volvió es de la
+      // anterior: escribirlo pondría los km de un viaje que ya no se cotiza.
+      if (!vigente) return;
+      setKmMedidos(medidos);
+      if (medidos !== null) setKm(medidos);
+      setMidiendo(false);
+    }
+
+    void medir();
+    return () => {
+      vigente = false;
+    };
+  }, [tipo, direccionDelViaje]);
 
   const previa = useConsulta(
     (repo) =>
@@ -647,9 +739,20 @@ function ServicioSpot({ perro }: { perro: Perro }) {
         tipo,
         nivelSpa,
         duracionMin: duracion,
+        cantidad: cantidadPaseos,
         km,
+        conRegreso,
       }),
-    [perro.id, fechaHora, tipo, nivelSpa, duracion, km],
+    [
+      perro.id,
+      fechaHora,
+      tipo,
+      nivelSpa,
+      duracion,
+      cantidadPaseos,
+      km,
+      conRegreso,
+    ],
   );
 
   async function agendar() {
@@ -662,7 +765,9 @@ function ServicioSpot({ perro }: { perro: Perro }) {
           tipo,
           nivelSpa,
           duracionMin: duracion,
+          cantidad: cantidadPaseos,
           km,
+          conRegreso,
         }),
       );
       toast.success("Servicio agendado", {
@@ -698,6 +803,10 @@ function ServicioSpot({ perro }: { perro: Perro }) {
           ))}
         </div>
 
+        {/* El paseo no pide día ni hora: se compra por cantidad y el equipo
+            lo reparte durante la estadía, porque el paseo se hace cuando el
+            perro está acá y cuando el día lo permite. */}
+        {tipo !== "paseo" && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="fecha-servicio">Día</Label>
@@ -713,19 +822,33 @@ function ServicioSpot({ perro }: { perro: Perro }) {
             </p>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="hora-servicio">Hora</Label>
+            {/* En el baño la hora no es cuándo se hace sino cuándo lo pasan a
+                buscar: el equipo lo organiza para tenerlo listo antes. En los
+                otros dos la hora es la hora, así que la etiqueta cambia. */}
+            <Label htmlFor="hora-servicio">
+              {tipo === "spa" ? "Hora en que retirarás a tu perro" : "Hora"}
+            </Label>
             <Input
               id="hora-servicio"
               type="time"
               value={hora}
               onChange={(e) => setHora(e.target.value)}
             />
+            {tipo === "spa" && (
+              <p className="text-muted-foreground text-xs">
+                Así lo tenemos listo antes de esa hora.
+              </p>
+            )}
           </div>
         </div>
+        )}
 
         {tipo === "spa" && (
           <div className="grid grid-cols-2 gap-2">
-            {(["express", "premium"] as const).map((nivel) => (
+            {/* El precio del baño lo deciden el pelo y el peso. El peso ya
+                está en la ficha, así que lo único que hay que preguntar es
+                el pelo. */}
+            {(["peloCorto", "peloLargo"] as const).map((nivel) => (
               <button
                 key={nivel}
                 type="button"
@@ -737,15 +860,50 @@ function ServicioSpot({ perro }: { perro: Perro }) {
                     : "border-border text-muted-foreground",
                 )}
               >
-                Baño {nivel}
+                {NOMBRE_PELO[nivel]}
               </button>
             ))}
           </div>
         )}
 
         {tipo === "paseo" && (
+          <div className="space-y-1.5">
+            <Label>¿Cuántos paseos?</Label>
+            <div className="flex items-center gap-3">
+              <Button
+                size="icon"
+                variant="outline"
+                aria-label="Un paseo menos"
+                disabled={cantidadPaseos <= 1}
+                onClick={() => setCantidadPaseos((n) => Math.max(1, n - 1))}
+              >
+                <Minus />
+              </Button>
+              <span className="font-display min-w-24 text-center text-2xl font-bold">
+                {cantidadPaseos}
+                <span className="text-muted-foreground ml-1.5 text-sm font-semibold">
+                  {cantidadPaseos === 1 ? "paseo" : "paseos"}
+                </span>
+              </span>
+              <Button
+                size="icon"
+                variant="outline"
+                aria-label="Un paseo más"
+                onClick={() => setCantidadPaseos((n) => n + 1)}
+              >
+                <Plus />
+              </Button>
+            </div>
+            <p className="text-muted-foreground text-xs text-pretty">
+              Los repartimos durante la estadía de tu perrito. Cada{" "}
+              {PASEOS_POR_PACK} entra la promo.
+            </p>
+          </div>
+        )}
+
+        {tipo === "paseo" && (
           <div className="grid grid-cols-2 gap-2">
-            {([30, 60] as const).map((minutos) => (
+            {([15, 30] as const).map((minutos) => (
               <button
                 key={minutos}
                 type="button"
@@ -757,23 +915,97 @@ function ServicioSpot({ perro }: { perro: Perro }) {
                     : "border-border text-muted-foreground",
                 )}
               >
-                {minutos === 30 ? "Media hora" : "Una hora"}
+                {minutos === 15 ? "15 minutos" : "Media hora"}
               </button>
             ))}
           </div>
         )}
 
         {tipo === "traslado" && (
-          <div className="space-y-1.5">
-            <Label htmlFor="km">Distancia (km)</Label>
-            <Input
-              id="km"
-              type="number"
-              inputMode="decimal"
-              min={1}
-              value={km}
-              onChange={(e) => setKm(Number(e.target.value) || 0)}
-            />
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { valor: false, texto: "Solo ida" },
+                { valor: true, texto: "Ida y vuelta" },
+              ].map(({ valor, texto }) => (
+                <button
+                  key={texto}
+                  type="button"
+                  onClick={() => setConRegreso(valor)}
+                  className={cn(
+                    "rounded-xl border-2 py-3 text-sm font-semibold transition-all",
+                    conRegreso === valor
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground",
+                  )}
+                >
+                  {texto}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>¿Dónde lo pasamos a buscar?</Label>
+              {/* La dirección registrada viene cargada: el dueño ya la
+                  eligió de la lista de Google al crear su cuenta, así que
+                  volver a pedírsela es hacerle escribir lo que ya dijo. */}
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { valor: false, texto: "Mi dirección" },
+                  { valor: true, texto: "Otra dirección" },
+                ].map(({ valor, texto }) => (
+                  <button
+                    key={texto}
+                    type="button"
+                    onClick={() => setOtraDireccion(valor)}
+                    className={cn(
+                      "rounded-xl border-2 py-2.5 text-sm font-semibold transition-all",
+                      otraDireccion === valor
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground",
+                    )}
+                  >
+                    {texto}
+                  </button>
+                ))}
+              </div>
+
+              {otraDireccion ? (
+                <Input
+                  id="direccion-traslado"
+                  value={direccion}
+                  placeholder="Calle, número y comuna"
+                  onChange={(e) => setDireccion(e.target.value)}
+                />
+              ) : (
+                <p className="text-muted-foreground text-sm text-pretty">
+                  {direccionDelViaje ||
+                    "No tenemos tu dirección registrada. Elige \"Otra dirección\"."}
+                </p>
+              )}
+            </div>
+
+            {/* Los km son el dato que decide el tramo, así que se muestran
+                siempre: medidos quedan de solo lectura con su explicación, y
+                sin medir se escriben, que es como funcionaba antes. */}
+            <div className="space-y-1.5">
+              <Label htmlFor="km">Distancia (km)</Label>
+              <Input
+                id="km"
+                type="number"
+                inputMode="decimal"
+                min={1}
+                value={km}
+                onChange={(e) => setKm(Number(e.target.value) || 0)}
+              />
+              <p className="text-muted-foreground text-xs text-pretty">
+                {midiendo
+                  ? "Calculando la distancia…"
+                  : kmMedidos !== null
+                    ? "Calculada desde la casa. Puedes corregirla."
+                    : "Escríbela tú: no pudimos calcularla."}
+              </p>
+            </div>
           </div>
         )}
 

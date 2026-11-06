@@ -281,6 +281,8 @@ export const ETIQUETA_UNIDAD: Record<UnidadRacion, { una: string; varias: string
     medida: { una: "medida", varias: "medidas" },
     g: { una: "g", varias: "g" },
     taza: { una: "taza", varias: "tazas" },
+    // Con "otra" no se mide, así que nunca se pluraliza nada.
+    otra: { una: "", varias: "" },
   };
 
 /**
@@ -296,14 +298,33 @@ export function describirAlimentacion(
 ): string | null {
   if (!alimentacion) return null;
 
+  // Lo primero que tiene que saber quien sirve la comida es si hay que
+  // servirla. Dejarlo al final de la línea haría que se leyera después de
+  // haber ido a buscar el pellet.
+  if (alimentacion.noComeAca) return "No come en La Patoteca.";
+
   const partesTexto: string[] = [];
-  if (alimentacion.marca) partesTexto.push(alimentacion.marca);
+  if (!alimentacion.noComePellet && alimentacion.marca) {
+    partesTexto.push(alimentacion.marca);
+  }
 
   const raciones = (alimentacion.raciones ?? [])
     .map((racion) => describirRacion(racion, alimentacion.unidad))
     .filter((texto): texto is string => texto !== null);
 
+  // Lo que escribió el dueño va antes del cuándo: "dos sobres grandes · en
+  // desayuno y cena" se lee como una frase.
+  if (alimentacion.queCome?.trim()) partesTexto.push(alimentacion.queCome.trim());
+
   if (raciones.length > 0) partesTexto.push(raciones.join(", "));
+
+  if (alimentacion.mezclarCon?.trim()) {
+    partesTexto.push(
+      alimentacion.noComePellet
+        ? alimentacion.mezclarCon.trim()
+        : `con ${alimentacion.mezclarCon.trim()}`,
+    );
+  }
 
   const linea = partesTexto.join(" · ");
   if (!linea) return alimentacion.notas ?? null;
@@ -316,8 +337,10 @@ function describirRacion(
   racion: Racion,
   unidad: UnidadRacion | undefined,
 ): string | null {
+  // Con "otra" no hay medida: lo que come lo cuenta `queCome`, y la ración
+  // solo aporta cuándo.
   const medida =
-    racion.cantidad && unidad
+    racion.cantidad && unidad && unidad !== "otra"
       ? `${formatearCantidad(racion.cantidad)} ${pluralizarUnidad(racion.cantidad, unidad)}`
       : null;
 

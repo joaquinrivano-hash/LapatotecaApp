@@ -21,7 +21,6 @@ import {
   type OcupanteRango,
   type ResultadoCapacidad,
 } from "@/lib/rules/capacidad";
-import { esClienteActivo } from "@/lib/rules/cliente";
 import { calcularAbono, calcularPrecioHotel } from "@/lib/rules/precio-hotel";
 import {
   calcularDevolucionJardin,
@@ -104,6 +103,7 @@ export interface EntradaReservaHotel {
   inicio: InstanteISO;
   fin: InstanteISO;
   paseosContratados?: number;
+  paseosCortosContratados?: number;
 }
 
 export interface CotizacionHotel extends Disponibilidad {
@@ -141,6 +141,7 @@ export async function cotizarReservaHotel(
     inicio: entrada.inicio,
     fin: entrada.fin,
     paseosContratados: entrada.paseosContratados,
+    paseosCortosContratados: entrada.paseosCortosContratados,
     conPlanDeJardin,
     indicePerro,
   });
@@ -204,6 +205,7 @@ export async function crearReservaHotel(
     inicioProgramado: entrada.inicio,
     finProgramado: entrada.fin,
     paseosContratados: entrada.paseosContratados ?? 0,
+    paseosCortosContratados: entrada.paseosCortosContratados ?? 0,
     estado: "pendiente",
     cotizacion: previa.cotizacion,
     abonoPagado: false,
@@ -586,7 +588,10 @@ export interface EntradaServicio {
   tipo: "spa" | "paseo" | "traslado";
   nivelSpa?: NivelSpa;
   duracionMin?: DuracionPaseo;
+  /** Solo paseo: cuántos se compran de una vez. */
+  cantidad?: number;
   km?: number;
+  conRegreso?: boolean;
 }
 
 export async function cotizarServicio(
@@ -596,34 +601,26 @@ export async function cotizarServicio(
   const perro = await repo.perros.obtener(entrada.perroId);
   if (!perro) throw new Error(`No existe el perro ${entrada.perroId}`);
 
-  const [planes, estadias] = await Promise.all([
-    repo.planes.porPerro(entrada.perroId),
-    repo.estadiasJardin.porCliente(perro.clienteId),
-  ]);
-
-  const hoy = fechaISO(entrada.fechaHora);
-  const ultimaEstadia = estadias
-    .map((e) => e.fecha)
-    .filter((f) => f <= hoy)
-    .sort()
-    .at(-1);
-
-  const activo = esClienteActivo({ planes, ultimaEstadia, fecha: hoy });
-
+  // Ya no se mira si el cliente está activo: los precios del afiche y del
+  // flyer son los finales para todos, y el traslado nunca tuvo descuento.
+  // Eso ahorra dos consultas por cada precio que se muestra en vivo.
   if (entrada.tipo === "spa") {
     return cotizarSpa({
       pesoKg: perro.pesoKg,
-      nivel: entrada.nivelSpa ?? "express",
-      esClienteActivo: activo,
+      nivel: entrada.nivelSpa ?? "peloCorto",
     });
   }
   if (entrada.tipo === "paseo") {
     return cotizarPaseo({
       duracionMin: entrada.duracionMin ?? 30,
-      esClienteActivo: activo,
+      cantidad: entrada.cantidad,
     });
   }
-  return cotizarTraslado({ km: entrada.km ?? 0, fechaHora: entrada.fechaHora });
+  return cotizarTraslado({
+    km: entrada.km ?? 0,
+    fechaHora: entrada.fechaHora,
+    conRegreso: entrada.conRegreso,
+  });
 }
 
 export async function agendarServicio(
@@ -641,7 +638,9 @@ export async function agendarServicio(
     fechaHora: entrada.fechaHora,
     nivelSpa: entrada.nivelSpa,
     duracionMin: entrada.duracionMin,
+    cantidad: entrada.cantidad,
     km: entrada.km,
+    conRegreso: entrada.conRegreso,
     estado: "agendado",
     cotizacion,
     creadoEn: ahora,
