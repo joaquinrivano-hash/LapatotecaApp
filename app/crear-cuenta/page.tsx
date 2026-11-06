@@ -324,13 +324,11 @@ export default function CrearCuenta() {
               <TriangleAlert className="mt-0.5 size-4 shrink-0" />
               {reparo.mensaje}
             </p>
-            {reparo.bloquea && (
-              <p className="text-muted-foreground text-xs text-pretty">
-                Escríbenos igual: a veces hay vuelta, pero no queremos
-                prometerte un cupo que no podemos cumplir.
-              </p>
-            )}
-            {(reparo.bloquea || reparo.conversar) && (
+            {/* El WhatsApp va SOLO en lo que se conversa, que hoy es el
+                peso. Lo que bloquea es la castración, y ahí no hay vuelta:
+                ofrecer escribirnos promete una excepción que no existe y
+                deja al dueño esperando una respuesta que va a ser que no. */}
+            {reparo.conversar && (
               <ContactoCasa
                 mensaje={`Hola, quiero inscribir a mi perro${perro.nombre ? ` ${perro.nombre}` : ""}${borrador.pesoKg ? ` (${borrador.pesoKg} kg)` : ""} en La Patoteca.`}
               />

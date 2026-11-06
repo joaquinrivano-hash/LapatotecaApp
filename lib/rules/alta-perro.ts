@@ -266,7 +266,7 @@ export function reparosDeAlta(
     )
   ) {
     reparos.push({
-      mensaje: `Desde los ${NEGOCIO.admision.mesesParaExigirCastracion} meses los machos tienen que estar castrados para quedarse con nosotros.`,
+      mensaje: "Los machos deben estar castrados.",
       bloquea: true,
     });
   }
