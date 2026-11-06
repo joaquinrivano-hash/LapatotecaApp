@@ -165,6 +165,36 @@ describe("revisarAltaDePerro", () => {
     ).toContain("alimentacion");
   });
 
+  it("con \"otra\" basta con que cuente qué come", () => {
+    // La pantalla no le muestra el catálogo de marcas en ese camino, así
+    // que exigírselo dejaría el alta trancada pidiendo algo invisible.
+    expect(
+      campos(
+        completo({
+          alimentacion: {
+            unidad: "otra",
+            marca: "",
+            queCome: "un sobre en la mañana",
+            raciones: [{ comidas: ["desayuno"] }],
+          },
+        }),
+      ),
+    ).not.toContain("alimentacion");
+
+    // Pero sin contar qué come, no se sabe qué servirle.
+    expect(
+      campos(
+        completo({
+          alimentacion: {
+            unidad: "otra",
+            queCome: "",
+            raciones: [{ comidas: ["desayuno"] }],
+          },
+        }),
+      ),
+    ).toContain("alimentacion");
+  });
+
   it("no comer acá es una respuesta, no una ficha a medias", () => {
     // Exigirle además la marca y las tazas sería pedirle los datos de una
     // comida que nadie va a servir, y dejaría el alta trancada.

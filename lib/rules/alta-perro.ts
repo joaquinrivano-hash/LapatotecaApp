@@ -101,7 +101,21 @@ function alimentacionCompleta(alimentacion: Alimentacion | undefined): boolean {
     return Boolean(alimentacion.mezclarCon?.trim());
   }
 
-  if (!alimentacion.marca?.trim() || !alimentacion.unidad) return false;
+  if (!alimentacion.unidad) return false;
+
+  // Con "otra" lo cuenta todo con sus palabras, y la marca va ahí dentro si
+  // importa ("un sobre de Pedigree…"). Exigirle además elegir una del
+  // catálogo —que la pantalla ni siquiera le muestra, porque no hay
+  // cantidades que mostrar— dejaría el alta trancada pidiendo algo que no
+  // se puede llenar.
+  if (alimentacion.unidad === "otra") {
+    return (
+      Boolean(alimentacion.queCome?.trim()) &&
+      (alimentacion.raciones ?? []).some((r) => r.comidas.length > 0)
+    );
+  }
+
+  if (!alimentacion.marca?.trim()) return false;
 
   const raciones = alimentacion.raciones ?? [];
   // Todas las raciones tienen que estar completas, no solo la primera: media

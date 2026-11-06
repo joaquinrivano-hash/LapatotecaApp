@@ -140,27 +140,17 @@ describe("describirAlimentacion", () => {
     ).toBe("Proplan · 1 taza en almuerzo y cena");
   });
 
-  it("la unidad que escribe el dueño va tal cual", () => {
-    // No sabemos su género ni su plural: "2 sobrees" es peor que repetir
-    // su palabra.
+  it("con \"otra\" manda lo que escribió el dueño, sin medidas", () => {
     expect(
       describirAlimentacion({
-        marca: "Proplan",
+        marca: "Pedigree",
         unidad: "otra",
-        unidadOtra: "sobres",
-        raciones: [{ cantidad: 2, comidas: ["cena"] }],
+        queCome: "un sobre en la mañana y medio en la noche",
+        raciones: [{ comidas: ["desayuno"] }, { comidas: ["cena"] }],
       }),
-    ).toBe("Proplan · 2 sobres en cena");
-  });
-
-  it("media unidad escrita tampoco se pluraliza", () => {
-    expect(
-      describirAlimentacion({
-        unidad: "otra",
-        unidadOtra: "lata",
-        raciones: [{ cantidad: 0.5, comidas: ["almuerzo"] }],
-      }),
-    ).toBe("½ lata en almuerzo");
+    ).toBe(
+      "Pedigree · un sobre en la mañana y medio en la noche · en desayuno, en cena",
+    );
   });
 
   it("dice primero que no come acá, y no dice nada más", () => {

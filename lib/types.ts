@@ -102,9 +102,10 @@ export type Comida = "desayuno" | "almuerzo" | "cena";
  * antes se llamaba "scoop" y nadie en Chile pide un scoop de comida.
  */
 /**
- * Con qué se mide la porción. "otra" la escribe el dueño: ninguna lista
- * cubre todo —hay quien mide en sobres, en latas o en puñados— y quedarse
- * fuera de la lista no puede dejar la ficha a medias.
+ * Con qué se mide la porción. Con "otra" no se mide: el dueño lo cuenta
+ * con sus palabras en `queCome`. Ninguna lista cubre todo —hay quien da
+ * sobres, latas o comida casera pesada a ojo— y quedarse fuera de la lista
+ * no puede dejar la ficha a medias.
  */
 export type UnidadRacion = "medida" | "g" | "taza" | "otra";
 
@@ -136,8 +137,8 @@ export interface Racion {
 export interface Alimentacion {
   marca?: string;
   unidad?: UnidadRacion;
-  /** Solo con `unidad: "otra"`: cómo la llama el dueño. */
-  unidadOtra?: string;
+  /** Solo con `unidad: "otra"`: qué come, en palabras del dueño. */
+  queCome?: string;
   raciones: Racion[];
   notas?: string;
   /**
