@@ -764,12 +764,29 @@ export function FormularioPerro({
 function Marca({
   activa,
   onCambio,
+  destacada = false,
   children,
 }: {
   activa: boolean;
   onCambio: (activa: boolean) => void;
+  /**
+   * Para el atajo que casi todos van a querer. Usa el ámbar de la marca y
+   * no el fucsia: el fucsia es el color de acción, y pintando con él una
+   * casilla entre otras casillas, todas piden lo mismo a gritos.
+   */
+  destacada?: boolean;
   children: React.ReactNode;
 }) {
+  const color = destacada
+    ? {
+        caja: "border-accent bg-accent/20 text-foreground",
+        visto: "border-accent bg-accent text-foreground",
+      }
+    : {
+        caja: "border-primary bg-primary/5 text-foreground",
+        visto: "border-primary bg-primary text-primary-foreground",
+      };
+
   return (
     <button
       type="button"
@@ -777,13 +794,15 @@ function Marca({
       onClick={() => onCambio(!activa)}
       className={`flex w-full items-center gap-2 rounded-xl border-2 px-3 py-2 text-left text-sm font-semibold transition-all ${
         activa
-          ? "border-primary bg-primary/5 text-foreground"
-          : "border-border text-muted-foreground"
+          ? color.caja
+          : destacada
+            ? "border-accent/50 text-foreground"
+            : "border-border text-muted-foreground"
       }`}
     >
       <span
         className={`flex size-5 shrink-0 items-center justify-center rounded-[0.3rem] border-2 ${
-          activa ? "border-primary bg-primary text-primary-foreground" : "border-border"
+          activa ? color.visto : destacada ? "border-accent/60" : "border-border"
         }`}
       >
         {activa && <Check className="size-3.5" />}
@@ -904,6 +923,16 @@ function Comidas({
                   />
                 )}
 
+                {/* La medida es un objeto suyo, no uno nuestro: sin el
+                    aviso, el equipo se queda sin saber cuánto servir el
+                    primer día. */}
+                {comida === primeraElegida && unidad === "medida" && (
+                  <p className="border-accent bg-accent/15 rounded-xl border-l-4 px-3 py-2 text-xs text-pretty">
+                    Acuérdate de traernos la medida a La Patoteca: sin ella no
+                    sabemos cuánto servirle.
+                  </p>
+                )}
+
                 {unidad &&
                   (escribeAqui ? (
                     <Campo
@@ -926,7 +955,7 @@ function Comidas({
                   ))}
 
                 {comida === "desayuno" && unidad && (
-                  <Marca activa={mismo} onCambio={igualarTodas}>
+                  <Marca activa={mismo} onCambio={igualarTodas} destacada>
                     Come lo mismo el resto de las comidas
                   </Marca>
                 )}
