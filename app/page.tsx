@@ -8,7 +8,10 @@ import {
   MapPin,
   Moon,
   Sun,
+  Tag,
+  Ticket,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { InterruptorDelPrototipo } from "@/components/shared/interruptor-prototipo";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,7 +28,26 @@ import { formatearCLP } from "@/lib/utils/moneda";
  * Las fotos son del folleto de agosto 2026: perros reales de la casa, no banco
  * de imágenes. Viven en `public/fotos`.
  */
-const SERVICIOS = [
+interface Servicio {
+  icono: LucideIcon;
+  titulo: string;
+  foto: string;
+  alt: string;
+  bajada: string;
+  /**
+   * Etiqueta y monto, o etiqueta y DOS montos cuando el precio depende de
+   * algo más —el horario, en los traslados—. Con dos montos hay que dar
+   * `columnas`, que los encabeza.
+   */
+  filas: readonly (readonly [string, number] | readonly [string, number, number])[];
+  /** Encabezados de las dos columnas de precio. */
+  columnas?: readonly [string, string];
+  /** Beneficios que no son un precio, destacados bajo la lista. */
+  descuentos?: readonly string[];
+  nota?: string;
+}
+
+const SERVICIOS: Servicio[] = [
   {
     icono: Sun,
     titulo: "Jardín de día",
@@ -42,17 +64,46 @@ const SERVICIOS = [
     ] as const,
   },
   {
+    icono: Ticket,
+    titulo: "Planes de jardín",
+    foto: "/fotos/patio.jpg",
+    alt: "Varios perros sueltos en el patio de la casa",
+    bajada:
+      "Mensuales y por adelantado. Mientras más días contrates, menos cuesta cada uno.",
+    // Los tramos salen de la config: el día que cambie un precio, la tarjeta
+    // cambia sola. Un monto escrito acá sería un precio que se desactualiza
+    // sin que nadie se entere.
+    filas: [
+      ...PRECIOS.planes.tramosPorDia.map(
+        (t) =>
+          [
+            t.hastaDias === null
+              ? `Más de ${t.desdeDias - 1} días, por día`
+              : `De ${t.desdeDias} a ${t.hastaDias} días, por día`,
+            t.precioPorDia,
+          ] as const,
+      ),
+      ["Pase libre, al mes", PRECIOS.planes.paseLibre] as const,
+    ],
+    nota: `Mínimo ${NEGOCIO.planes.minimoDias} días. Se usan de lunes a viernes y valen hasta fin de mes: los días que no uses no pasan al siguiente.`,
+  },
+
+  {
     icono: Moon,
     titulo: "Hotel",
-    foto: "/fotos/hotel.jpg",
-    alt: "Perro acostado en una cama, tapado con una manta",
-    bajada: "Se quedan a dormir en la casa, en cama o sillón. Sin caniles.",
+    foto: "/fotos/grupo.webp",
+    alt: "Varios perros descansando juntos en el patio de césped, frente al muro de colores de la casa",
+    bajada: "¡Estadía por una o varias noches!",
     filas: [
       ["Por hora", PRECIOS.hotel.horaExtra],
       ["24 horas", PRECIOS.hotel.bloque24h],
       ["Paseo opcional", PRECIOS.hotel.paseo],
     ] as const,
-    nota: `Desde ${NEGOCIO.hotel.nochesParaDescuento10} noches, 10% de descuento. Reserva con ${Math.round(NEGOCIO.hotel.fraccionAbono * 100)}% de abono.`,
+    descuentos: [
+      `Desde ${NEGOCIO.hotel.nochesParaDescuento10} noches, 10% de descuento`,
+      `Desde ${NEGOCIO.hotel.nochesParaDescuento15} noches, 15%`,
+    ],
+    nota: `Reserva con ${Math.round(NEGOCIO.hotel.fraccionAbono * 100)}% de abono.`,
   },
   {
     icono: Bath,
@@ -86,14 +137,19 @@ const SERVICIOS = [
     alt: "Perro con arnés y cinturón de seguridad en el asiento del auto",
     bajada:
       "Cada perrito viaja solo, junto a su debido cinturón de seguridad.",
+    // La tarifa de punta no es letra chica: es el doble de información que
+    // el dueño necesita para saber cuánto le va a salir. Decir solo "en
+    // punta sube" lo obliga a preguntar.
+    columnas: ["Normal", "Punta"],
     filas: PRECIOS.traslado.tramos.map(
       (t, i) =>
         [
           `${i === 0 ? 0 : PRECIOS.traslado.tramos[i - 1].hastaKm} a ${t.hastaKm} km`,
           t.normal,
+          t.punta,
         ] as const,
     ),
-    nota: "En horario punta la tarifa sube. Cubrimos parte de Providencia, Ñuñoa, Las Condes, La Reina, Peñalolén, Vitacura y Macul.",
+    nota: `Punta: ${NEGOCIO.traslado.horariosPunta.map((h) => `${h.desde} a ${h.hasta}`).join(" y ")}. Cubrimos parte de Providencia, Ñuñoa, Las Condes, La Reina, Peñalolén, Vitacura y Macul.`,
   },
 ];
 
@@ -102,7 +158,7 @@ const REQUISITOS = [
   "Machos esterilizados",
   "Vacunas óctuple, antirrábica y KC al día",
   "Desparasitación interna y externa al día",
-  "100% sociable",
+  "Sociable",
   `Día de prueba aprobado (${formatearCLP(PRECIOS.diaDePrueba)})`,
 ];
 
@@ -219,7 +275,17 @@ export default function Landing() {
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {SERVICIOS.map(
-              ({ icono: Icono, titulo, foto, alt, bajada, filas, nota }) => (
+              ({
+                icono: Icono,
+                titulo,
+                foto,
+                alt,
+                bajada,
+                columnas,
+                filas,
+                descuentos,
+                nota,
+              }) => (
                 <Card key={titulo} className="overflow-hidden pt-0">
                   <div className="relative aspect-5/3">
                     <Image
@@ -241,18 +307,53 @@ export default function Landing() {
                       {bajada}
                     </p>
                     <dl className="divide-border/60 divide-y text-sm">
-                      {filas.map(([etiqueta, monto]) => (
-                        <div
-                          key={etiqueta}
-                          className="flex justify-between gap-3 py-1.5"
-                        >
-                          <dt>{etiqueta}</dt>
-                          <dd className="font-semibold tabular-nums">
-                            {formatearCLP(monto)}
-                          </dd>
+                      {columnas && (
+                        <div className="text-muted-foreground grid grid-cols-[1fr_auto_auto] gap-x-3 pb-1 text-[11px] font-semibold tracking-wide uppercase">
+                          <span />
+                          <span className="text-right">{columnas[0]}</span>
+                          <span className="text-right">{columnas[1]}</span>
                         </div>
-                      ))}
+                      )}
+                      {filas.map((fila) => {
+                        const [etiqueta, monto, punta] = fila;
+                        return (
+                          <div
+                            key={etiqueta}
+                            className={
+                              punta === undefined
+                                ? "flex justify-between gap-3 py-1.5"
+                                : "grid grid-cols-[1fr_auto_auto] gap-x-3 py-1.5"
+                            }
+                          >
+                            <dt>{etiqueta}</dt>
+                            <dd className="text-right font-semibold tabular-nums">
+                              {formatearCLP(monto)}
+                            </dd>
+                            {punta !== undefined && (
+                              <dd className="text-primary text-right font-semibold tabular-nums">
+                                {formatearCLP(punta)}
+                              </dd>
+                            )}
+                          </div>
+                        );
+                      })}
                     </dl>
+                    {/* Los descuentos no son un precio, así que no entran
+                        en la lista de arriba; y son lo que hace elegir, así
+                        que tampoco pueden quedar en la letra chica. */}
+                    {descuentos && (
+                      <ul className="space-y-1">
+                        {descuentos.map((d) => (
+                          <li
+                            key={d}
+                            className="flex items-center gap-1.5 text-sm font-semibold"
+                          >
+                            <Tag className="text-accent size-3.5 shrink-0" />
+                            {d}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     {nota && (
                       <p className="text-muted-foreground text-xs text-pretty">
                         {nota}
@@ -270,7 +371,7 @@ export default function Landing() {
           <Card>
             <CardContent className="space-y-3 p-5">
               <h2 className="font-display text-xl font-bold">
-                Qué necesita tu perro
+                Requisitos
               </h2>
               <ul className="space-y-2 text-sm">
                 {REQUISITOS.map((requisito) => (
