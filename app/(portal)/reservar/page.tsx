@@ -28,7 +28,9 @@ import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import { PrecioCLP } from "@/components/shared/precio";
 import { NEGOCIO } from "@/lib/config/negocio";
-import { PRECIOS } from "@/lib/config/precios";
+import { NOMBRE_PELO } from "@/lib/rules/servicios";
+import type { DuracionPaseo, NivelSpa } from "@/lib/types";
+import { PASEOS_POR_PACK, PRECIOS } from "@/lib/config/precios";
 import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import { useCliente } from "@/lib/hooks/use-cliente";
 import { hoyDelStaff } from "@/lib/servicios/asistencia";
@@ -678,8 +680,8 @@ function ServicioSpot({ perro }: { perro: Perro }) {
   const [tipo, setTipo] = useState<"spa" | "paseo" | "traslado">("spa");
   const [fecha, setFecha] = useState(sumarDias(hoy, 2));
   const [hora, setHora] = useState("11:00");
-  const [nivelSpa, setNivelSpa] = useState<"express" | "premium">("express");
-  const [duracion, setDuracion] = useState<30 | 60>(30);
+  const [nivelSpa, setNivelSpa] = useState<NivelSpa>("peloCorto");
+  const [duracion, setDuracion] = useState<DuracionPaseo>(15);
   const [cantidadPaseos, setCantidadPaseos] = useState(1);
   const [km, setKm] = useState(4);
   const [conRegreso, setConRegreso] = useState(false);
@@ -843,7 +845,10 @@ function ServicioSpot({ perro }: { perro: Perro }) {
 
         {tipo === "spa" && (
           <div className="grid grid-cols-2 gap-2">
-            {(["express", "premium"] as const).map((nivel) => (
+            {/* El precio del baño lo deciden el pelo y el peso. El peso ya
+                está en la ficha, así que lo único que hay que preguntar es
+                el pelo. */}
+            {(["peloCorto", "peloLargo"] as const).map((nivel) => (
               <button
                 key={nivel}
                 type="button"
@@ -855,7 +860,7 @@ function ServicioSpot({ perro }: { perro: Perro }) {
                     : "border-border text-muted-foreground",
                 )}
               >
-                Baño {nivel}
+                {NOMBRE_PELO[nivel]}
               </button>
             ))}
           </div>
@@ -890,14 +895,15 @@ function ServicioSpot({ perro }: { perro: Perro }) {
               </Button>
             </div>
             <p className="text-muted-foreground text-xs text-pretty">
-              Los repartimos durante la estadía de tu perrito.
+              Los repartimos durante la estadía de tu perrito. Cada{" "}
+              {PASEOS_POR_PACK} entra la promo.
             </p>
           </div>
         )}
 
         {tipo === "paseo" && (
           <div className="grid grid-cols-2 gap-2">
-            {([30, 60] as const).map((minutos) => (
+            {([15, 30] as const).map((minutos) => (
               <button
                 key={minutos}
                 type="button"
@@ -909,7 +915,7 @@ function ServicioSpot({ perro }: { perro: Perro }) {
                     : "border-border text-muted-foreground",
                 )}
               >
-                {minutos === 30 ? "Media hora" : "Una hora"}
+                {minutos === 15 ? "15 minutos" : "Media hora"}
               </button>
             ))}
           </div>

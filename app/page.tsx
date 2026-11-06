@@ -21,7 +21,7 @@ import {
   CabeceraPublica,
 } from "@/components/shared/cabecera-publica";
 import { NEGOCIO } from "@/lib/config/negocio";
-import { PRECIOS } from "@/lib/config/precios";
+import { PASEOS_POR_PACK, PRECIOS } from "@/lib/config/precios";
 import { formatearCLP } from "@/lib/utils/moneda";
 
 /**
@@ -111,11 +111,14 @@ const SERVICIOS: Servicio[] = [
     foto: "/fotos/spa.jpg",
     alt: "Perro recién bañado sentado entre flores",
     bajada: "Te lo entregamos limpiecito.",
+    // El afiche es una matriz de pelo por tamaño, así que la tarjeta
+    // también: con "precios desde" el dueño no sabe cuál es el suyo.
+    columnas: ["Pequeño", "Mediano"],
     filas: [
-      ["Baño express", PRECIOS.spa.express.chico],
-      ["Baño premium", PRECIOS.spa.premium.chico],
+      ["Pelo corto", PRECIOS.spa.peloCorto.chico, PRECIOS.spa.peloCorto.grande],
+      ["Pelo largo", PRECIOS.spa.peloLargo.chico, PRECIOS.spa.peloLargo.grande],
     ] as const,
-    nota: "Precios desde, según el tamaño. 20% en el premium para clientes.",
+    nota: `Pequeño bajo ${NEGOCIO.spa.pesoChicoBajoKg} kg; mediano de ${NEGOCIO.spa.pesoChicoBajoKg} a ${NEGOCIO.spa.pesoMaximoKg} kg.`,
   },
   {
     icono: Footprints,
@@ -123,12 +126,16 @@ const SERVICIOS: Servicio[] = [
     foto: "/fotos/paseos.jpg",
     alt: "Perro paseando por la vereda entre hojas de otoño",
     bajada:
-      "Más ejercicio, más felicidad. Sector Providencia. Puedes agregar paseos a la estadía de tu perrito.",
+      "Puedes incluir paseos a la estadía de tu perrito. Sector Providencia.",
     filas: [
+      ["Cada 15 minutos", PRECIOS.paseo[15]],
       ["Media hora", PRECIOS.paseo[30]],
-      ["Una hora", PRECIOS.paseo[60]],
     ] as const,
-    nota: "Enviamos comprobantes de tiempo y distancia recorrida. 20% de descuento para clientes de La Patoteca.",
+    descuentos: [
+      `${PASEOS_POR_PACK} paseos de 15 min: ${formatearCLP(PRECIOS.paseoPack3[15])}`,
+      `${PASEOS_POR_PACK} de media hora: ${formatearCLP(PRECIOS.paseoPack3[30])}`,
+    ],
+    nota: "Se envían fotos y comprobante del tiempo total del paseo.",
   },
   {
     icono: Car,
@@ -330,7 +337,11 @@ export default function Landing() {
                               {formatearCLP(monto)}
                             </dd>
                             {punta !== undefined && (
-                              <dd className="text-primary text-right font-semibold tabular-nums">
+                              // El fucsia es el color de ACCIÓN de la marca:
+                              // pintar con él un precio lo hace parecer un
+                              // aviso, y "mediano" o "punta" no son alertas.
+                              // La columna la distingue su encabezado.
+                              <dd className="text-right font-semibold tabular-nums">
                                 {formatearCLP(punta)}
                               </dd>
                             )}

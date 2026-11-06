@@ -98,7 +98,8 @@ export interface EstadoPerro {
     notas: string;
     noComePellet: boolean;
     mezclarCon: string;
-    noComeAca: boolean;
+    /** `null` = todavía no contesta, y entonces no se pregunta nada más. */
+    comeAca: boolean | null;
   };
   medicamentos: Medicamento[];
   alergias: { tiene: boolean | null; detalle: string };
@@ -128,7 +129,7 @@ export function estadoVacio(): EstadoPerro {
       notas: "",
       noComePellet: false,
       mezclarCon: "",
-      noComeAca: false,
+      comeAca: null,
     },
     medicamentos: [],
     alergias: { tiene: null, detalle: "" },
@@ -179,7 +180,13 @@ export function estadoDesde(perro: Perro): EstadoPerro {
       notas: perro.alimentacion?.notas ?? "",
       noComePellet: perro.alimentacion?.noComePellet ?? false,
       mezclarCon: perro.alimentacion?.mezclarCon ?? "",
-      noComeAca: perro.alimentacion?.noComeAca ?? false,
+      // Una ficha sin nada anotado se queda sin contestar, no en "sí come":
+      // dar por contestado lo que nadie contestó esconde el campo vacío.
+      comeAca: perro.alimentacion?.noComeAca
+        ? false
+        : perro.alimentacion
+          ? true
+          : null,
     },
     medicamentos: perro.medicamentos ?? [],
     alergias: {
@@ -234,7 +241,7 @@ export function aBorrador(estado: EstadoPerro): BorradorDePerro {
       notas: estado.alimentacion.notas.trim() || undefined,
       noComePellet: estado.alimentacion.noComePellet || undefined,
       mezclarCon: estado.alimentacion.mezclarCon.trim() || undefined,
-      noComeAca: estado.alimentacion.noComeAca || undefined,
+      noComeAca: estado.alimentacion.comeAca === false || undefined,
     },
   };
 }
@@ -451,7 +458,7 @@ export function FormularioPerro({
           ]}
           elegida={estado.esterilizado}
           onElegir={(esterilizado) => cambiar({ esterilizado })}
-          ayuda={`Obligatorio en los machos desde los ${NEGOCIO.admision.mesesParaExigirCastracion} meses.`}
+          ayuda="Obligatorio en machos."
           error={error("esterilizado")}
           fija={sexoYCastracionFijos}
         />
@@ -558,19 +565,22 @@ export function FormularioPerro({
         grande
         ayuda="Cuéntanos cuánto y cuándo debemos darle de comer a tu perrito en La Patoteca"
       >
-        {/* La primera pregunta es si hay que servirle algo. Preguntarle
-            cuánto come y recién al final si come acá sería hacerle llenar
-            media sección para después descartarla. */}
-        <Marca
-          activa={estado.alimentacion.noComeAca}
-          onCambio={(noComeAca) =>
-            cambiar({ alimentacion: { ...estado.alimentacion, noComeAca } })
+        {/* La primera pregunta es si hay que servirle algo, y hasta que no
+            se conteste no se pregunta nada más: hacerle llenar media sección
+            para después descartarla es trabajo tirado. */}
+        <Opciones
+          etiqueta="¿Comerá en La Patoteca?"
+          opciones={[
+            { valor: true, texto: "Sí comerá" },
+            { valor: false, texto: "No comerá en La Patoteca" },
+          ]}
+          elegida={estado.alimentacion.comeAca}
+          onElegir={(comeAca) =>
+            cambiar({ alimentacion: { ...estado.alimentacion, comeAca } })
           }
-        >
-          No comerá en La Patoteca
-        </Marca>
+        />
 
-        {!estado.alimentacion.noComeAca && (
+        {estado.alimentacion.comeAca === true && (
           <>
             {/* Las comidas van antes que la medida: primero cuándo come, y
                 cada comida elegida abre la suya. Hay perros que desayunan

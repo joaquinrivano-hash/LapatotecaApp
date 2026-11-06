@@ -756,25 +756,23 @@ export function generarSeed(
     const tipo = azar.elegir(["spa", "spa", "paseo", "paseo", "traslado"] as const);
     const fechaHora = instanteEn(fecha, aCuartos(azar.entero(8 * 60, 19 * 60)));
 
-    // Cliente activo: tiene plan vigente o vino hace poco. En el seed casi
-    // todos los que piden servicios son habituales.
-    const esClienteActivo = azar.probabilidad(0.7);
-
     let cotizacion;
     let nivelSpa;
     let duracionMin;
+    let cantidad;
     let km;
 
     if (tipo === "spa") {
-      nivelSpa = azar.probabilidad(0.65) ? ("express" as const) : ("premium" as const);
-      cotizacion = cotizarSpa({
-        pesoKg: perro.pesoKg,
-        nivel: nivelSpa,
-        esClienteActivo,
-      });
+      nivelSpa = azar.probabilidad(0.65)
+        ? ("peloCorto" as const)
+        : ("peloLargo" as const);
+      cotizacion = cotizarSpa({ pesoKg: perro.pesoKg, nivel: nivelSpa });
     } else if (tipo === "paseo") {
-      duracionMin = azar.probabilidad(0.6) ? (30 as const) : (60 as const);
-      cotizacion = cotizarPaseo({ duracionMin, esClienteActivo });
+      duracionMin = azar.probabilidad(0.6) ? (15 as const) : (30 as const);
+      // Uno de cada cuatro se lleva el pack de tres, para que la cobranza
+      // del seed muestre la promo y no solo paseos sueltos.
+      cantidad = azar.probabilidad(0.25) ? 3 : 1;
+      cotizacion = cotizarPaseo({ duracionMin, cantidad });
     } else {
       km = azar.decimal(1.5, 18, 1);
       cotizacion = cotizarTraslado({ km, fechaHora });
@@ -789,6 +787,7 @@ export function generarSeed(
       fechaHora,
       nivelSpa,
       duracionMin,
+      cantidad,
       km,
       estado: esPasado
         ? azar.probabilidad(0.93)

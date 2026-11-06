@@ -387,9 +387,9 @@ describe("servicios spot", () => {
       perroId: "perro-001",
       fechaHora: en("11:00"),
       tipo: "spa",
-      nivelSpa: "express",
+      nivelSpa: "peloCorto",
     });
-    expect(c.total).toBe(18_000);
+    expect(c.total).toBe(25_000);
   });
 
   it("el traslado usa la matriz de tramo y horario", async () => {

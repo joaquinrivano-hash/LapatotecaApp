@@ -263,7 +263,7 @@ export default function CrearCuenta() {
               ayuda={
                 esTelefonoValido(cuenta.telefono)
                   ? `Lo guardamos como ${formatearTelefono(cuenta.telefono)}.`
-                  : "Acá te mandaremos los reportes diarios. Empieza con +569. Ej: +569 8765 4321."
+                  : "Ej: +569 8765 4321."
               }
               error={
                 cuenta.telefono.trim() !== "" &&

@@ -6,10 +6,9 @@
  */
 
 import { NEGOCIO } from "@/lib/config/negocio";
-import { PRECIOS } from "@/lib/config/precios";
+import { PASEOS_POR_PACK, PRECIOS } from "@/lib/config/precios";
 import {
   construirCotizacion,
-  descuentoClienteActivo,
   descuentoSegundoPerro,
   soloAplicables,
 } from "@/lib/rules/descuentos";
@@ -18,6 +17,7 @@ import {
   minutosDelDia,
   minutosDesdeHHMM,
 } from "@/lib/utils/fecha";
+import { formatearCLP } from "@/lib/utils/moneda";
 import type {
   Cotizacion,
   DuracionPaseo,
@@ -34,41 +34,43 @@ export function tamanoSpa(pesoKg: number): TamanoSpa {
 
 export interface EntradaSpa {
   pesoKg: number;
+  /** Pelo corto o largo: es lo que decide el precio, con el tamaño. */
   nivel: NivelSpa;
-  esClienteActivo?: boolean;
   indicePerro?: number;
 }
 
+/**
+ * El baño, con los precios del afiche.
+ *
+ * **No lleva descuento de cliente.** Los cuatro valores del afiche son los
+ * finales: antes el 20% existía solo en el premium porque el express era un
+ * precio de entrada, y ese par dejó de existir. Sigue el descuento por
+ * segundo perro, que es de la casa y no del afiche.
+ */
 export function cotizarSpa(entrada: EntradaSpa): Cotizacion {
   const tamano = tamanoSpa(entrada.pesoKg);
-  const monto = PRECIOS.spa[entrada.nivel][tamano];
-
-  // El 20% a clientes aplica SOLO al baño premium: el express ya está al
-  // precio de entrada y no lleva descuento.
-  const aplicaDescuento =
-    (entrada.esClienteActivo ?? false) &&
-    (!NEGOCIO.spa.descuentoSoloEnPremium || entrada.nivel === "premium");
 
   return construirCotizacion(
     [
       {
-        concepto: entrada.nivel === "express" ? "Baño express" : "Baño premium",
+        concepto: `Baño ${NOMBRE_PELO[entrada.nivel]}`,
         detalle: `Perro ${tamano === "chico" ? "pequeño" : "mediano"} (${entrada.pesoKg} kg)`,
-        monto,
+        monto: PRECIOS.spa[entrada.nivel][tamano],
       },
     ],
-    soloAplicables([
-      descuentoSegundoPerro(entrada.indicePerro),
-      descuentoClienteActivo(aplicaDescuento),
-    ]),
+    soloAplicables([descuentoSegundoPerro(entrada.indicePerro)]),
   );
 }
+
+export const NOMBRE_PELO: Record<NivelSpa, string> = {
+  peloCorto: "pelo corto",
+  peloLargo: "pelo largo",
+};
 
 export interface EntradaPaseo {
   duracionMin: DuracionPaseo;
   /** Cuántos se compran de una vez. Por omisión, uno. */
   cantidad?: number;
-  esClienteActivo?: boolean;
   indicePerro?: number;
 }
 
@@ -77,25 +79,46 @@ export interface EntradaPaseo {
  * estadía: el dueño no elige el día y la hora de cada uno, porque el paseo
  * se hace cuando el perro está acá y cuando el día lo permite.
  *
- * Los descuentos se aplican al total del pack, no a cada paseo: en cascada
- * sobre el subtotal dan lo mismo, y una línea por paseo convertiría el
- * desglose de cinco paseos en quince líneas.
+ * **Cada tres sale la promo del flyer**, y por eso el cálculo no es una
+ * multiplicación: cinco paseos son un pack de tres más dos sueltos. El
+ * ahorro va en su propia línea porque es lo que hace comprar tres en vez
+ * de uno, y en un total no se ve.
+ *
+ * Los precios del flyer son los finales, así que no llevan descuento de
+ * cliente. Sigue el de segundo perro, que es de la casa.
  */
 export function cotizarPaseo(entrada: EntradaPaseo): Cotizacion {
   const cantidad = Math.max(1, Math.round(entrada.cantidad ?? 1));
+  const packs = Math.floor(cantidad / PASEOS_POR_PACK);
+  const sueltos = cantidad % PASEOS_POR_PACK;
+
+  const suelto = PRECIOS.paseo[entrada.duracionMin];
+  const lineas = [];
+
+  if (sueltos > 0) {
+    lineas.push({
+      concepto: sueltos === 1 ? "Paseo" : `${sueltos} paseos`,
+      detalle: formatearDuracion(entrada.duracionMin),
+      monto: sueltos * suelto,
+    });
+  }
+  if (packs > 0) {
+    const porPack = PRECIOS.paseoPack3[entrada.duracionMin];
+    lineas.push({
+      concepto:
+        packs === 1
+          ? `Promo ${PASEOS_POR_PACK} paseos`
+          : `${packs} packs de ${PASEOS_POR_PACK} paseos`,
+      detalle: `${formatearDuracion(entrada.duracionMin)} · ahorras ${formatearCLP(
+        packs * (PASEOS_POR_PACK * suelto - porPack),
+      )}`,
+      monto: packs * porPack,
+    });
+  }
 
   return construirCotizacion(
-    [
-      {
-        concepto: cantidad === 1 ? "Paseo" : `${cantidad} paseos`,
-        detalle: formatearDuracion(entrada.duracionMin),
-        monto: PRECIOS.paseo[entrada.duracionMin] * cantidad,
-      },
-    ],
-    soloAplicables([
-      descuentoSegundoPerro(entrada.indicePerro),
-      descuentoClienteActivo(entrada.esClienteActivo ?? false),
-    ]),
+    lineas,
+    soloAplicables([descuentoSegundoPerro(entrada.indicePerro)]),
   );
 }
 
