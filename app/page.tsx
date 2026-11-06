@@ -31,7 +31,7 @@ const SERVICIOS = [
     titulo: "Jardín de día",
     foto: "/fotos/jardin.jpg",
     alt: "Dos perros jugando en el pasto frente al muro de colores de la casa",
-    bajada: `Guardería de ${NEGOCIO.jardin.horaApertura}:00 a ${NEGOCIO.jardin.horaCierre}:00. Juegan, comen y duermen siesta.`,
+    bajada: `Guardería de ${NEGOCIO.jardin.horaApertura}:00 a ${NEGOCIO.jardin.horaCierre}:00. Perfecto para que pase el día acompañado.`,
     filas: [
       [`Menos de ${NEGOCIO.jardin.horasJornadaCorta} h`, PRECIOS.jardin.jornadaCorta],
       [
