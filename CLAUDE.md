@@ -759,6 +759,29 @@ sobrepeso la cuenta se crea igual, el botón dice "Crear cuenta" y no "Crear
 cuenta y agendar", y en vez del calendario va a su cuenta, que explica que lo
 conversamos.
 
+#### Si no deja crearla, dice por qué
+
+El botón "Crear cuenta" **no se apaga** cuando falta algo. Apagado no decía
+por qué: el dueño llenaba el formulario, tocaba el botón y no pasaba nada —
+lo reportó la dueña el 06-11—. Y la ficha del perro avisaba solo lo
+**primero** que faltaba, en un aviso flotante que se iba solo.
+
+Ahora el toque responde siempre. Si falta algo, abajo del botón aparece
+**todo** lo que falta, separado en "Tus datos", "La ficha de Trufa" y, aparte,
+lo que no tiene vuelta (la castración), y la pantalla baja hasta ahí. Cada
+grupo trae "Ir a corregirlo", porque el formulario es largo y un campo en
+rojo tres pantallas más arriba no se ve. El aviso se recalcula en cada render:
+se achica a medida que se corrige y desaparece cuando ya se puede crear.
+
+Lo del dueño lo revisa `revisarDatosDelDueno` (`lib/rules/alta-cuenta.ts`),
+igual que `revisarAltaDePerro` revisa al perro: antes era un sí/no suelto en
+la pantalla, que alcanzaba para apagar el botón y no para decir qué faltaba.
+Ahora también ataja un email sin arroba, que antes llegaba hasta Supabase.
+
+Sigue valiendo que lo que falta se marca **recién al intentar**: ir marcando
+en rojo lo que todavía no alcanza a escribir es hostil. La excepción son el
+WhatsApp y las contraseñas, que ya avisaban apenas tenían algo escrito.
+
 ### La dirección se elige, no se escribe
 
 `components/shared/campo-direccion.tsx` y `lib/integraciones/direcciones/`.
