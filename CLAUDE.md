@@ -1440,6 +1440,33 @@ mismas reglas puras y escriba el cobro ella. Mientras el único camino a la
 plata sea una transferencia que un humano concilia, se puede vivir con esto;
 con cobro automático, no.
 
+#### Y lo otro que no puede cuidar: el cupo
+
+Lo mismo que el monto, y por el mismo motivo: una política de RLS sabe acotar
+filas, no contar franjas de 30 minutos. **La capacidad se revisa en la app**,
+así que agendar es cotizar y después escribir, y entre las dos cosas no hay
+nada que impida que entre otro.
+
+Está medido, no supuesto: `lib/servicios/capacidad-multiusuario.test.ts`
+hace entrar dueños nuevos por `crearCuenta` y los manda a agendar contra el
+mismo día.
+
+- **Uno tras otro, cuadra exacto.** 25 llenan la jornada, el 26 se rechaza
+  diciendo qué franja chocó, el pico queda en 25 y el rechazo no deja nada a
+  medias. Lo mismo con hotel y jardín mezclados —los 25 son compartidos, no
+  25 de cada uno— y con una semana de reservas cruzadas.
+- **Los 30 a la vez se pasan.** 30 reservas simultáneas entran las 30 y el
+  pico del día queda en 30: ninguna alcanzó a ver lo que agendó la otra. La
+  ventana es del tamaño de una ida y vuelta a Supabase.
+
+Hoy está acotado: la casa llega a 25 pocos días al año, los dueños no
+aprietan "confirmar" en el mismo segundo, y si pasara el calendario muestra
+el pico de verdad, así que el día sobrevendido se ve. El arreglo es el mismo
+que el del monto —una función en la base que verifique capacidad e inserte en
+la misma transacción, como `agendar_dia_con_plan`— y el día que se haga, el
+test que afirma la ventana tiene que caer: está escrito para eso, con la
+línea de reemplazo al lado.
+
 #### Descontar stock sin poder tocar el precio
 
 La tentación era darle `update` sobre `productos` al dueño para que la
