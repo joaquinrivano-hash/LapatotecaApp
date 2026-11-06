@@ -22,16 +22,32 @@ import {
   cobroDelDiaDePrueba,
   politicaDeCancelacion,
 } from "@/lib/rules/dia-de-prueba";
-import { comprarPlan, esDiaHabil, planVigente } from "@/lib/rules/planes";
-import { calcularDevolucionJardin } from "@/lib/rules/precio-jardin";
+import { indiceDeSegundoPerro } from "@/lib/rules/descuentos";
+import {
+  comprarPlan,
+  esDiaHabil,
+  planesVigentes,
+  planVigente,
+} from "@/lib/rules/planes";
+import { calcularPrecioHotel } from "@/lib/rules/precio-hotel";
+import {
+  calcularDevolucionJardin,
+  calcularPrecioJardin,
+} from "@/lib/rules/precio-jardin";
 import { fechaISO } from "@/lib/utils/fecha";
-import type { EstadiaJardin, ID, PlanComprado } from "@/lib/types";
+import type { EstadiaJardin, ID, ItemOrden, PlanComprado } from "@/lib/types";
 
 const ms = (instante: string) => new Date(instante).getTime();
 
 type Colecciones = Pick<
   RepositorioPatoteca,
-  "estadiasJardin" | "pagos" | "perros" | "planes"
+  | "estadiasJardin"
+  | "pagos"
+  | "perros"
+  | "planes"
+  | "reservasHotel"
+  | "productos"
+  | "ordenes"
 >;
 
 export function crearAgendaLocal(repo: Colecciones): AgendaRepo {
@@ -364,6 +380,172 @@ export function crearAgendaLocal(repo: Colecciones): AgendaRepo {
       }
 
       return { estadia: cancelada, devolucion, aDevolver, planDevuelto };
+    },
+
+    // Las tres de abajo son la gemela de
+    // `20261106120000_lo_que_el_dueno_no_se_salta.sql`. Allá existen porque
+    // el dueño ya no inserta ni días, ni reservas, ni cobros ni órdenes:
+    // el precio lo pone la base y lo compara con lo que vio. Acá se
+    // recalcula con la misma regla y se compara igual, para que un test
+    // que pasa en el prototipo no esconda un "no calza" en la nube.
+    //
+    // La admisión, el cupo y los duplicados los revisa la capa de servicios
+    // antes de llamar (en la nube lo repite el disparador
+    // `lo_que_cuida_la_casa`).
+
+    async agendarDiaSuelto(perroId, horario, cotizacion, ahora) {
+      const perro = await repo.perros.obtener(perroId);
+      if (!perro) throw new ErrorRepositorio("No existe ese perro.");
+      if (fechaISO(horario.inicio) !== horario.fecha) {
+        throw new ErrorRepositorio("La hora no cae en ese día.");
+      }
+
+      const delDia = await repo.estadiasJardin.porFecha(horario.fecha);
+      const esperado = calcularPrecioJardin({
+        inicio: horario.inicio,
+        fin: horario.fin,
+        origen: "dia_suelto",
+        indicePerro: indiceDeSegundoPerro(delDia, perro.clienteId, perro.id),
+      });
+      if (cotizacion.total !== esperado.total) {
+        throw new ErrorRepositorio("El precio del día no calza.");
+      }
+
+      const estadia = await repo.estadiasJardin.crear({
+        clienteId: perro.clienteId,
+        perroId: perro.id,
+        fecha: horario.fecha,
+        inicioProgramado: horario.inicio,
+        finProgramado: horario.fin,
+        origen: "dia_suelto",
+        estado: "esperada",
+        cotizacion,
+        creadaEn: ahora,
+      });
+
+      const pago = await repo.pagos.crear({
+        clienteId: perro.clienteId,
+        concepto: "dia_suelto",
+        referenciaId: estadia.id,
+        monto: esperado.total,
+        estado: "pendiente",
+        emitidoEn: ahora,
+      });
+
+      return { estadia, pago };
+    },
+
+    async reservarHotel(perroId, pedido, cotizacion, ahora) {
+      const perro = await repo.perros.obtener(perroId);
+      if (!perro) throw new ErrorRepositorio("No existe ese perro.");
+      if (pedido.paseosContratados < 0 || pedido.paseosCortosContratados < 0) {
+        throw new ErrorRepositorio("Los paseos no pueden ser negativos.");
+      }
+
+      const desde = fechaISO(pedido.inicio);
+      const [planes, delDia] = await Promise.all([
+        repo.planes.porPerro(perroId),
+        repo.estadiasJardin.porFecha(desde),
+      ]);
+      const esperado = calcularPrecioHotel({
+        inicio: pedido.inicio,
+        fin: pedido.fin,
+        paseosContratados: pedido.paseosContratados,
+        paseosCortosContratados: pedido.paseosCortosContratados,
+        conPlanDeJardin: planesVigentes(planes, desde).length > 0,
+        indicePerro: indiceDeSegundoPerro(delDia, perro.clienteId, perro.id),
+      });
+      if (
+        cotizacion.total !== esperado.total ||
+        cotizacion.abono !== esperado.abono
+      ) {
+        throw new ErrorRepositorio("El precio del hotel no calza.");
+      }
+
+      const reserva = await repo.reservasHotel.crear({
+        clienteId: perro.clienteId,
+        perroId: perro.id,
+        inicioProgramado: pedido.inicio,
+        finProgramado: pedido.fin,
+        paseosContratados: pedido.paseosContratados,
+        paseosCortosContratados: pedido.paseosCortosContratados,
+        estado: "pendiente",
+        cotizacion,
+        abonoPagado: false,
+        creadaEn: ahora,
+      });
+
+      const pago = await repo.pagos.crear({
+        clienteId: perro.clienteId,
+        concepto: "abono_hotel",
+        referenciaId: reserva.id,
+        monto: esperado.abono ?? 0,
+        estado: "pendiente",
+        emitidoEn: ahora,
+        venceEn: desde,
+      });
+
+      return { reserva, pago };
+    },
+
+    async comprarEnTienda(clienteId, items, ahora) {
+      const sinPagar = (await repo.ordenes.porCliente(clienteId)).filter(
+        (o) => o.estado === "pendiente",
+      );
+      if (sinPagar.length >= NEGOCIO.tienda.ordenesSinPagarMaximas) {
+        throw new ErrorRepositorio(
+          "Tienes compras pendientes de pago: escríbenos y las ordenamos.",
+        );
+      }
+
+      const productos = await repo.productos.listar();
+      const ajustados: string[] = [];
+      const lineas: ItemOrden[] = [];
+
+      for (const item of items) {
+        const producto = productos.find((p) => p.id === item.productoId);
+        if (!producto || !producto.activo || producto.stock === 0) {
+          if (producto) ajustados.push(`${producto.nombre} quedó sin stock.`);
+          continue;
+        }
+        const cantidad = Math.min(Math.max(0, item.cantidad), producto.stock);
+        if (cantidad === 0) continue;
+        if (cantidad < item.cantidad) {
+          ajustados.push(
+            `De ${producto.nombre} quedaban ${producto.stock}: se cobraron esos.`,
+          );
+        }
+        await repo.productos.ajustarStock(producto.id, -cantidad);
+        lineas.push({
+          productoId: producto.id,
+          nombre: producto.nombre,
+          cantidad,
+          precioUnitario: producto.precio,
+        });
+      }
+
+      if (lineas.length === 0) {
+        throw new ErrorRepositorio("Ninguno de los productos tiene stock.");
+      }
+
+      const total = lineas.reduce((s, l) => s + l.precioUnitario * l.cantidad, 0);
+      const orden = await repo.ordenes.crear({
+        clienteId,
+        items: lineas,
+        total,
+        estado: "pendiente",
+        creadaEn: ahora,
+      });
+      const pago = await repo.pagos.crear({
+        clienteId,
+        concepto: "tienda",
+        referenciaId: orden.id,
+        monto: total,
+        estado: "pendiente",
+        emitidoEn: ahora,
+      });
+
+      return { orden, pago, ajustados };
     },
   };
 }

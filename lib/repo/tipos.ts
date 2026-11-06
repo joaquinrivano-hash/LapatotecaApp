@@ -22,6 +22,8 @@ import type {
   FechaISO,
   ID,
   Incidente,
+  InstanteISO,
+  ItemCarrito,
   MensajeSaliente,
   Notificacion,
   OrdenTienda,
@@ -31,12 +33,11 @@ import type {
   Producto,
   Reporte,
   ReservaHotel,
+  Rol,
   ServicioAgendado,
   Suscripcion,
-  Turno,
-  InstanteISO,
-  Rol,
   TipoPlan,
+  Turno,
 } from "@/lib/types";
 import type { PoliticaDeCancelacion } from "@/lib/rules/dia-de-prueba";
 import type { DevolucionJardin } from "@/lib/rules/precio-jardin";
@@ -280,6 +281,54 @@ export interface AgendaRepo {
    * vuelve al pack. Encima de la hora el cobro queda como estaba.
    */
   cancelarDiaDeJardin(estadiaId: ID, ahora: InstanteISO): Promise<DiaDeJardinCancelado>;
+  /**
+   * El día suelto con su cobro, juntos. El precio lo pone la regla y la
+   * cotización es la que vio el dueño: si no calzan se rechaza.
+   */
+  agendarDiaSuelto(
+    perroId: ID,
+    horario: Horario,
+    cotizacion: Cotizacion,
+    ahora: InstanteISO,
+  ): Promise<DiaSueltoAgendado>;
+  /** La reserva por confirmar con el cobro del abono, juntos. */
+  reservarHotel(
+    perroId: ID,
+    pedido: {
+      inicio: InstanteISO;
+      fin: InstanteISO;
+      paseosContratados: number;
+      paseosCortosContratados: number;
+    },
+    cotizacion: Cotizacion,
+    ahora: InstanteISO,
+  ): Promise<ReservaHotelTomada>;
+  /**
+   * La compra con el precio de la vitrina: descuenta el stock que alcanza,
+   * avisa lo que se ajustó y deja la orden y su cobro pendientes.
+   */
+  comprarEnTienda(
+    clienteId: ID,
+    items: ItemCarrito[],
+    ahora: InstanteISO,
+  ): Promise<CompraHecha>;
+}
+
+export interface DiaSueltoAgendado {
+  estadia: EstadiaJardin;
+  pago: Pago;
+}
+
+export interface ReservaHotelTomada {
+  reserva: ReservaHotel;
+  pago: Pago;
+}
+
+export interface CompraHecha {
+  orden: OrdenTienda;
+  pago: Pago;
+  /** Lo que no alcanzó y se ajustó, en palabras para el dueño. */
+  ajustados: string[];
 }
 
 export interface DiaDePruebaAgendado {

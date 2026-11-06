@@ -334,6 +334,7 @@ Entonces, cuándo nace cada cobro:
 | Recargo fuera de horario | **Nunca solo**: lo decide Administración |
 | Ingreso no planificado | Lo emite Administración después |
 | Servicio spot (spa, paseo, traslado) | **Nunca al agendarlo**: la casa confirma el valor y ahí lo emite |
+| Tienda | Al comprar, por adelantado (nace pendiente: no hay pasarela) |
 
 Y como el día de jardín ahora está pagado antes de usarse, **cancelarlo tiene
 consecuencia**: `cancelarDiaDeJardin` aplica la política y, cuando devuelve,
@@ -1507,48 +1508,101 @@ Y por eso "sumar las ganancias" da cero: los conceptos que no nacen del
 turno —planes, abonos, servicios, tienda, cuenta mensual— no los ve, así que
 no hay nada que sumar.
 
-#### Lo que RLS no puede cuidar: el monto
+#### Lo que RLS no podía cuidar: el monto y el cupo
 
-Una política verifica **quién** cobra y **en qué estado** nace el cobro. No
-puede verificar **cuánto**. El monto lo calcula el navegador, así que alguien
-con la consola abierta puede crearse un cobro de $0, y ninguna política lo
-va a detener — no es un agujero en las reglas, es el límite de dónde están
-escritas.
+Una política verifica **quién** escribe y **en qué estado** nace la fila. No
+puede verificar **cuánto** ni **contar franjas de 30 minutos**. Durante
+semanas el monto lo calculó el navegador —alguien con la consola abierta se
+creaba un cobro de $0— y la capacidad se revisó en la app: entre cotizar y
+escribir no había nada que impidiera que entrara otro, y
+`lib/servicios/capacidad-multiusuario.test.ts` lo midió: 30 reservas
+simultáneas entraban las 30.
 
-Hoy eso está acotado y a la vista: el cobro nace pendiente y lo marca pagado
-una persona mirando la transferencia, así que un cobro falso aparece raro en
-la pantalla de pagos. **Antes de que exista una pasarela de pago, la
-cotización tiene que moverse al servidor** — una ruta que cotice con las
-mismas reglas puras y escriba el cobro ella. Mientras el único camino a la
-plata sea una transferencia que un humano concilia, se puede vivir con esto;
-con cobro automático, no.
+Las dos cosas se cerraron el 6-11-2026 con
+`20261106120000_lo_que_el_dueno_no_se_salta.sql`; ver "Lo que el dueño no
+se salta". El test de concurrencia sigue, porque describe al **prototipo**:
+el repositorio local no tiene candado, y la nube sí.
 
-#### Y lo otro que no puede cuidar: el cupo
+#### Lo que el dueño no se salta, aunque abra la consola
 
-Lo mismo que el monto, y por el mismo motivo: una política de RLS sabe acotar
-filas, no contar franjas de 30 minutos. **La capacidad se revisa en la app**,
-así que agendar es cotizar y después escribir, y entre las dos cosas no hay
-nada que impida que entre otro.
+`20261106120000_lo_que_el_dueno_no_se_salta.sql`, con sus gemelas en
+`lib/repo/agenda-local.ts` y sus casos en `aislamiento.sh`. Salió de un
+**hackeo ético**: ponerse en el lugar de un cliente —o de un script con su
+sesión y la llave pública— y probar qué escribe en la base saltándose la
+app. Lo que entraba, antes de ese archivo:
 
-Está medido, no supuesto: `lib/servicios/capacidad-multiusuario.test.ts`
-hace entrar dueños nuevos por `crearCuenta` y los manda a agendar contra el
-mismo día.
+| Por dónde | Qué conseguía |
+|---|---|
+| `descontar_stock` | La llamaba cualquiera con cualquier producto: la tienda entera en cero en un segundo. |
+| `insert into pagos` | Cualquier concepto y monto. Con un `recargo_jardin` de $0 la cola de Administración daba el recargo por **decidido** y nunca lo cobraba; con un `saldo_hotel` de $0, lo mismo con el saldo. |
+| `insert into estadias_jardin` / `reservas_hotel` | Sin admisión, sin cupo, con la cotización que quisiera. Y 30 a la vez. |
+| `insert into servicios` | Nacía `agendado` y se saltaba la cola que le pone precio: un servicio que nunca se cobra. |
+| `insert into ordenes` | Nacía `pagada` con total 0. |
 
-- **Uno tras otro, cuadra exacto.** 25 llenan la jornada, el 26 se rechaza
-  diciendo qué franja chocó, el pico queda en 25 y el rechazo no deja nada a
-  medias. Lo mismo con hotel y jardín mezclados —los 25 son compartidos, no
-  25 de cada uno— y con una semana de reservas cruzadas.
-- **Los 30 a la vez se pasan.** 30 reservas simultáneas entran las 30 y el
-  pico del día queda en 30: ninguna alcanzó a ver lo que agendó la otra. La
-  ventana es del tamaño de una ida y vuelta a Supabase.
+Lo que distingue a un script de una persona es la velocidad y el volumen,
+así que no bastaba con cerrar cada puerta: había que **acotar el daño** de
+lo que sí se puede hacer.
 
-Hoy está acotado: la casa llega a 25 pocos días al año, los dueños no
-aprietan "confirmar" en el mismo segundo, y si pasara el calendario muestra
-el pico de verdad, así que el día sobrevendido se ve. El arreglo es el mismo
-que el del monto —una función en la base que verifique capacidad e inserte en
-la misma transacción, como `agendar_dia_con_plan`— y el día que se haga, el
-test que afirma la ventana tiene que caer: está escrito para eso, con la
-línea de reemplazo al lado.
+La respuesta es la de siempre en este repo. **Lo que toca plata o cupo pasa
+por funciones** que saben hacer una sola cosa entera y en una transacción:
+
+- `agendar_dia_suelto` → el precio por tramo y el segundo perro los calcula
+  la base y los compara con la cotización que vio el dueño: si no calzan,
+  rechaza. Día y cobro, juntos.
+- `reservar_hotel` → la cascada completa (duración, plan vigente, segundo
+  perro), las horas extra y el abono, igual. Reserva y abono, juntos.
+- `comprar_en_tienda` → el precio lo pone la vitrina, lo que no alcanza se
+  ajusta y se avisa, y la orden nace **pendiente** como todo lo demás. Esto
+  además **arregla la tienda en la nube**: antes nacía "pagada" por un Webpay
+  que no existe, la base rechazaba el cobro, y la compra fallaba con el stock
+  ya descontado.
+
+**Y disparadores que no dejan hacer lo mismo por fuera**:
+
+- `lo_que_cuida_la_casa`, en cada día y cada reserva que agenda un dueño
+  —directo o a través de cualquier función, también `agendar_dia_con_plan`
+  y `agendar_dia_de_prueba`, que así quedaron cubiertas sin reescribirlas—:
+  el perro es suyo, la hora no pasó, la **admisión** (los bloqueos de
+  `evaluarAdmision`, leídos de la ficha), un perro por día y sin reservas
+  que se pisen, hasta **180 días** adelante, un perro nuevo por bloque, y el
+  **cupo** contado por la base **bajo un candado de transacción**
+  (`pg_advisory_xact_lock`): dos dueños confirmando en el mismo instante
+  entran uno después del otro.
+- El dueño ya **no inserta** en `pagos`, `ordenes` ni `suscripciones`, ni
+  días ni reservas directo. La política "agendo y queda pendiente" se borró:
+  los cobros nacen adentro de las funciones.
+- Un servicio nace `por_confirmar` y el dueño no lo toca después.
+- `descontar_stock` es del equipo; la compra descuenta adentro de su función.
+- Hasta **3 compras sin pagar** por cliente: cada orden descuenta stock al
+  nacer, y sin tope una cuenta vaciaba la vitrina con órdenes que nadie paga.
+
+**El equipo queda como estaba.** El cuidador que registra un perro en la
+puerta con la casa llena lo hace a propósito ("Registrar de todas formas"),
+y la prueba lo verifica: con 25 adentro, el 26 del dueño no entra y el del
+cuidador sí.
+
+Tres decisiones que conviene saber:
+
+- **`es_dueno()` mira la identidad, no `current_user`.** Adentro de una
+  función `security definer` el usuario es la dueña de la función, pero
+  `auth.uid()` sigue siendo el del que llamó: así el disparador cubre
+  también lo que entra por las funciones. Y es nulo-seguro: en el editor
+  SQL y en las migraciones `auth.uid()` es nulo y nada de esto dispara.
+- **El andamio de la prueba limpia la identidad en lo que arma la casa.**
+  `prueba.uid` queda puesto en la transacción, y con él puesto los
+  disparadores habrían bloqueado las preparaciones. En el editor SQL real
+  `auth.uid()` es nulo, y `como_la_casa` ahora lo imita.
+- **Dos parámetros nuevos en `NEGOCIO` que no son reglas comerciales**:
+  `agenda.diasMaximosDeAnticipacion` (180) y
+  `tienda.ordenesSinPagarMaximas` (3). Son topes contra un script, viven
+  también en SQL y entran en `reglas-en-la-base.test.ts`. Si la dueña
+  quiere otros números, se cambian en los dos lados.
+
+Lo que sigue abierto, a propósito: la **cotización de los servicios** no se
+compara (el precio lo confirma la casa, así que no vale nada todavía), y un
+dueño puede seguir corrigiendo su ficha —peso, vacunas— porque son sus
+datos; la admisión se revisa contra lo que diga la ficha al agendar, y
+Administración recibe el aviso de cada cambio.
 
 #### Descontar stock sin poder tocar el precio
 
@@ -1656,9 +1710,9 @@ Así que:
   esta regla sin avisar. Aprobar o rechazar (`resolverDiaDePrueba`) lo hace
   Administración, que pasa. `actualizarPerroComoDueno` además descarta el
   campo, igual que el sexo y la castración.
-- **`lo_que_agenda_el_dueno`** acota lo que el dueño inserta directo: un
-  día suelto esperado, sin plan y sin horas reales, o una reserva de hotel
-  pendiente y sin abono. Todo lo demás tiene su función.
+- **`lo_que_agenda_el_dueno`** acotaba lo que el dueño insertaba directo.
+  Desde `lo_que_el_dueno_no_se_salta` ya no inserta nada directo: también
+  el día suelto y la reserva de hotel tienen su función.
 
 Que haya cupo y que el perro cumpla la admisión sigue en la app, como con
 todo lo que se agenda: es una pregunta de capacidad, no de plata. Lo que se
@@ -2151,6 +2205,7 @@ no tienen un orden que no rompa nada (ver más abajo): el código llegó a
 | `20261022150000_cambios_de_agenda` | Cancelar y mover lo agendado con su cobro, en la base; el disparador que no deja al dueño reescribir estadías ni reservas. **Sin ella, cancelar desde el portal falla** (antes de este cambio quedaba a medias) | Corrida el 22-10-2026, verificada desde afuera |
 | `20261022160000_planes_y_dia_de_prueba` | Comprar y usar un plan y agendar el día de prueba, en la base; los disparadores que no dejan al dueño tocar planes, aprobarse el día de prueba ni insertar días o reservas por fuera. **Va junto con su código**: con una sin la otra, agendar el día de prueba y usar el plan fallan (ver abajo) | Corrida el 22-10-2026, verificada desde afuera |
 | `20261022170000_devolver_el_dia_de_prueba` | Redefine `cancelar_dia_de_prueba` para que lo ya pagado quede en "Por devolver". **No está acoplada**: sin ella el código nuevo funciona igual, con el comportamiento viejo (lo pagado no se devuelve), así que se puede correr después de publicar. Si alguna vez se vuelve a correr `cambios_de_agenda` suelto, hay que correr esta después | Corrida el 22-10-2026, confirmada con `pg_proc` |
+| `20261106120000_lo_que_el_dueno_no_se_salta` | Las funciones `agendar_dia_suelto`, `reservar_hotel` y `comprar_en_tienda`; el disparador `lo_que_cuida_la_casa` (admisión, cupo bajo candado, duplicados, horizonte); el dueño deja de insertar cobros, órdenes, suscripciones, días y reservas directo; `descontar_stock` solo para el equipo. **Va junto con su código, como `planes_y_dia_de_prueba`**: el código nuevo llama funciones que sin ella no existen, y el código viejo inserta directo lo que ella bloquea. Se corre la migración y se publica `main` en seguida, minutos y no días | **Sin confirmar** (agregada el 6-11-2026) |
 | `20261105120000_traslado_y_paseos` | `servicios.con_regreso`, `servicios.cantidad` y `reservas_hotel.paseos_cortos_contratados`: el traslado de ida y vuelta, los paseos sueltos por cantidad y el paseo de 15 min del hotel. **No está acoplada**: sin ella, agendar un traslado con regreso, un pack de paseos o una reserva con paseo de 15 min falla al guardar (columna que no existe), pero todo lo demás sigue igual, así que se puede correr después de publicar | Corrida el 5-11-2026, verificada desde afuera: las tres columnas dan `401` |
 
 La regla de acá en adelante:
@@ -2346,6 +2401,13 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
    `401` no distingue la versión: si hay que volver a comprobarlo, es
    con `select prosrc like '%a_devolver%' from pg_proc where
    proname = 'cancelar_dia_de_prueba';`, que tiene que dar `true`.
+11. **Correr `20261106120000_lo_que_el_dueno_no_se_salta` en el editor
+    SQL, junto con publicar su código** (ver la tabla de migraciones: está
+    acoplada). Después, verificar desde afuera con `GET
+    /rest/v1/rpc/agendar_dia_suelto?perro=00000000-0000-0000-0000-000000000000`:
+    `404` es que no corrió, `401` es que existe. Y probar desde el portal un
+    día de jardín, una reserva de hotel y una compra: las tres tienen que
+    quedar pendientes en `/admin/pagos`.
 10. **Desconectar el proyecto viejo `lapatoteca-app` del repo.** Lo pidió
     la dueña el 22-10-2026. Cada push se publica dos veces —una en cada
     proyecto— y es la sospecha principal de por qué producción dejó de
@@ -2359,12 +2421,11 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
 
 **Decisiones de producto abiertas:**
 
-- **La tienda nace pagada** (con un "webpay" que no existe), mientras que
-  todo lo demás nace pendiente hasta que Administración concilia la
-  transferencia. Los planes ya se igualaron (22-10): darlos por pagados
-  hacía fallar la compra en la nube. La tienda tiene el **mismo bug** —crea
-  la orden "pagada", descuenta stock y falla al crear el cobro—, así que
-  igualarla no es solo una decisión: hoy en la nube no funciona.
+- ~~**La tienda nace pagada**~~ — igualada el 6-11-2026 con
+  `lo_que_el_dueno_no_se_salta`: la orden y su cobro nacen pendientes,
+  el precio lo pone la vitrina y la compra pasa por `comprar_en_tienda`.
+  Falta que la dueña lo vea: la pantalla de pagos ya la lista como cualquier
+  cobro, y el aviso de la tienda dice "quedó pendiente de pago".
 - **El sexo quedó fijo para el dueño**, igual que la castración, porque
   decide si a un macho se le exige. Lo decidió una sesión; falta que la dueña
   lo confirme.

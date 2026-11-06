@@ -75,18 +75,20 @@ export default function Tienda() {
   async function pagar() {
     if (!clienteId) return;
     try {
-      const { orden, ajustados } = await ejecutar((repo) =>
+      const { ajustados } = await ejecutar((repo) =>
         comprarEnTienda(
           repo,
           clienteId,
           items.map(([productoId, cantidad]) => ({ productoId, cantidad })),
         ),
       );
-      toast.success("Compra lista", {
-        description:
-          ajustados.length > 0
-            ? ajustados.join(" ")
-            : `Pagaste ${orden.items.length} ${orden.items.length === 1 ? "producto" : "productos"}. Lo dejamos listo para el retiro.`,
+      // La orden nace pendiente, como todo lo demás: decir "pagaste" sería
+      // prometer algo que todavía no pasó.
+      toast.success("Compra anotada", {
+        description: [
+          ...ajustados,
+          `Quedó pendiente de pago: lo ves en Mi cuenta y lo retiras cuando vengas.`,
+        ].join(" "),
       });
       setCarrito({});
       setAbierto(false);

@@ -240,6 +240,29 @@ export const NEGOCIO = {
    */
   tienda: {
     visible: false,
+    /**
+     * Cuántas compras sin pagar puede tener un cliente antes de que la
+     * siguiente espere a que se concilie alguna.
+     *
+     * No es una regla comercial, es un tope contra un script: cada orden
+     * descuenta stock al nacer, así que sin esto una cuenta podía vaciar
+     * la vitrina con órdenes que nadie paga. La vive también la base
+     * (`comprar_en_tienda`).
+     */
+    ordenesSinPagarMaximas: 3,
+  },
+
+  /** Lo que acota la agenda, mirando a quien no es de la casa. */
+  agenda: {
+    /**
+     * Hasta cuántos días adelante puede agendar un dueño.
+     *
+     * Tampoco es una regla comercial: es lo que impide que una cuenta se
+     * tome un cupo todos los días durante años con cobros que nunca paga.
+     * Medio año cubre cualquier vacación que se reserve con tiempo. La
+     * vive también la base (`lo_que_cuida_la_casa`).
+     */
+    diasMaximosDeAnticipacion: 180,
   },
 
   cobroMensual: {

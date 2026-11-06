@@ -21,6 +21,7 @@ import {
   type OcupanteRango,
   type ResultadoCapacidad,
 } from "@/lib/rules/capacidad";
+import { indiceDeSegundoPerro } from "@/lib/rules/descuentos";
 import { calcularAbono, calcularPrecioHotel } from "@/lib/rules/precio-hotel";
 import {
   calcularDevolucionJardin,
@@ -132,10 +133,12 @@ export async function cotizarReservaHotel(
   const conPlanDeJardin = planesVigentes(planes, desde).length > 0;
 
   // El descuento de segundo perro aplica si el dueño ya tiene otro perro
-  // comprometido ese día.
-  const indicePerro = estadiasDelDia.filter(
-    (e) => e.clienteId === perro.clienteId && e.perroId !== perro.id,
-  ).length;
+  // comprometido ese día. La regla es compartida con la base.
+  const indicePerro = indiceDeSegundoPerro(
+    estadiasDelDia,
+    perro.clienteId,
+    perro.id,
+  );
 
   const cotizacion = calcularPrecioHotel({
     inicio: entrada.inicio,
@@ -197,32 +200,21 @@ export async function crearReservaHotel(
     );
   }
 
-  const perro = (await repo.perros.obtener(entrada.perroId))!;
-
-  const reserva = await repo.reservasHotel.crear({
-    clienteId: perro.clienteId,
-    perroId: perro.id,
-    inicioProgramado: entrada.inicio,
-    finProgramado: entrada.fin,
-    paseosContratados: entrada.paseosContratados ?? 0,
-    paseosCortosContratados: entrada.paseosCortosContratados ?? 0,
-    estado: "pendiente",
-    cotizacion: previa.cotizacion,
-    abonoPagado: false,
-    creadaEn: ahora,
-  });
-
-  // Pendiente y sin fecha de pago, igual que exige la base (_permisos): nadie
-  // se da por pagado solo.
-  const abono = await repo.pagos.crear({
-    clienteId: perro.clienteId,
-    concepto: "abono_hotel",
-    referenciaId: reserva.id,
-    monto: previa.abono,
-    estado: "pendiente",
-    emitidoEn: ahora,
-    venceEn: fechaISO(entrada.inicio),
-  });
+  // La reserva y el abono nacen juntos en `repo.agenda`: en la nube el
+  // dueño ya no inserta ni reservas ni cobros, y el precio lo recalcula la
+  // base contra esta misma cotización. Nace pendiente y sin fecha de pago:
+  // nadie se da por pagado solo.
+  const { reserva, pago: abono } = await repo.agenda.reservarHotel(
+    entrada.perroId,
+    {
+      inicio: entrada.inicio,
+      fin: entrada.fin,
+      paseosContratados: entrada.paseosContratados ?? 0,
+      paseosCortosContratados: entrada.paseosCortosContratados ?? 0,
+    },
+    previa.cotizacion,
+    ahora,
+  );
 
   return { reserva, abono };
 }
@@ -273,9 +265,7 @@ export async function cotizarDiaJardin(
     entrada.fecha,
   );
 
-  const indicePerro = delDia.filter(
-    (e) => e.clienteId === perro.clienteId && e.perroId !== perro.id,
-  ).length;
+  const indicePerro = indiceDeSegundoPerro(delDia, perro.clienteId, perro.id);
 
   const cotizacion = calcularPrecioJardin({
     inicio,
@@ -327,13 +317,12 @@ export async function reservarDiaJardin(
     );
   }
 
-  const perro = (await repo.perros.obtener(entrada.perroId))!;
-
   // Con plan, el día del pack se descuenta al AGENDAR, no cuando el perro
   // llega, y el día y el descuento van juntos en `repo.agenda`: en la nube
   // el dueño no toca el saldo de su plan, porque se lo dejaría en cero.
   let estadia: EstadiaJardin;
   let planUsado: PlanComprado | null = null;
+  let pago: Pago | null = null;
   if (previa.planDisponible) {
     ({ estadia, plan: planUsado } = await repo.agenda.agendarDiaConPlan(
       previa.planDisponible.id,
@@ -342,37 +331,19 @@ export async function reservarDiaJardin(
       ahora,
     ));
   } else {
-    estadia = await repo.estadiasJardin.crear({
-      clienteId: perro.clienteId,
-      perroId: perro.id,
-      fecha: entrada.fecha,
-      inicioProgramado: previa.inicio,
-      finProgramado: previa.fin,
-      origen: "dia_suelto",
-      estado: "esperada",
-      cotizacion: previa.cotizacion,
-      creadaEn: ahora,
-    });
+    // El día suelto se paga POR ADELANTADO, igual que el plan: la jornada
+    // se cobra al agendarla, no al cerrarla. Día y cobro nacen juntos en
+    // `repo.agenda`: en la nube el dueño ya no inserta ninguno de los dos y
+    // el precio lo recalcula la base contra esta misma cotización. Lo que
+    // puede aparecer después es el recargo por retiro tarde, y ese no nace
+    // solo: lo decide Administración.
+    ({ estadia, pago } = await repo.agenda.agendarDiaSuelto(
+      entrada.perroId,
+      { fecha: entrada.fecha, inicio: previa.inicio, fin: previa.fin },
+      previa.cotizacion,
+      ahora,
+    ));
   }
-
-  // El día suelto se paga POR ADELANTADO, igual que el plan: la jornada se
-  // cobra al agendarla, no al cerrarla. Lo que puede aparecer después es el
-  // recargo por retiro tarde, y ese no nace solo — lo decide Administración.
-  //
-  // Con plan el total es cero: el pack ya cubrió el día y lo único que pasó
-  // al agendar fue descontarlo del saldo.
-  const total = previa.cotizacion.total;
-  const pago =
-    total > 0
-      ? await repo.pagos.crear({
-          clienteId: perro.clienteId,
-          concepto: "dia_suelto",
-          referenciaId: estadia.id,
-          monto: total,
-          estado: "pendiente",
-          emitidoEn: ahora,
-        })
-      : null;
 
   return { estadia, planUsado, pago };
 }
@@ -702,61 +673,18 @@ export async function comprarEnTienda(
   items: ItemDeCarrito[],
   ahora: InstanteISO = new Date().toISOString(),
 ): Promise<{ orden: OrdenTienda; pago: Pago; ajustados: string[] }> {
-  const productos = await repo.productos.listar();
-  const ajustados: string[] = [];
-  const lineas = [];
-
-  for (const item of items) {
-    const producto = productos.find((p) => p.id === item.productoId);
-    if (!producto || producto.stock === 0) {
-      if (producto) ajustados.push(`${producto.nombre} quedó sin stock.`);
-      continue;
-    }
-
-    const cantidad = Math.min(item.cantidad, producto.stock);
-    if (cantidad < item.cantidad) {
-      ajustados.push(
-        `De ${producto.nombre} quedaban ${producto.stock}: se cobraron esos.`,
-      );
-    }
-
-    lineas.push({
-      productoId: producto.id,
-      nombre: producto.nombre,
-      cantidad,
-      precioUnitario: producto.precio,
-    });
-    await repo.productos.ajustarStock(producto.id, -cantidad);
-  }
-
-  if (lineas.length === 0) {
+  // Todo junto en `repo.agenda`: el precio lo pone la vitrina, lo que no
+  // alcanza se ajusta y se avisa, y la orden nace PENDIENTE como todo lo
+  // demás. Antes nacía "pagada" por un Webpay que no existe —y en la nube
+  // la base rechazaba ese cobro con el stock ya descontado—; y el dueño
+  // descontaba stock a mano, que era por donde un script vaciaba la tienda.
+  try {
+    return await repo.agenda.comprarEnTienda(clienteId, items, ahora);
+  } catch (error) {
     throw new ReservaRechazada("No pudimos cerrar la compra.", [
-      "Ninguno de los productos tiene stock.",
+      error instanceof Error ? error.message : String(error),
     ]);
   }
-
-  const total = lineas.reduce((s, l) => s + l.precioUnitario * l.cantidad, 0);
-
-  const orden = await repo.ordenes.crear({
-    clienteId,
-    items: lineas,
-    total,
-    estado: "pagada",
-    creadaEn: ahora,
-  });
-
-  const pago = await repo.pagos.crear({
-    clienteId,
-    concepto: "tienda",
-    referenciaId: orden.id,
-    monto: total,
-    estado: "pagado",
-    metodo: "webpay",
-    emitidoEn: ahora,
-    pagadoEn: ahora,
-  });
-
-  return { orden, pago, ajustados };
 }
 
 /**

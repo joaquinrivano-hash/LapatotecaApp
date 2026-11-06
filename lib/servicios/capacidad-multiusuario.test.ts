@@ -333,20 +333,20 @@ describe("varios dueños nuevos agendando el mismo día", () => {
  * que entre otro: dos dueños que aprietan "confirmar" en el mismo instante
  * cotizan los dos contra la misma casa, los dos ven cupo, y los dos entran.
  *
- * No es un descuido de la capa de servicios: es que la capacidad se revisa
- * en la app y no en la base, igual que el monto (ver "Lo que RLS no puede
- * cuidar" en CLAUDE.md). Ninguna política de RLS puede contar franjas, así
- * que mientras la cotización viva en el navegador la ventana existe, y es
- * del tamaño de una ida y vuelta a Supabase.
+ * Esto describe al PROTOTIPO, que es sobre lo que corre este archivo: el
+ * repositorio local no tiene candado, así que la ventana existe ahí.
  *
- * Hoy está acotado: la casa llega a 25 pocos días al año y el calendario
- * muestra el pico de verdad, así que un día sobrevendido se ve. El arreglo
- * es el mismo que ya está anotado para el monto —una función en la base que
- * verifique capacidad e inserte en la misma transacción— y el día que se
- * haga, **este test tiene que caer**: cambia el `toBeGreaterThan` por el
- * `toBeLessThanOrEqual` que está al lado y queda afirmando lo correcto.
+ * En la nube ya no. Desde `20261106120000_lo_que_el_dueno_no_se_salta.sql`
+ * el cupo lo cuenta la base, bajo un candado de transacción
+ * (`lo_que_cuida_la_casa`): dos dueños confirmando en el mismo instante
+ * entran uno después del otro, y el segundo ve lo que agendó el primero.
+ * Lo prueba `supabase/pruebas/aislamiento.sh` ("el perro 26 no entra").
+ *
+ * Se deja el test porque documenta un límite real del modo demo, y porque
+ * si algún día la gemela local gana el candado, tiene que caer y cambiarse
+ * por el `toBeLessThanOrEqual` que está al lado.
  */
-describe("el límite: la capacidad se revisa en la app, no en la base", () => {
+describe("el límite del prototipo: sin candado, los simultáneos se pasan", () => {
   it("dos dueños confirmando en el mismo instante se pueden pasar", async () => {
     const perros = [];
     for (let i = 0; i < MAXIMO + 5; i += 1) {

@@ -19,7 +19,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NEGOCIO } from "@/lib/config/negocio";
-import { PRECIOS } from "@/lib/config/precios";
+import { DESCUENTOS, PRECIOS } from "@/lib/config/precios";
 
 const migraciones = join(__dirname, "..", "..", "..", "supabase", "migrations");
 const SQL = readdirSync(migraciones)
@@ -28,7 +28,7 @@ const SQL = readdirSync(migraciones)
   .map((archivo) => readFileSync(join(migraciones, archivo), "utf8"))
   .join("\n");
 
-const FUENTES: Record<string, unknown> = { NEGOCIO, PRECIOS };
+const FUENTES: Record<string, unknown> = { NEGOCIO, PRECIOS, DESCUENTOS };
 
 /** `NEGOCIO.diaDePrueba.horasParaCancelarSinCosto` → 24 */
 function valorEnConfig(ruta: string): unknown {
@@ -42,7 +42,7 @@ function valorEnConfig(ruta: string): unknown {
 
 const GEMELAS = [
   ...SQL.matchAll(
-    /--\s*((?:NEGOCIO|PRECIOS)\.[\w.]+)\s*\n\s*\w+\s+constant\s+\w+\s*:=\s*(true|false|[\d.]+)\s*;/g,
+    /--\s*((?:NEGOCIO|PRECIOS|DESCUENTOS)\.[\w.]+)\s*\n\s*\w+\s+constant\s+\w+\s*:=\s*(true|false|[\d.]+)\s*;/g,
   ),
 ].map(([, ruta, valor]) => ({
   ruta,
@@ -66,6 +66,31 @@ describe("reglas escritas en la base", () => {
         "PRECIOS.planes.tramosPorDia.0.hastaDias",
         "PRECIOS.planes.tramosPorDia.0.precioPorDia",
         "PRECIOS.planes.tramosPorDia.1.precioPorDia",
+        // 20261106120000_lo_que_el_dueno_no_se_salta
+        "NEGOCIO.admision.pesoMaximoKg",
+        "NEGOCIO.admision.mesesParaExigirCastracion",
+        "NEGOCIO.capacidad.maximoSimultaneo",
+        "NEGOCIO.agenda.diasMaximosDeAnticipacion",
+        "NEGOCIO.diaDePrueba.maximoPorBloque",
+        "NEGOCIO.jardin.horasJornadaCorta",
+        "NEGOCIO.jardin.horasJornadaMedia",
+        "NEGOCIO.hotel.horasPorBloque",
+        "NEGOCIO.hotel.horasToleranciaCheckout",
+        "NEGOCIO.hotel.nochesParaDescuento10",
+        "NEGOCIO.hotel.nochesParaDescuento15",
+        "NEGOCIO.hotel.fraccionAbono",
+        "NEGOCIO.tienda.ordenesSinPagarMaximas",
+        "PRECIOS.jardin.jornadaCorta",
+        "PRECIOS.jardin.jornadaMedia",
+        "PRECIOS.jardin.jornadaLarga",
+        "PRECIOS.hotel.bloque24h",
+        "PRECIOS.hotel.horaExtra",
+        "PRECIOS.hotel.paseo",
+        "PRECIOS.hotel.paseoCorto",
+        "DESCUENTOS.segundoPerro",
+        "DESCUENTOS.hotelDesde7Noches",
+        "DESCUENTOS.hotelDesde14Noches",
+        "DESCUENTOS.hotelConPlanDeJardin",
       ]),
     );
   });

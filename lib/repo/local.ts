@@ -701,11 +701,14 @@ export function crearRepositorioLocal(
   );
   const planes = new PlanesLocal(ctx, "plan", (d) => d.planes);
   const pagos = new PagosLocal(ctx, "pago", (d) => d.pagos);
+  const reservasHotel = new ReservasHotelLocal(ctx, "res", (d) => d.reservasHotel);
+  const productos = new ProductosLocal(ctx, "prod", (d) => d.productos);
+  const ordenes = new OrdenesLocal(ctx, "orden", (d) => d.ordenes);
 
   return {
     clientes: new ClientesLocal(ctx, "cli", (d) => d.clientes),
     perros,
-    reservasHotel: new ReservasHotelLocal(ctx, "res", (d) => d.reservasHotel),
+    reservasHotel,
     estadiasJardin,
     planes,
     suscripciones: new SuscripcionesLocal(ctx, "susc", (d) => d.suscripciones),
@@ -716,14 +719,22 @@ export function crearRepositorioLocal(
       "cuenta",
       (d) => d.cuentasMensuales,
     ),
-    productos: new ProductosLocal(ctx, "prod", (d) => d.productos),
-    ordenes: new OrdenesLocal(ctx, "orden", (d) => d.ordenes),
+    productos,
+    ordenes,
     reportes: new ReportesLocal(ctx, "rep", (d) => d.reportes),
     incidentes: new IncidentesLocal(ctx, "inc", (d) => d.incidentes),
     mensajes: new MensajesLocal(ctx, "msg", (d) => d.mensajes),
     turnos: new TurnosLocal(ctx, "turno", (d) => d.turnos ?? []),
     notificaciones: new NotificacionesLocal(ctx, "avi", (d) => d.notificaciones),
-    agenda: crearAgendaLocal({ estadiasJardin, pagos, perros, planes }),
+    agenda: crearAgendaLocal({
+      estadiasJardin,
+      pagos,
+      perros,
+      planes,
+      reservasHotel,
+      productos,
+      ordenes,
+    }),
     configuracion,
     equipo,
     sistema,

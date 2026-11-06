@@ -420,8 +420,33 @@ describe("tienda", () => {
     ]);
 
     expect(orden.total).toBe(15_980);
-    expect(pago.estado).toBe("pagado");
+    // Nace pendiente como todo lo demás: se transfiere y Administración la
+    // marca pagada. Antes nacía "pagada" por un Webpay que no existe.
+    expect(orden.estado).toBe("pendiente");
+    expect(pago.estado).toBe("pendiente");
+    expect(pago.concepto).toBe("tienda");
     expect((await repo.productos.obtener("prod-001"))!.stock).toBe(1);
+  });
+
+  // Un script podía vaciar la vitrina con órdenes que nadie paga. Con tres
+  // sin pagar, la siguiente espera a que se concilie alguna.
+  it("con tres compras sin pagar, la cuarta espera", async () => {
+    montar({ productos: [{ ...PRODUCTO, stock: 50 }] });
+    for (let i = 0; i < NEGOCIO.tienda.ordenesSinPagarMaximas; i += 1) {
+      await comprarEnTienda(repo, CLIENTE.id, [
+        { productoId: "prod-001", cantidad: 1 },
+      ]);
+    }
+
+    const rechazo = await comprarEnTienda(repo, CLIENTE.id, [
+      { productoId: "prod-001", cantidad: 1 },
+    ]).catch((e) => e);
+
+    expect(rechazo).toBeInstanceOf(ReservaRechazada);
+    expect((rechazo as ReservaRechazada).motivos.join(" ")).toContain("pendientes de pago");
+    expect((await repo.productos.obtener("prod-001"))!.stock).toBe(
+      50 - NEGOCIO.tienda.ordenesSinPagarMaximas,
+    );
   });
 
   it("si no alcanza el stock compra lo que hay y lo avisa", async () => {
@@ -779,5 +804,90 @@ describe("agendar servicios", () => {
     );
 
     expect(agendados.map((s) => s.fechaHora)).toEqual([en("09:00"), en("17:00")]);
+  });
+});
+
+
+/**
+ * El precio lo pone la regla, no el que llama.
+ *
+ * `repo.agenda` recibe la cotización que vio el dueño y la compara con la
+ * suya: si no calzan, rechaza. Es la gemela local de lo que hace la base, y
+ * lo que impide que una cotización tocada en el camino se convierta en un
+ * cobro de $0.
+ */
+describe("la agenda no acepta una cotización tocada", () => {
+  const horario = { fecha: LUNES, inicio: en("08:00"), fin: en("18:00") };
+
+  it("un día suelto a otro precio no calza", async () => {
+    const buena = await cotizarDiaJardin(repo, { perroId: "perro-001", fecha: LUNES });
+
+    await expect(
+      repo.agenda.agendarDiaSuelto(
+        "perro-001",
+        horario,
+        { ...buena.cotizacion, total: 0 },
+        ANTES,
+      ),
+    ).rejects.toThrow("no calza");
+    expect(await repo.pagos.listar()).toEqual([]);
+  });
+
+  it("y al precio de la regla sí entra, con su cobro", async () => {
+    const buena = await cotizarDiaJardin(repo, { perroId: "perro-001", fecha: LUNES });
+
+    const { estadia, pago } = await repo.agenda.agendarDiaSuelto(
+      "perro-001",
+      horario,
+      buena.cotizacion,
+      ANTES,
+    );
+
+    expect(estadia.estado).toBe("esperada");
+    expect(pago.monto).toBe(buena.cotizacion.total);
+    expect(pago.estado).toBe("pendiente");
+  });
+
+  it("una reserva de hotel con el abono tocado no calza", async () => {
+    const pedido = {
+      inicio: en("10:00"),
+      fin: en("10:00", "2026-06-18"),
+      paseosContratados: 0,
+      paseosCortosContratados: 0,
+    };
+    const buena = await cotizarReservaHotel(repo, { perroId: "perro-001", ...pedido });
+
+    await expect(
+      repo.agenda.reservarHotel(
+        "perro-001",
+        pedido,
+        { ...buena.cotizacion, abono: 1 },
+        ANTES,
+      ),
+    ).rejects.toThrow("no calza");
+    expect(await repo.reservasHotel.listar()).toEqual([]);
+  });
+
+  it("un segundo perro cancelado ya no descuenta", async () => {
+    // La hermana tenía el día y lo canceló: no es un perro comprometido.
+    montar({
+      perros: [perro(), perro({ id: "perro-002", nombre: "Chispa" })],
+      estadiasJardin: [
+        {
+          id: "hermana",
+          clienteId: CLIENTE.id,
+          perroId: "perro-002",
+          fecha: LUNES,
+          inicioProgramado: en("08:00"),
+          finProgramado: en("18:00"),
+          origen: "dia_suelto",
+          estado: "cancelada",
+          creadaEn: ANTES,
+        },
+      ],
+    });
+
+    const c = await cotizarDiaJardin(repo, { perroId: "perro-001", fecha: LUNES });
+    expect(c.cotizacion.descuentos).toEqual([]);
   });
 });
