@@ -50,13 +50,14 @@ import type {
 } from "@/lib/types";
 
 const COMIDAS: Comida[] = ["desayuno", "almuerzo", "cena"];
-const UNIDADES: UnidadRacion[] = ["medida", "g", "taza"];
+const UNIDADES: UnidadRacion[] = ["medida", "g", "taza", "otra"];
 
 /** Cómo se llama cada medida en el selector. */
 const NOMBRE_UNIDAD: Record<UnidadRacion, string> = {
   medida: "medida",
   g: "gramos",
   taza: "taza",
+  otra: "Otra",
 };
 
 /** "Cuántas tazas" pero "Cuántos gramos": la taza es femenina. */
@@ -64,6 +65,9 @@ const CUANTOS: Record<UnidadRacion, string> = {
   medida: "Cuántas medidas",
   g: "Cuántos gramos",
   taza: "Cuántas tazas",
+  // La escribe el dueño, así que no sabemos su género: "cuánto" sirve para
+  // sobres, latas y puñados por igual.
+  otra: "Cuánto",
 };
 
 /** El artículo lo pide la comida: "en el desayuno" pero "en la cena". */
@@ -94,6 +98,7 @@ export interface EstadoPerro {
     marca: string;
     /** `null` = todavía no eligió la medida, que es el primer paso. */
     unidad: UnidadRacion | null;
+    unidadOtra: string;
     raciones: { cantidad: string; comidas: Comida[] }[];
     notas: string;
     noComePellet: boolean;
@@ -125,6 +130,7 @@ export function estadoVacio(): EstadoPerro {
     alimentacion: {
       marca: "",
       unidad: null,
+      unidadOtra: "",
       raciones: [],
       notas: "",
       noComePellet: false,
@@ -165,6 +171,7 @@ export function estadoDesde(perro: Perro): EstadoPerro {
     alimentacion: {
       marca: perro.alimentacion?.marca ?? "",
       unidad: perro.alimentacion?.unidad ?? null,
+      unidadOtra: perro.alimentacion?.unidadOtra ?? "",
       // Una ración vieja podía cubrir varias comidas de una vez; ahora cada
       // comida trae la suya, así que al cargar se abren. Es sin pérdida: la
       // misma cantidad queda repetida en cada comida que tenía.
@@ -230,6 +237,7 @@ export function aBorrador(estado: EstadoPerro): BorradorDePerro {
     alimentacion: {
       marca: estado.alimentacion.marca.trim() || undefined,
       unidad: estado.alimentacion.unidad ?? undefined,
+      unidadOtra: estado.alimentacion.unidadOtra.trim() || undefined,
       // Una ración en blanco no se guarda: es la fila que la pantalla muestra
       // siempre, no algo que el dueño haya escrito.
       raciones: estado.alimentacion.raciones
@@ -589,6 +597,10 @@ export function FormularioPerro({
               onUnidad={(unidad) =>
                 cambiar({ alimentacion: { ...estado.alimentacion, unidad } })
               }
+              unidadOtra={estado.alimentacion.unidadOtra}
+              onUnidadOtra={(unidadOtra) =>
+                cambiar({ alimentacion: { ...estado.alimentacion, unidadOtra } })
+              }
               raciones={estado.alimentacion.raciones}
               onCambio={(raciones) =>
                 cambiar({ alimentacion: { ...estado.alimentacion, raciones } })
@@ -834,11 +846,15 @@ function Marca({
 function Comidas({
   unidad,
   onUnidad,
+  unidadOtra,
+  onUnidadOtra,
   raciones,
   onCambio,
 }: {
   unidad: UnidadRacion | null;
   onUnidad: (unidad: UnidadRacion) => void;
+  unidadOtra: string;
+  onUnidadOtra: (texto: string) => void;
   raciones: { cantidad: string; comidas: Comida[] }[];
   onCambio: (raciones: { cantidad: string; comidas: Comida[] }[]) => void;
 }) {
@@ -923,6 +939,16 @@ function Comidas({
                   />
                 )}
 
+                {comida === primeraElegida && unidad === "otra" && (
+                  <Campo
+                    id="comida-unidad-otra"
+                    etiqueta="¿Con qué la miden?"
+                    valor={unidadOtra}
+                    onCambio={onUnidadOtra}
+                    ayuda="Ej: sobres, latas, puñados. Escríbelo en plural."
+                  />
+                )}
+
                 {/* La medida es un objeto suyo, no uno nuestro: sin el
                     aviso, el equipo se queda sin saber cuánto servir el
                     primer día. */}
@@ -934,6 +960,7 @@ function Comidas({
                 )}
 
                 {unidad &&
+                  (unidad !== "otra" || unidadOtra.trim() !== "") &&
                   (escribeAqui ? (
                     <Campo
                       id={`comida-cantidad-${comida}`}

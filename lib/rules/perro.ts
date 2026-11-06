@@ -281,6 +281,8 @@ export const ETIQUETA_UNIDAD: Record<UnidadRacion, { una: string; varias: string
     medida: { una: "medida", varias: "medidas" },
     g: { una: "g", varias: "g" },
     taza: { una: "taza", varias: "tazas" },
+    // La escribe el dueño, así que no se pluraliza: se usa tal cual.
+    otra: { una: "", varias: "" },
   };
 
 /**
@@ -307,7 +309,9 @@ export function describirAlimentacion(
   }
 
   const raciones = (alimentacion.raciones ?? [])
-    .map((racion) => describirRacion(racion, alimentacion.unidad))
+    .map((racion) =>
+      describirRacion(racion, alimentacion.unidad, alimentacion.unidadOtra),
+    )
     .filter((texto): texto is string => texto !== null);
 
   if (raciones.length > 0) partesTexto.push(raciones.join(", "));
@@ -330,10 +334,11 @@ export function describirAlimentacion(
 function describirRacion(
   racion: Racion,
   unidad: UnidadRacion | undefined,
+  unidadOtra?: string,
 ): string | null {
   const medida =
     racion.cantidad && unidad
-      ? `${formatearCantidad(racion.cantidad)} ${pluralizarUnidad(racion.cantidad, unidad)}`
+      ? `${formatearCantidad(racion.cantidad)} ${pluralizarUnidad(racion.cantidad, unidad, unidadOtra)}`
       : null;
 
   const cuando =
@@ -350,7 +355,14 @@ function describirRacion(
  *
  * Media taza va en singular: "½ tazas" no lo dice nadie.
  */
-function pluralizarUnidad(cantidad: number, unidad: UnidadRacion): string {
+function pluralizarUnidad(
+  cantidad: number,
+  unidad: UnidadRacion,
+  unidadOtra?: string,
+): string {
+  // Lo que escribió el dueño va tal cual: no sabemos su género ni su
+  // plural, y "2 sobrees" es peor que repetir su palabra.
+  if (unidad === "otra") return unidadOtra?.trim() ?? "";
   const etiqueta = ETIQUETA_UNIDAD[unidad];
   return cantidad <= 1 ? etiqueta.una : etiqueta.varias;
 }

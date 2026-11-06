@@ -101,7 +101,12 @@ export type Comida = "desayuno" | "almuerzo" | "cena";
  * "medida" es el medidor que viene en el saco, que es como lo dice la gente;
  * antes se llamaba "scoop" y nadie en Chile pide un scoop de comida.
  */
-export type UnidadRacion = "medida" | "g" | "taza";
+/**
+ * Con qué se mide la porción. "otra" la escribe el dueño: ninguna lista
+ * cubre todo —hay quien mide en sobres, en latas o en puñados— y quedarse
+ * fuera de la lista no puede dejar la ficha a medias.
+ */
+export type UnidadRacion = "medida" | "g" | "taza" | "otra";
 
 /**
  * Una ración: cuánto come y en qué comidas de esas.
@@ -131,6 +136,8 @@ export interface Racion {
 export interface Alimentacion {
   marca?: string;
   unidad?: UnidadRacion;
+  /** Solo con `unidad: "otra"`: cómo la llama el dueño. */
+  unidadOtra?: string;
   raciones: Racion[];
   notas?: string;
   /**
