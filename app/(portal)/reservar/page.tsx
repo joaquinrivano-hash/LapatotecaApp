@@ -393,71 +393,91 @@ function ComprarPlan({ perro }: { perro: Perro }) {
           pasan al mes siguiente.
         </p>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label>¿Cuántos días al mes?</Label>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Un día menos"
-              disabled={dias <= NEGOCIO.planes.minimoDias}
-              onClick={() => setDias((d) => Math.max(NEGOCIO.planes.minimoDias, d - 1))}
-            >
-              <Minus />
-            </Button>
-            <span className="font-display min-w-12 text-center text-2xl font-bold tabular-nums">
-              {dias}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Un día más"
-              onClick={() => setDias((d) => Math.min(22, d + 1))}
-            >
-              <Plus />
-            </Button>
-            <span className="text-muted-foreground ml-auto text-sm">
+      <CardContent>
+        {/* Son DOS alternativas, no un plan con un agregado abajo: el pase
+            libre REEMPLAZA al pack por días, no lo complementa. Apiladas se
+            leían como "el plan" y "algo más"; lado a lado, con la misma
+            forma y cada una con su propio botón, la pregunta que queda es
+            cuál de las dos, que es la correcta.
+
+            El ámbar es el color de dato de la marca y acá separa la segunda
+            opción sin competir con el fucsia, que es el de acción. Lleva
+            texto marino, nunca blanco. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="border-border flex flex-col gap-3 rounded-2xl border-2 p-4">
+            <div>
+              <p className="font-display text-lg font-bold">Por días</p>
+              <Label className="text-muted-foreground font-normal">
+                ¿Cuántos días al mes?
+              </Label>
+            </div>
+
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Un día menos"
+                disabled={dias <= NEGOCIO.planes.minimoDias}
+                onClick={() =>
+                  setDias((d) => Math.max(NEGOCIO.planes.minimoDias, d - 1))
+                }
+              >
+                <Minus />
+              </Button>
+              <span className="font-display min-w-12 text-center text-2xl font-bold tabular-nums">
+                {dias}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Un día más"
+                onClick={() => setDias((d) => Math.min(22, d + 1))}
+              >
+                <Plus />
+              </Button>
+            </div>
+            <p className="text-muted-foreground text-center text-sm">
               {formatearCLP(precioDelTramo(dias))} por día
-            </span>
+            </p>
+
+            <Button
+              size="lg"
+              disabled={ocupado}
+              onClick={() => comprar("dias")}
+              className="mt-auto w-full flex-col gap-0 py-3"
+            >
+              <span>Plan de {dias} días</span>
+              <span className="text-sm font-normal opacity-90">
+                {formatearCLP(precio)}
+              </span>
+            </Button>
+          </div>
+
+          <div className="border-accent bg-accent/15 flex flex-col gap-3 rounded-2xl border-2 p-4">
+            <div>
+              <p className="font-display text-lg font-bold">Pase libre</p>
+              <p className="text-muted-foreground text-sm text-pretty">
+                Asistencia libre todos los días hábiles, con tope a las{" "}
+                {NEGOCIO.jardin.horaCierre}:00.
+              </p>
+            </div>
+
+            <p className="font-display text-center text-2xl font-bold tabular-nums">
+              {formatearCLP(PRECIOS.planes.paseLibre)}
+              <span className="block text-sm font-normal">al mes</span>
+            </p>
+
+            <Button
+              variant="accent"
+              size="lg"
+              disabled={ocupado}
+              onClick={() => comprar("pase_libre")}
+              className="mt-auto w-full"
+            >
+              Comprar pase libre
+            </Button>
           </div>
         </div>
-
-        <Button
-          size="xl"
-          disabled={ocupado}
-          onClick={() => comprar("dias")}
-          className="w-full flex-col gap-0 py-3"
-        >
-          <span>Plan de {dias} días</span>
-          <span className="text-sm font-normal opacity-90">
-            {formatearCLP(precio)}
-          </span>
-        </Button>
-
-        {/* El pase libre va abajo y aparte: no es un plan más de la lista,
-            es el que los reemplaza a todos. Al lado del otro, en el mismo
-            tamaño, se leía como la segunda de dos opciones iguales.
-
-            El ámbar es el color de dato de la marca y acá hace de destaque
-            sin competir con el fucsia, que es el color de acción. */}
-        <button
-          type="button"
-          disabled={ocupado}
-          onClick={() => comprar("pase_libre")}
-          className="bg-accent text-foreground w-full rounded-2xl px-4 py-4 text-left transition-opacity disabled:opacity-60"
-        >
-          <span className="font-display flex items-baseline justify-between gap-3 text-lg font-bold">
-            Pase libre
-            <span className="text-base tabular-nums">
-              {formatearCLP(PRECIOS.planes.paseLibre)} al mes
-            </span>
-          </span>
-          <span className="mt-0.5 block text-sm text-pretty opacity-80">
-            Asistencia libre todos los días hábiles, con tope a las{" "}
-            {NEGOCIO.jardin.horaCierre}:00.
-          </span>
-        </button>
       </CardContent>
     </Card>
   );
