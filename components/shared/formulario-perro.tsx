@@ -98,7 +98,7 @@ export interface EstadoPerro {
     marca: string;
     /** `null` = todavía no eligió la medida, que es el primer paso. */
     unidad: UnidadRacion | null;
-    unidadOtra: string;
+    queCome: string;
     raciones: { cantidad: string; comidas: Comida[] }[];
     notas: string;
     noComePellet: boolean;
@@ -130,7 +130,7 @@ export function estadoVacio(): EstadoPerro {
     alimentacion: {
       marca: "",
       unidad: null,
-      unidadOtra: "",
+      queCome: "",
       raciones: [],
       notas: "",
       noComePellet: false,
@@ -171,7 +171,7 @@ export function estadoDesde(perro: Perro): EstadoPerro {
     alimentacion: {
       marca: perro.alimentacion?.marca ?? "",
       unidad: perro.alimentacion?.unidad ?? null,
-      unidadOtra: perro.alimentacion?.unidadOtra ?? "",
+      queCome: perro.alimentacion?.queCome ?? "",
       // Una ración vieja podía cubrir varias comidas de una vez; ahora cada
       // comida trae la suya, así que al cargar se abren. Es sin pérdida: la
       // misma cantidad queda repetida en cada comida que tenía.
@@ -237,7 +237,7 @@ export function aBorrador(estado: EstadoPerro): BorradorDePerro {
     alimentacion: {
       marca: estado.alimentacion.marca.trim() || undefined,
       unidad: estado.alimentacion.unidad ?? undefined,
-      unidadOtra: estado.alimentacion.unidadOtra.trim() || undefined,
+      queCome: estado.alimentacion.queCome.trim() || undefined,
       // Una ración en blanco no se guarda: es la fila que la pantalla muestra
       // siempre, no algo que el dueño haya escrito.
       raciones: estado.alimentacion.raciones
@@ -597,9 +597,9 @@ export function FormularioPerro({
               onUnidad={(unidad) =>
                 cambiar({ alimentacion: { ...estado.alimentacion, unidad } })
               }
-              unidadOtra={estado.alimentacion.unidadOtra}
-              onUnidadOtra={(unidadOtra) =>
-                cambiar({ alimentacion: { ...estado.alimentacion, unidadOtra } })
+              queCome={estado.alimentacion.queCome}
+              onQueCome={(queCome) =>
+                cambiar({ alimentacion: { ...estado.alimentacion, queCome } })
               }
               raciones={estado.alimentacion.raciones}
               onCambio={(raciones) =>
@@ -607,28 +607,7 @@ export function FormularioPerro({
               }
             />
 
-            <Marca
-              activa={estado.alimentacion.noComePellet}
-              onCambio={(noComePellet) =>
-                cambiar({
-                  alimentacion: { ...estado.alimentacion, noComePellet },
-                })
-              }
-            >
-              No come pellet
-            </Marca>
-
-            <Campo
-              id="comida-mezclar"
-              etiqueta="Mezclar con:"
-              valor={estado.alimentacion.mezclarCon}
-              onCambio={(mezclarCon) =>
-                cambiar({ alimentacion: { ...estado.alimentacion, mezclarCon } })
-              }
-              ayuda="ej. 133 g de lata, 1 sobre, 30 g de carne"
-            />
-
-            {!estado.alimentacion.noComePellet && comidaServida && (
+            {comidaServida && (
               <ConOtra
                 id="comida-marca"
                 etiqueta="¿Qué marca come?"
@@ -649,7 +628,7 @@ export function FormularioPerro({
               onCambio={(notas) =>
                 cambiar({ alimentacion: { ...estado.alimentacion, notas } })
               }
-              ayuda="Ej: si no come al almuerzo, no insistir."
+              ayuda="Ej: mezclar con agua, combinar con medio sobre, si no come al almuerzo no insistir."
             />
           </>
         )}
@@ -846,15 +825,15 @@ function Marca({
 function Comidas({
   unidad,
   onUnidad,
-  unidadOtra,
-  onUnidadOtra,
+  queCome,
+  onQueCome,
   raciones,
   onCambio,
 }: {
   unidad: UnidadRacion | null;
   onUnidad: (unidad: UnidadRacion) => void;
-  unidadOtra: string;
-  onUnidadOtra: (texto: string) => void;
+  queCome: string;
+  onQueCome: (texto: string) => void;
   raciones: { cantidad: string; comidas: Comida[] }[];
   onCambio: (raciones: { cantidad: string; comidas: Comida[] }[]) => void;
 }) {
@@ -939,13 +918,17 @@ function Comidas({
                   />
                 )}
 
+                {/* Con "otra" no se pregunta cuánto en cada comida: el
+                    dueño lo cuenta entero acá, una vez. Pedirle además una
+                    cantidad por comida sería hacerle escribir dos veces lo
+                    mismo con la mitad de las palabras. */}
                 {comida === primeraElegida && unidad === "otra" && (
                   <Campo
-                    id="comida-unidad-otra"
-                    etiqueta="¿Con qué la miden?"
-                    valor={unidadOtra}
-                    onCambio={onUnidadOtra}
-                    ayuda="Ej: sobres, latas, puñados. Escríbelo en plural."
+                    id="comida-que-come"
+                    etiqueta="Detalla qué come"
+                    valor={queCome}
+                    onCambio={onQueCome}
+                    ayuda="Ej: un sobre de Pedigree en la mañana y medio en la noche."
                   />
                 )}
 
@@ -959,7 +942,7 @@ function Comidas({
                 )}
 
                 {unidad &&
-                  (unidad !== "otra" || unidadOtra.trim() !== "") &&
+                  unidad !== "otra" &&
                   (escribeAqui ? (
                     <Campo
                       id={`comida-cantidad-${comida}`}
@@ -980,7 +963,7 @@ function Comidas({
                     </p>
                   ))}
 
-                {comida === "desayuno" && unidad && (
+                {comida === "desayuno" && unidad && unidad !== "otra" && (
                   <Marca activa={mismo} onCambio={igualarTodas} destacada>
                     Come lo mismo el resto de las comidas
                   </Marca>

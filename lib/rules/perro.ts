@@ -281,7 +281,7 @@ export const ETIQUETA_UNIDAD: Record<UnidadRacion, { una: string; varias: string
     medida: { una: "medida", varias: "medidas" },
     g: { una: "g", varias: "g" },
     taza: { una: "taza", varias: "tazas" },
-    // La escribe el dueño, así que no se pluraliza: se usa tal cual.
+    // Con "otra" no se mide, así que nunca se pluraliza nada.
     otra: { una: "", varias: "" },
   };
 
@@ -309,10 +309,12 @@ export function describirAlimentacion(
   }
 
   const raciones = (alimentacion.raciones ?? [])
-    .map((racion) =>
-      describirRacion(racion, alimentacion.unidad, alimentacion.unidadOtra),
-    )
+    .map((racion) => describirRacion(racion, alimentacion.unidad))
     .filter((texto): texto is string => texto !== null);
+
+  // Lo que escribió el dueño va antes del cuándo: "dos sobres grandes · en
+  // desayuno y cena" se lee como una frase.
+  if (alimentacion.queCome?.trim()) partesTexto.push(alimentacion.queCome.trim());
 
   if (raciones.length > 0) partesTexto.push(raciones.join(", "));
 
@@ -334,11 +336,12 @@ export function describirAlimentacion(
 function describirRacion(
   racion: Racion,
   unidad: UnidadRacion | undefined,
-  unidadOtra?: string,
 ): string | null {
+  // Con "otra" no hay medida: lo que come lo cuenta `queCome`, y la ración
+  // solo aporta cuándo.
   const medida =
-    racion.cantidad && unidad
-      ? `${formatearCantidad(racion.cantidad)} ${pluralizarUnidad(racion.cantidad, unidad, unidadOtra)}`
+    racion.cantidad && unidad && unidad !== "otra"
+      ? `${formatearCantidad(racion.cantidad)} ${pluralizarUnidad(racion.cantidad, unidad)}`
       : null;
 
   const cuando =
@@ -355,14 +358,7 @@ function describirRacion(
  *
  * Media taza va en singular: "½ tazas" no lo dice nadie.
  */
-function pluralizarUnidad(
-  cantidad: number,
-  unidad: UnidadRacion,
-  unidadOtra?: string,
-): string {
-  // Lo que escribió el dueño va tal cual: no sabemos su género ni su
-  // plural, y "2 sobrees" es peor que repetir su palabra.
-  if (unidad === "otra") return unidadOtra?.trim() ?? "";
+function pluralizarUnidad(cantidad: number, unidad: UnidadRacion): string {
   const etiqueta = ETIQUETA_UNIDAD[unidad];
   return cantidad <= 1 ? etiqueta.una : etiqueta.varias;
 }
