@@ -954,8 +954,7 @@ function Comidas({
                     primer día. */}
                 {comida === primeraElegida && unidad === "medida" && (
                   <p className="border-accent bg-accent/15 rounded-xl border-l-4 px-3 py-2 text-xs text-pretty">
-                    Acuérdate de traernos la medida a La Patoteca: sin ella no
-                    sabemos cuánto servirle.
+                    Acuérdate de traernos la medida a La Patoteca.
                   </p>
                 )}
 
