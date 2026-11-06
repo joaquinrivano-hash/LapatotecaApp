@@ -582,10 +582,13 @@ export function FormularioPerro({
 
         {estado.alimentacion.comeAca === true && (
           <>
-            {/* Las comidas van antes que la medida: primero cuándo come, y
-                cada comida elegida abre la suya. Hay perros que desayunan
-                media taza y cenan una entera. */}
+            {/* Las tres comidas, una debajo de otra, con su cantidad
+                adentro. La medida se pregunta en la primera que elija. */}
             <Comidas
+              unidad={estado.alimentacion.unidad}
+              onUnidad={(unidad) =>
+                cambiar({ alimentacion: { ...estado.alimentacion, unidad } })
+              }
               raciones={estado.alimentacion.raciones}
               onCambio={(raciones) =>
                 cambiar({ alimentacion: { ...estado.alimentacion, raciones } })
@@ -602,37 +605,6 @@ export function FormularioPerro({
             >
               No come pellet
             </Marca>
-
-            {!estado.alimentacion.noComePellet &&
-              estado.alimentacion.raciones.length > 0 && (
-                <>
-                  <Opciones
-                    etiqueta="¿Con qué se mide su porción?"
-                    opciones={UNIDADES.map((valor) => ({
-                      valor,
-                      texto: NOMBRE_UNIDAD[valor],
-                    }))}
-                    elegida={estado.alimentacion.unidad}
-                    onElegir={(unidad) =>
-                      cambiar({
-                        alimentacion: { ...estado.alimentacion, unidad },
-                      })
-                    }
-                  />
-
-                  {estado.alimentacion.unidad && (
-                    <Porciones
-                      unidad={estado.alimentacion.unidad}
-                      raciones={estado.alimentacion.raciones}
-                      onCambio={(raciones) =>
-                        cambiar({
-                          alimentacion: { ...estado.alimentacion, raciones },
-                        })
-                      }
-                    />
-                  )}
-                </>
-              )}
 
             <Campo
               id="comida-mezclar"
@@ -829,89 +801,138 @@ function Marca({
  * abre después su propia medición, que es lo que deja anotar media taza en
  * la mañana y una entera en la noche.
  */
+/**
+ * En qué comidas come y cuánto en cada una.
+ *
+ * Las tres van una debajo de otra y no en chips: cada comida abre su propia
+ * cantidad, y en fila esas cantidades quedaban lejos de la comida a la que
+ * pertenecen. Vertical se lee como lo que es, el día del perro de la mañana
+ * a la noche.
+ *
+ * La medida se pregunta UNA vez, en la primera comida elegida: un perro no
+ * come media taza en la mañana y 200 gramos en la noche.
+ */
 function Comidas({
+  unidad,
+  onUnidad,
   raciones,
   onCambio,
 }: {
+  unidad: UnidadRacion | null;
+  onUnidad: (unidad: UnidadRacion) => void;
   raciones: { cantidad: string; comidas: Comida[] }[];
   onCambio: (raciones: { cantidad: string; comidas: Comida[] }[]) => void;
 }) {
-  const elegidas = new Set(raciones.flatMap((r) => r.comidas));
+  const cantidadDe = (comida: Comida) =>
+    raciones.find((r) => r.comidas.includes(comida))?.cantidad;
+
+  /**
+   * Arranca marcado si todas las comidas elegidas comen lo mismo, que es el
+   * caso normal: así quien vuelve a su ficha la ve como la dejó y no con
+   * tres campos repitiendo el mismo número.
+   */
+  const [mismo, setMismo] = useState(() => {
+    const cantidades = raciones.map((r) => r.cantidad);
+    return cantidades.length > 1 && new Set(cantidades).size === 1;
+  });
+
+  /** Siempre en el orden del día: la ficha se lee de la mañana a la noche. */
+  const ordenar = (rs: { cantidad: string; comidas: Comida[] }[]) =>
+    COMIDAS.flatMap((c) => rs.filter((r) => r.comidas.includes(c)));
 
   const alternar = (comida: Comida) => {
-    if (elegidas.has(comida)) {
-      onCambio(raciones.filter((r) => !r.comidas.includes(comida)));
+    if (cantidadDe(comida) !== undefined) {
+      const quedan = raciones.filter((r) => !r.comidas.includes(comida));
+      onCambio(quedan);
+      // "Lo mismo que el desayuno" se cae si no queda desayuno del que
+      // copiar, o si no queda otra comida a la que copiarle.
+      if (comida === "desayuno" || quedan.length < 2) setMismo(false);
       return;
     }
-    // Se guardan en el orden del día y no en el que las tocaron: la ficha
-    // se lee de la mañana a la noche.
-    const conLaNueva = [...raciones, { cantidad: "", comidas: [comida] }];
     onCambio(
-      COMIDAS.flatMap((c) => conLaNueva.filter((r) => r.comidas.includes(c))),
+      ordenar([
+        ...raciones,
+        { cantidad: mismo ? (cantidadDe("desayuno") ?? "") : "", comidas: [comida] },
+      ]),
     );
   };
 
-  return (
-    <div className="space-y-1.5">
-      <Label>¿En qué comidas?</Label>
-      <div className="flex flex-wrap gap-1.5">
-        {COMIDAS.map((comida) => (
-          <Chip
-            key={comida}
-            activo={elegidas.has(comida)}
-            onClick={() => alternar(comida)}
-          >
-            {ETIQUETA_COMIDA[comida]}
-          </Chip>
-        ))}
-      </div>
-    </div>
-  );
-}
+  const ponerCantidad = (comida: Comida, cantidad: string) =>
+    onCambio(
+      raciones.map((r) =>
+        mismo || r.comidas.includes(comida) ? { ...r, cantidad } : r,
+      ),
+    );
 
-/**
- * Cuánto come en cada comida que eligió.
- *
- * Una medición por comida, con el nombre de la comida como etiqueta: la
- * pregunta "cuánto en el desayuno" se contesta sola, y no hay que acordarse
- * de a qué porción correspondía cuál.
- *
- * La medida es una sola para todas: un perro no come media taza en la
- * mañana y 200 gramos en la noche.
- */
-function Porciones({
-  unidad,
-  raciones,
-  onCambio,
-}: {
-  unidad: UnidadRacion;
-  raciones: { cantidad: string; comidas: Comida[] }[];
-  onCambio: (raciones: { cantidad: string; comidas: Comida[] }[]) => void;
-}) {
+  /** Marcar "lo mismo" suma las que falten y les copia la cantidad. */
+  const igualarTodas = (activo: boolean) => {
+    setMismo(activo);
+    if (!activo) return;
+    const cantidad = cantidadDe("desayuno") ?? "";
+    onCambio(ordenar(COMIDAS.map((c) => ({ cantidad, comidas: [c] }))));
+  };
+
+  const primeraElegida = COMIDAS.find((c) => cantidadDe(c) !== undefined);
+
   return (
     <div className="space-y-2">
-      {raciones.map((racion, i) => {
-        const comida = racion.comidas[0];
+      <Label>¿En qué comidas?</Label>
+      {COMIDAS.map((comida) => {
+        const cantidad = cantidadDe(comida);
+        const elegida = cantidad !== undefined;
+        // Con "lo mismo" marcado, la cantidad se escribe una vez: repetir el
+        // campo en las otras dos invita a dejarlas distintas sin querer.
+        const escribeAqui = elegida && (!mismo || comida === "desayuno");
 
         return (
-          <Campo
-            key={comida ?? i}
-            id={`comida-cantidad-${comida ?? i}`}
-            etiqueta={`¿${CUANTOS[unidad]} ${EN_LA_COMIDA[comida]}?`}
-            valor={racion.cantidad}
-            onCambio={(cantidad) =>
-              onCambio(
-                raciones.map((r, j) => (j === i ? { ...r, cantidad } : r)),
-              )
-            }
-            ayuda={ayudaDeCantidad(racion.cantidad, unidad)}
-            error={
-              racion.cantidad !== "" &&
-              parsearCantidad(racion.cantidad) === undefined
-                ? "No entendimos esa cantidad. Prueba 1, ½ o 1/2."
-                : undefined
-            }
-          />
+          <div key={comida} className="space-y-2">
+            <Marca activa={elegida} onCambio={() => alternar(comida)}>
+              <span className="capitalize">{ETIQUETA_COMIDA[comida]}</span>
+            </Marca>
+
+            {elegida && (
+              <div className="space-y-2 pl-3">
+                {comida === primeraElegida && (
+                  <Opciones
+                    etiqueta="¿Con qué se mide su porción?"
+                    opciones={UNIDADES.map((valor) => ({
+                      valor,
+                      texto: NOMBRE_UNIDAD[valor],
+                    }))}
+                    elegida={unidad}
+                    onElegir={onUnidad}
+                  />
+                )}
+
+                {unidad &&
+                  (escribeAqui ? (
+                    <Campo
+                      id={`comida-cantidad-${comida}`}
+                      etiqueta={`¿${CUANTOS[unidad]} ${EN_LA_COMIDA[comida]}?`}
+                      valor={cantidad}
+                      onCambio={(v) => ponerCantidad(comida, v)}
+                      ayuda={ayudaDeCantidad(cantidad, unidad)}
+                      error={
+                        cantidad !== "" &&
+                        parsearCantidad(cantidad) === undefined
+                          ? "No entendimos esa cantidad. Prueba 1, ½ o 1/2."
+                          : undefined
+                      }
+                    />
+                  ) : (
+                    <p className="text-muted-foreground text-xs">
+                      Lo mismo que en el desayuno.
+                    </p>
+                  ))}
+
+                {comida === "desayuno" && unidad && (
+                  <Marca activa={mismo} onCambio={igualarTodas}>
+                    Come lo mismo el resto de las comidas
+                  </Marca>
+                )}
+              </div>
+            )}
+          </div>
         );
       })}
     </div>
