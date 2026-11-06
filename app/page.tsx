@@ -33,6 +33,12 @@ interface Servicio {
   titulo: string;
   foto: string;
   alt: string;
+  /**
+   * Dónde se ancla el recorte. Las tarjetas son apaisadas y una foto
+   * vertical se recorta al centro, que en un perro sentado es el pecho:
+   * "top" deja la cara, que es lo que hace mirar la tarjeta.
+   */
+  encuadre?: string;
   bajada: string;
   /**
    * Etiqueta y monto, o etiqueta y DOS montos cuando el precio depende de
@@ -108,8 +114,9 @@ const SERVICIOS: Servicio[] = [
   {
     icono: Bath,
     titulo: "Spa",
-    foto: "/fotos/spa.jpg",
-    alt: "Perro recién bañado sentado entre flores",
+    foto: "/fotos/spa.webp",
+    encuadre: "object-top",
+    alt: "Perro con pañuelo de huellas sentado sobre una manta rosada, recién bañado",
     bajada: "Te lo entregamos limpiecito.",
     // El afiche es una matriz de pelo por tamaño, así que la tarjeta
     // también: con "precios desde" el dueño no sabe cuál es el suyo.
@@ -287,6 +294,7 @@ export default function Landing() {
                 titulo,
                 foto,
                 alt,
+                encuadre,
                 bajada,
                 columnas,
                 filas,
@@ -300,7 +308,7 @@ export default function Landing() {
                       alt={alt}
                       fill
                       sizes="(min-width: 1024px) 340px, (min-width: 768px) 45vw, 100vw"
-                      className="object-cover"
+                      className={`object-cover ${encuadre ?? ""}`}
                     />
                   </div>
                   <CardContent className="space-y-3 p-5">
