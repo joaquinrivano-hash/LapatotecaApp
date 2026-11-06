@@ -39,11 +39,12 @@ export function PoliticasDelDiaDePrueba() {
             ·
           </span>
           <span className="text-pretty">
+            {/* Solo el cargo, sin el porqué ni la devolución del resto: lo
+                pidió la dueña el 06-11. La regla no cambió —quien ya pagó y
+                cancela tarde recupera lo que pasa del cargo—, y eso se le
+                dice al cancelar, que es cuando le toca. */}
             <strong>Con menos de {horas} horas:</strong> cancelar o cambiar la
-            fecha cuesta{" "}
-            {formatearCLP(PRECIOS.cancelacionTardiaDiaDePrueba)}, porque ese
-            cupo ya no alcanza a tomarlo otro perrito. Si cancelas y ya habías
-            pagado, te devolvemos el resto.
+            fecha cuesta {formatearCLP(PRECIOS.cancelacionTardiaDiaDePrueba)}.
           </span>
         </li>
       </ul>

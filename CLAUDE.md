@@ -888,8 +888,12 @@ plata y sin que nada lo mostrara.
 
 Quien paga antes no puede salir peor parado que quien no pagó: el que no
 transfirió y cancela tarde debe $5.000, así que el que transfirió los
-$10.000 recupera $5.000. Las condiciones que se ven antes de pagar lo dicen
-así; una versión anterior decía "no hay devolución" para el aviso tardío.
+$10.000 recupera $5.000. Una versión anterior de las condiciones decía "no
+hay devolución" para el aviso tardío. Desde el 06-11, a pedido de la dueña,
+las condiciones que se ven antes de pagar dicen **solo el cargo**: "con menos
+de 24 horas, cancelar o cambiar la fecha cuesta $5.000", sin el porqué ni la
+devolución del resto. La regla es la misma; que el resto vuelve se dice al
+cancelar, en la pantalla del día de prueba, que es cuando le toca.
 
 La pantalla del día de prueba muestra la condición **antes** de cancelar,
 recalculada en el render, y si algo vuelve pide la cuenta ahí mismo con el
