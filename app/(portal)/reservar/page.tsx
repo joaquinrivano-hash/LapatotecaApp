@@ -864,25 +864,39 @@ function ServicioSpot({ perro }: { perro: Perro }) {
         )}
 
         {tipo === "spa" && (
-          <div className="grid grid-cols-2 gap-2">
-            {/* El precio del baño lo deciden el pelo y el peso. El peso ya
-                está en la ficha, así que lo único que hay que preguntar es
-                el pelo. */}
-            {(["peloCorto", "peloLargo"] as const).map((nivel) => (
-              <button
-                key={nivel}
-                type="button"
-                onClick={() => setNivelSpa(nivel)}
-                className={cn(
-                  "rounded-xl border-2 py-3 text-sm font-semibold capitalize transition-all",
-                  nivelSpa === nivel
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground",
-                )}
-              >
-                {NOMBRE_PELO[nivel]}
-              </button>
-            ))}
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              {/* El precio del baño lo deciden el pelo y el peso. El peso ya
+                  está en la ficha, así que lo único que hay que preguntar es
+                  el pelo. */}
+              {(["peloCorto", "peloLargo"] as const).map((nivel) => (
+                <button
+                  key={nivel}
+                  type="button"
+                  onClick={() => setNivelSpa(nivel)}
+                  className={cn(
+                    "rounded-xl border-2 py-3 text-sm font-semibold capitalize transition-all",
+                    nivelSpa === nivel
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground",
+                  )}
+                >
+                  {NOMBRE_PELO[nivel]}
+                </button>
+              ))}
+            </div>
+
+            {/* El pelo lo declara el dueño y se confirma con el perro acá.
+                De los dos, el corto es el único que puede subir de precio,
+                así que el aviso va solo en ese: decirlo en los dos sería
+                advertir de algo que no puede pasar. Y va ANTES de agendar,
+                no cuando llegue el cobro con una diferencia que nadie
+                mencionó. */}
+            {nivelSpa === "peloCorto" && (
+              <p className="text-muted-foreground text-sm text-pretty">
+                * Si tu perro resulta de pelo largo, se cobrará la diferencia.
+              </p>
+            )}
           </div>
         )}
 
