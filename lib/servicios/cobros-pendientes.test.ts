@@ -10,10 +10,13 @@ import type {
   EstadiaJardin,
   Perro,
   ReservaHotel,
+  ServicioAgendado,
 } from "@/lib/types";
 import {
   cobrarPendiente,
   cobrarRecargo,
+  confirmarServicio,
+  serviciosPorConfirmar,
   cobrosPendientesPorCliente,
   diasPorCobrar,
   emitirDiaDeJardin,
@@ -481,6 +484,149 @@ describe("avisarle al dueño del cobro que no pidió", () => {
 
   it("perdonar no manda nada: no hay cobro que avisar", async () => {
     await perdonarRecargo(repo, "est-001", en("21:00"));
+    expect(await repo.mensajes.listar()).toEqual([]);
+  });
+});
+
+
+/* ── Los servicios pedidos desde el portal ─────────────────────────── */
+
+describe("servicios por confirmar", () => {
+  /** Lo que deja `agendarServicio`: agendado, sin cobro y sin precio firme. */
+  function pedido(
+    id: string,
+    creadoEn: string,
+    total = 18_000,
+  ): ServicioAgendado {
+    return {
+      id,
+      clienteId: CLIENTE.id,
+      perroId: PELUSA.id,
+      tipo: "spa",
+      fechaHora: en("11:00"),
+      nivelSpa: "peloCorto",
+      estado: "por_confirmar",
+      cotizacion: {
+        lineas: [{ concepto: "Baño pelo corto", monto: total }],
+        subtotal: total,
+        descuentos: [],
+        total,
+      },
+      creadoEn,
+    };
+  }
+
+  it("lista lo que el dueño pidió y todavía no tiene precio", async () => {
+    montar({ servicios: [pedido("srv-1", en("09:00", "2026-06-12"))] });
+
+    const cola = await serviciosPorConfirmar(repo);
+
+    expect(cola).toHaveLength(1);
+    expect(cola[0].cotizado).toBe(18_000);
+    expect(cola[0].perro?.nombre).toBe("Pelusa");
+    expect(cola[0].cliente?.nombre).toBe("Javiera");
+  });
+
+  it("no lista uno que ya tiene su valor confirmado", async () => {
+    montar({
+      servicios: [
+        { ...pedido("srv-1", en("09:00", "2026-06-12")), estado: "agendado" },
+      ],
+    });
+
+    expect(await serviciosPorConfirmar(repo)).toEqual([]);
+  });
+
+  // Lo que se añeja es lo que se termina no cobrando, y acá además hay
+  // alguien esperando que le hablen.
+  it("pone primero al que lleva más tiempo esperando", async () => {
+    montar({
+      servicios: [
+        pedido("nuevo", en("09:00", "2026-06-14")),
+        pedido("viejo", en("09:00", "2026-06-11")),
+      ],
+    });
+
+    const cola = await serviciosPorConfirmar(repo);
+    expect(cola.map((c) => c.servicio.id)).toEqual(["viejo", "nuevo"]);
+  });
+
+  it("confirmar emite el cobro por el valor que fijó la casa", async () => {
+    montar({ servicios: [pedido("srv-1", en("09:00", "2026-06-12"))] });
+
+    const { servicio, pago } = await confirmarServicio(
+      repo,
+      "srv-1",
+      24_000,
+      en("12:00"),
+    );
+
+    expect(pago.monto).toBe(24_000);
+    expect(pago.concepto).toBe("servicio");
+    expect(pago.estado).toBe("pendiente");
+    expect(pago.referenciaId).toBe("srv-1");
+    expect(servicio.estado).toBe("agendado");
+
+    // Y sale de la cola: ya se decidió.
+    expect(await serviciosPorConfirmar(repo)).toEqual([]);
+  });
+
+  // La cotización es lo que el dueño VIO, y por eso quedó guardada. El
+  // valor final vive en el cobro, igual que el saldo del hotel.
+  it("no reescribe la cotización que vio el dueño", async () => {
+    montar({ servicios: [pedido("srv-1", en("09:00", "2026-06-12"))] });
+
+    const { servicio } = await confirmarServicio(repo, "srv-1", 24_000, en("12:00"));
+
+    expect(servicio.cotizacion.total).toBe(18_000);
+  });
+
+  it("confirmar dos veces no cobra dos veces", async () => {
+    montar({ servicios: [pedido("srv-1", en("09:00", "2026-06-12"))] });
+    await confirmarServicio(repo, "srv-1", 24_000, en("12:00"));
+
+    await expect(
+      confirmarServicio(repo, "srv-1", 24_000, en("12:30")),
+    ).rejects.toBeInstanceOf(DecisionImposible);
+
+    const pagos = await repo.pagos.listar();
+    expect(pagos.filter((p) => p.referenciaId === "srv-1")).toHaveLength(1);
+  });
+
+  it("rechaza un monto que no es un monto", async () => {
+    montar({ servicios: [pedido("srv-1", en("09:00", "2026-06-12"))] });
+
+    await expect(
+      confirmarServicio(repo, "srv-1", Number.NaN, en("12:00")),
+    ).rejects.toBeInstanceOf(DecisionImposible);
+    await expect(
+      confirmarServicio(repo, "srv-1", -1_000, en("12:00")),
+    ).rejects.toBeInstanceOf(DecisionImposible);
+  });
+
+  // Emitir un cobro es avisarlo: el dueño no estuvo cuando se fijó el precio.
+  it("avisa al dueño por el canal configurado", async () => {
+    montar({ servicios: [pedido("srv-1", en("09:00", "2026-06-12"))] });
+
+    await confirmarServicio(
+      repo,
+      "srv-1",
+      24_000,
+      en("12:00"),
+      crearCanalSimulado(),
+    );
+
+    const mensajes = await repo.mensajes.listar();
+    expect(mensajes).toHaveLength(1);
+    expect(mensajes[0].clienteId).toBe(CLIENTE.id);
+  });
+
+  it("sin canal el cobro se emite igual", async () => {
+    montar({ servicios: [pedido("srv-1", en("09:00", "2026-06-12"))] });
+
+    const { pago } = await confirmarServicio(repo, "srv-1", 24_000, en("12:00"));
+
+    expect(pago.monto).toBe(24_000);
     expect(await repo.mensajes.listar()).toEqual([]);
   });
 });

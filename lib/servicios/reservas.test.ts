@@ -13,6 +13,8 @@ import type {
   Producto,
 } from "@/lib/types";
 import {
+  agendarServicio,
+  agendarServicios,
   comprarEnTienda,
   comprarPlanDeJardin,
   cotizarDiaJardin,
@@ -719,5 +721,63 @@ describe("Administración se entera de la cancelación", () => {
     for (const cambio of aviso.cambios) {
       expect(cambio.antes).toBeUndefined();
     }
+  });
+});
+
+
+describe("agendar servicios", () => {
+  const PEDIDO = { perroId: "perro-001", fechaHora: en("11:00"), tipo: "spa" as const };
+
+  // El precio del afiche depende del pelo y del peso, que se verifican con
+  // el perro acá, así que la pantalla promete que la casa confirma el
+  // valor. Un cobro ya emitido por un monto exacto contradiría esa promesa.
+  it("nace por confirmar y SIN cobro", async () => {
+    const servicio = await agendarServicio(repo, PEDIDO, ANTES);
+
+    expect(servicio.estado).toBe("por_confirmar");
+    expect(await repo.pagos.listar()).toEqual([]);
+  });
+
+  it("guarda la cotización que vio el dueño", async () => {
+    const servicio = await agendarServicio(
+      repo,
+      { ...PEDIDO, nivelSpa: "peloLargo" },
+      ANTES,
+    );
+
+    expect(servicio.cotizacion.total).toBeGreaterThan(0);
+    expect(servicio.nivelSpa).toBe("peloLargo");
+  });
+
+  it("el carrito agenda todos y ninguno queda cobrado", async () => {
+    const agendados = await agendarServicios(
+      repo,
+      [
+        PEDIDO,
+        { perroId: "perro-001", fechaHora: en("09:00"), tipo: "paseo", duracionMin: 30 },
+        { perroId: "perro-001", fechaHora: en("18:00"), tipo: "traslado", km: 4 },
+      ],
+      ANTES,
+    );
+
+    expect(agendados).toHaveLength(3);
+    expect(agendados.map((s) => s.tipo)).toEqual(["spa", "paseo", "traslado"]);
+    expect(agendados.every((s) => s.estado === "por_confirmar")).toBe(true);
+    expect(await repo.pagos.listar()).toEqual([]);
+  });
+
+  // Cada ítem del carrito lleva SU hora: si todos cayeran en la misma, un
+  // baño del sábado y un traslado del lunes serían el mismo momento.
+  it("cada uno conserva su propia hora", async () => {
+    const agendados = await agendarServicios(
+      repo,
+      [
+        { ...PEDIDO, fechaHora: en("09:00") },
+        { ...PEDIDO, fechaHora: en("17:00") },
+      ],
+      ANTES,
+    );
+
+    expect(agendados.map((s) => s.fechaHora)).toEqual([en("09:00"), en("17:00")]);
   });
 });

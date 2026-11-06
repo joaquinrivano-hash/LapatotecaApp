@@ -333,6 +333,7 @@ Entonces, cuándo nace cada cobro:
 | Hotel | **50% al reservar**, saldo al retiro según la salida real |
 | Recargo fuera de horario | **Nunca solo**: lo decide Administración |
 | Ingreso no planificado | Lo emite Administración después |
+| Servicio spot (spa, paseo, traslado) | **Nunca al agendarlo**: la casa confirma el valor y ahí lo emite |
 
 Y como el día de jardín ahora está pagado antes de usarse, **cancelarlo tiene
 consecuencia**: `cancelarDiaDeJardin` aplica la política y, cuando devuelve,
@@ -739,6 +740,88 @@ cliente reserva a futuro y no hay ningún perro en la puerta que registrar.
 
 Los `input type="date"` se ven en el formato del navegador, que puede no ser el
 chileno. Por eso llevan la fecha escrita debajo.
+
+### Los servicios spot se piden, no se compran
+
+`agendarServicio` en `lib/servicios/reservas.ts`, `serviciosPorConfirmar` en
+`cobros-pendientes.ts`, y la tarjeta de `/admin/pagos`.
+
+Los tres servicios sueltos tienen algo en común que el hotel y el jardín no
+tienen: **el precio depende de algo que se verifica con el perro acá**. El
+baño, del pelo y del peso; el traslado, de los kilómetros de verdad y de si
+la hora cae en punta. El número que ve el dueño en el portal es el del
+afiche, y el afiche es una matriz, no un precio.
+
+Por eso el flujo no es comprar sino pedir:
+
+- Se muestra **la tabla del afiche completa**, no solo la línea que le tocó
+  (`<TablaPrecios />`). Con "precios desde" el dueño no sabe cuál es el
+  suyo, y viendo el cuadro entiende por qué su valor puede moverse.
+- La pantalla promete, antes del botón y no detrás de un enlace: **"Te
+  hablaremos en breve para confirmar el valor."**
+- El servicio nace en `por_confirmar` y **sin cobro**. Esa promesa no
+  convive con un cobro ya emitido por un monto exacto: sería decirle que lo
+  conversamos mientras ya le cobramos.
+- Administración le pone precio y lo emite desde **"Servicios por
+  confirmar"**, en `/admin/pagos`. Es la otra mitad de la promesa: sin esa
+  cola, un servicio pedido desde el portal no se cobra nunca.
+
+**La cotización no se reescribe al confirmar.** Es lo que el dueño VIO, y por
+eso quedó guardada; el valor final vive en el cobro, igual que en el hotel,
+donde la cotización es una cosa y el saldo que se emite al retiro es otra.
+Pisarla dejaría el desglose sin cuadrar con su propio total y borraría de qué
+se habló.
+
+La cola va en su propia tarjeta y no en la de cobros pendientes porque **la
+pregunta es otra**. En el recargo se decide si se cobra; en el saldo y en el
+día, cuándo se emite. Acá falta el monto, y sale de una conversación que la
+app no tuvo — por eso el campo viene con lo cotizado escrito y se puede
+cambiar: es el punto de partida, no el resultado.
+
+#### El carrito
+
+Dos botones, porque son dos intenciones: **"Agendar servicio"** para el que
+viene por una sola cosa, y **"Agregar al carrito"** para el que quiere baño y
+traslado y no tiene por qué agendar dos veces ni recibir dos conversaciones.
+
+Cada ítem guarda **su entrada completa, con SU día y SU hora**, no solo el
+tipo. Guardarlos contra los campos del formulario los haría cambiar solos
+cuando el dueño mueve la fecha para elegir el siguiente, y un baño del sábado
+se volvería un baño del lunes sin que nadie lo tocara.
+
+El total del carrito dice **"Total referencial"**, por lo mismo que la nota.
+
+#### Y el dueño lo ve
+
+En "Lo que viene" de Mi cuenta, con la insignia **Servicio** y la línea
+"Te hablamos en breve para confirmar el valor". Antes de esto los servicios
+no aparecían en ninguna pantalla del dueño —lo único que los delataba era el
+cobro—, así que al dejar de nacer cobrados habrían desaparecido del todo.
+
+Por eso `porConfirmar` dejó de ser una bandera y pasó a ser la frase: en el
+hotel falta el abono, en un servicio falta que la casa confirme el valor, y
+no son lo mismo.
+
+#### El afiche vive en un solo lugar
+
+`components/shared/tabla-precios.tsx`. Los mismos números los muestran la
+landing (para quien todavía no es cliente) y el portal (para quien está
+agendando). Los montos salían de `PRECIOS` en los dos lados, así que no se
+iban a desincronizar por un valor; se iban a desincronizar por una **fila**:
+una tabla gana un tramo y la otra no.
+
+#### Esto no necesitó migración
+
+`servicios.estado` es `text` sin `check`, y la política de inserción del dueño
+solo verifica su `cliente_id`. El estado nuevo entra tal cual en la base que
+ya está corriendo.
+
+Con una consecuencia conocida, de la misma familia que el monto (ver "Lo que
+RLS no puede cuidar"): **el dueño puede insertar un servicio ya `agendado`**
+desde la consola, y así saltarse la cola y no aparecer nunca para cobrar. Hoy
+el daño está acotado —son pocos servicios y la casa los ve en la agenda— y se
+cierra igual que los otros: un disparador que fuerce `por_confirmar` en lo que
+inserta el dueño, como `lo_que_agenda_el_dueno` hace con las estadías.
 
 ### La puerta de entrada del portal
 

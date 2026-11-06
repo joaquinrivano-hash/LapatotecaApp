@@ -623,15 +623,30 @@ export async function cotizarServicio(
   });
 }
 
+/**
+ * Agenda el servicio y NO lo cobra.
+ *
+ * El precio que vio el dueño es el del afiche, y los tres servicios
+ * dependen de algo que se verifica con el perro en la casa: el pelo y el
+ * peso en el baño, los kilómetros y la hora en el traslado. Por eso la
+ * pantalla le promete que le hablamos para confirmar el valor — y esa
+ * promesa no convive con un cobro ya emitido por un monto exacto. El cobro
+ * lo emite Administración cuando fija el precio, desde la cola de
+ * `serviciosPorConfirmar`.
+ *
+ * La cotización igual se guarda: es lo que el dueño vio y con lo que la
+ * casa parte la conversación, no un número inventado después.
+ */
 export async function agendarServicio(
   repo: RepositorioPatoteca,
   entrada: EntradaServicio,
   ahora: InstanteISO = new Date().toISOString(),
-): Promise<{ servicio: ServicioAgendado; pago: Pago }> {
-  const perro = (await repo.perros.obtener(entrada.perroId))!;
+): Promise<ServicioAgendado> {
+  const perro = await repo.perros.obtener(entrada.perroId);
+  if (!perro) throw new Error(`No existe el perro ${entrada.perroId}`);
   const cotizacion = await cotizarServicio(repo, entrada);
 
-  const servicio = await repo.servicios.crear({
+  return repo.servicios.crear({
     clienteId: perro.clienteId,
     perroId: perro.id,
     tipo: entrada.tipo,
@@ -641,22 +656,31 @@ export async function agendarServicio(
     cantidad: entrada.cantidad,
     km: entrada.km,
     conRegreso: entrada.conRegreso,
-    estado: "agendado",
+    estado: "por_confirmar",
     cotizacion,
     creadoEn: ahora,
   });
+}
 
-  const pago = await repo.pagos.crear({
-    clienteId: perro.clienteId,
-    concepto: "servicio",
-    referenciaId: servicio.id,
-    monto: cotizacion.total,
-    estado: "pendiente",
-    emitidoEn: ahora,
-    venceEn: fechaISO(entrada.fechaHora),
-  });
-
-  return { servicio, pago };
+/**
+ * Varios servicios de una vez: lo que deja el carrito del portal.
+ *
+ * Van uno por uno y no en bloque porque cada uno es independiente —tienen
+ * su propia hora y su propio precio— y porque en la nube son inserts
+ * separados de todas formas. Si uno falla, los anteriores quedan
+ * agendados: es lo correcto acá, ya que ninguno depende del otro y
+ * deshacerlos dejaría al dueño sin lo que sí alcanzó a tomar.
+ */
+export async function agendarServicios(
+  repo: RepositorioPatoteca,
+  entradas: EntradaServicio[],
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<ServicioAgendado[]> {
+  const agendados: ServicioAgendado[] = [];
+  for (const entrada of entradas) {
+    agendados.push(await agendarServicio(repo, entrada, ahora));
+  }
+  return agendados;
 }
 
 /* ── Tienda ────────────────────────────────────────────────────────── */

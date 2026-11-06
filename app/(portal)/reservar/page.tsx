@@ -8,6 +8,8 @@ import {
   CalendarCheck,
   Car,
   Check,
+  ShoppingBasket,
+  Trash2,
   Footprints,
   Minus,
   Moon,
@@ -27,6 +29,7 @@ import { ComoPagar } from "@/components/shared/como-pagar";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import { PrecioCLP } from "@/components/shared/precio";
+import { TablaPrecios } from "@/components/shared/tabla-precios";
 import { NEGOCIO } from "@/lib/config/negocio";
 import { NOMBRE_PELO } from "@/lib/rules/servicios";
 import type { DuracionPaseo, NivelSpa } from "@/lib/types";
@@ -44,10 +47,12 @@ import {
   reservarDiaJardin,
   ReservaRechazada,
 } from "@/lib/servicios/reservas";
+import type { EntradaServicio } from "@/lib/servicios/reservas";
 import { cn } from "@/lib/utils";
 import {
   formatearDiaMesCorto,
   formatearFecha,
+  formatearFechaCorta,
   formatearFechaLarga,
   instanteEnHora,
   sumarDias,
@@ -707,6 +712,20 @@ function ServicioSpot({ perro }: { perro: Perro }) {
   const [conRegreso, setConRegreso] = useState(false);
   const [otraDireccion, setOtraDireccion] = useState(false);
   const [direccion, setDireccion] = useState("");
+  /**
+   * Lo que el dueño va juntando antes de confirmar.
+   *
+   * Cada ítem guarda su propia entrada completa —con SU día y SU hora— y no
+   * solo el tipo: un baño el sábado y un traslado el lunes son dos cosas
+   * distintas, y guardarlas contra los campos del formulario las haría
+   * cambiar solas cuando él mueve la fecha para elegir el siguiente.
+   *
+   * El concepto y el total se guardan cotizados: es lo que vio al
+   * agregarlo, y es lo que tiene que seguir viendo en la lista.
+   */
+  const [carrito, setCarrito] = useState<
+    { clave: string; entrada: EntradaServicio; concepto: string; total: number }[]
+  >([]);
   /** `null` mientras no se sabe; `false` cuando la distancia no llegó. */
   const [midiendo, setMidiendo] = useState(false);
   const [kmMedidos, setKmMedidos] = useState<number | null>(null);
@@ -775,24 +794,47 @@ function ServicioSpot({ perro }: { perro: Perro }) {
     ],
   );
 
-  async function agendar() {
-    const { agendarServicio } = await import("@/lib/servicios/reservas");
+  /** Lo que está elegido ahora mismo, listo para agendar o para el carrito. */
+  function loElegido(): EntradaServicio {
+    return {
+      perroId: perro.id,
+      fechaHora,
+      tipo,
+      nivelSpa,
+      duracionMin: duracion,
+      cantidad: cantidadPaseos,
+      km,
+      conRegreso,
+    };
+  }
+
+  function agregarAlCarrito() {
+    if (!previa.datos) return;
+    setCarrito((actual) => [
+      ...actual,
+      {
+        clave: `${Date.now()}-${actual.length}`,
+        entrada: loElegido(),
+        concepto: previa.datos!.lineas[0]?.concepto ?? "Servicio",
+        total: previa.datos!.total,
+      },
+    ]);
+    toast.success("Agregado al carrito", {
+      description: "Puedes seguir agregando y agendar todo junto.",
+    });
+  }
+
+  async function agendar(entradas: EntradaServicio[], vaciar: boolean) {
+    const { agendarServicios } = await import("@/lib/servicios/reservas");
     try {
-      await ejecutar((repo) =>
-        agendarServicio(repo, {
-          perroId: perro.id,
-          fechaHora,
-          tipo,
-          nivelSpa,
-          duracionMin: duracion,
-          cantidad: cantidadPaseos,
-          km,
-          conRegreso,
-        }),
+      await ejecutar((repo) => agendarServicios(repo, entradas));
+      if (vaciar) setCarrito([]);
+      toast.success(
+        entradas.length === 1
+          ? "Servicio agendado"
+          : `${entradas.length} servicios agendados`,
+        { description: "Te hablamos en breve para confirmar el valor." },
       );
-      toast.success("Servicio agendado", {
-        description: "Lo dejamos en tu cuenta del mes.",
-      });
     } catch (error) {
       avisarError(error);
     }
@@ -1043,13 +1085,117 @@ function ServicioSpot({ perro }: { perro: Perro }) {
           </div>
         )}
 
+        {/* La tabla del afiche completa, no solo la línea que le tocó.
+            El precio depende del pelo y del peso, o de los kilómetros y la
+            hora, y todo eso se verifica acá: ver el cuadro entero es lo que
+            le permite entender por qué su valor puede moverse. */}
+        <TablaPrecios tipo={tipo} />
+
         {previa.datos && <Desglose cotizacion={previa.datos} />}
 
-        <Button size="xl" className="w-full" disabled={ocupado} onClick={agendar}>
-          <Check />
-          Agendar
-        </Button>
+        {/* Dos caminos, porque son dos intenciones distintas: el que viene
+            por una sola cosa no tiene por qué pasar por un carrito, y el que
+            quiere baño y traslado no tiene por qué agendar dos veces y
+            recibir dos conversaciones. */}
+        <div className="space-y-2">
+          <Button
+            size="xl"
+            className="w-full"
+            disabled={ocupado || !previa.datos}
+            onClick={() => agendar([loElegido()], false)}
+          >
+            <Check />
+            Agendar servicio
+          </Button>
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full"
+            disabled={ocupado || !previa.datos}
+            onClick={agregarAlCarrito}
+          >
+            <ShoppingBasket />
+            Agregar al carrito
+          </Button>
+        </div>
+
+        {/* La nota va acá y no detrás de un enlace: el dueño acaba de ver un
+            total y tiene que saber, ANTES de tocar el botón, que ese número
+            es el del afiche y que se lo confirmamos nosotros. */}
+        <p className="text-muted-foreground text-sm text-pretty">
+          Te hablaremos en breve para confirmar el valor.
+        </p>
+
+        {carrito.length > 0 && (
+          <div className="border-primary/40 space-y-3 rounded-2xl border-2 p-4">
+            <p className="font-display font-bold">
+              Tu carrito ({carrito.length})
+            </p>
+
+            <ul className="divide-border divide-y">
+              {carrito.map((item) => (
+                <li
+                  key={item.clave}
+                  className="flex items-baseline gap-2 py-2 text-sm"
+                >
+                  <span className="flex-1 text-pretty">
+                    {item.concepto}
+                    <span className="text-muted-foreground block text-xs">
+                      {formatearFechaCorta(item.entrada.fechaHora)} ·{" "}
+                      {horaDe(item.entrada.fechaHora)}
+                    </span>
+                  </span>
+                  <PrecioCLP monto={item.total} tamano="sm" />
+                  <button
+                    type="button"
+                    aria-label={`Sacar ${item.concepto} del carrito`}
+                    className="text-muted-foreground hover:text-primary"
+                    onClick={() =>
+                      setCarrito((actual) =>
+                        actual.filter((i) => i.clave !== item.clave),
+                      )
+                    }
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            <div className="flex items-baseline justify-between gap-3 font-semibold">
+              <span>Total referencial</span>
+              <PrecioCLP
+                monto={carrito.reduce((suma, i) => suma + i.total, 0)}
+              />
+            </div>
+
+            <Button
+              size="xl"
+              className="w-full"
+              disabled={ocupado}
+              onClick={() =>
+                agendar(
+                  carrito.map((i) => i.entrada),
+                  true,
+                )
+              }
+            >
+              <Check />
+              Agendar todo
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
+}
+
+/** La hora de pared de un instante, para la lista del carrito. */
+function horaDe(instante: string): string {
+  return new Intl.DateTimeFormat("es-CL", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: NEGOCIO.zonaHoraria,
+  }).format(new Date(instante));
 }

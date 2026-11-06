@@ -410,7 +410,20 @@ export interface Suscripcion {
 /* ── Servicios spot ────────────────────────────────────────────────── */
 
 export type TipoServicio = "spa" | "paseo" | "traslado";
-export type EstadoServicio = "agendado" | "realizado" | "cancelado";
+/**
+ * `por_confirmar` es donde nace lo que el dueño agenda desde el portal.
+ *
+ * El precio que vio es el del afiche y los tres servicios dependen de algo
+ * que se verifica con el perro acá —el pelo y el peso en el baño, los
+ * kilómetros y la hora en el traslado—, así que la pantalla le promete que
+ * le hablamos para confirmar el valor. Pasa a `agendado` cuando
+ * Administración fija el precio y emite el cobro.
+ */
+export type EstadoServicio =
+  | "por_confirmar"
+  | "agendado"
+  | "realizado"
+  | "cancelado";
 
 export interface ServicioAgendado {
   id: ID;
