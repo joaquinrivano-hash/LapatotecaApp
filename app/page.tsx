@@ -103,11 +103,10 @@ const SERVICIOS: Servicio[] = [
     filas: [
       ["Por hora", PRECIOS.hotel.horaExtra],
       ["24 horas", PRECIOS.hotel.bloque24h],
-      ["Paseo opcional", PRECIOS.hotel.paseo],
     ] as const,
     descuentos: [
       `Desde ${NEGOCIO.hotel.nochesParaDescuento10} noches, 10% de descuento`,
-      `Desde ${NEGOCIO.hotel.nochesParaDescuento15} noches, 15%`,
+      `Desde ${NEGOCIO.hotel.nochesParaDescuento15} noches, 15% de descuento`,
     ],
     nota: `Reserva con ${Math.round(NEGOCIO.hotel.fraccionAbono * 100)}% de abono.`,
   },
