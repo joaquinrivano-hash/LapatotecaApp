@@ -2381,6 +2381,24 @@ arreglar todavía; cada uno se comprobó con datos, no leyendo):
    llegada y salida y nada más; la tarjeta del veredicto muestra el perro,
    el dueño y las horas, pero no los incidentes ni los reportes del día.
 
+**E. Lo que la dueña pidió anotar el 11-11, sin detalle todavía.** Son
+tres temas con una palabra cada uno; **antes de empezar cualquiera, hay que
+preguntarle qué quiere**. Lo de abajo es solo lo que ya existe y por dónde
+podría ir, no una decisión:
+
+1. **Tareas pendientes.** No hay nada parecido hoy. ¿Una lista del día para
+   el equipo en `/staff` (dar remedios, bañar, llamar a un dueño), que se
+   marca hecha y deja quién la hizo?
+2. **Reportes.** Se mandan desde `/staff/reportes`, pero las ventanas del
+   folleto (8:00–10:30, 13:00–15:00 y 18:00–19:30,
+   `NEGOCIO.reportes.ventanas`) todavía no se aplican en esa pantalla (ver
+   sección 8). ¿Avisar cuándo toca mandar y a qué perros les falta el
+   reporte de esa ventana?
+3. **Comidas.** La ficha ya guarda marca, medida y raciones por comida
+   (`describirAlimentacion`). ¿Una vista de la hora de comer —quién come
+   qué y cuánto, en la mañana, al almuerzo y en la tarde— para los perros
+   que están en la casa, que se marca dada?
+
 **Orden sugerido:** A1 y A2 primero (sin eso el portal no agenda); después
 C1 junto con A6 y A7 en una sola tanda.
 
