@@ -2494,9 +2494,14 @@ tres temas con una palabra cada uno; **antes de empezar cualquiera, hay que
 preguntarle qué quiere**. Lo de abajo es solo lo que ya existe y por dónde
 podría ir, no una decisión:
 
-1. **Tareas pendientes.** No hay nada parecido hoy. ¿Una lista del día para
-   el equipo en `/staff` (dar remedios, bañar, llamar a un dueño), que se
-   marca hecha y deja quién la hizo?
+1. **Tareas pendientes.** ¿Una lista del día para el equipo en `/staff`
+   (dar remedios, bañar, llamar a un dueño), que se marca hecha y deja
+   quién la hizo? **Ojo: ya hay trabajo hecho y sin publicar.** La rama
+   `claude/tareas-del-dia` (28-10, 8 commits que no están en `main`) armó
+   `/staff/tareas` y `/admin/tareas` leyendo el grupo de WhatsApp "La
+   Patoteca REPORTES": las tres rondas por comida, el aseo semanal, los
+   encargos que se arrastran y el reporte para el grupo. Antes de escribir
+   algo nuevo, mirar esa rama con la dueña.
 2. **Reportes.** Se mandan desde `/staff/reportes`, pero las ventanas del
    folleto (8:00–10:30, 13:00–15:00 y 18:00–19:30,
    `NEGOCIO.reportes.ventanas`) todavía no se aplican en esa pantalla (ver
@@ -2509,6 +2514,15 @@ podría ir, no una decisión:
 
 **Orden sugerido:** A1 y A2 primero (sin eso el portal no agenda); después
 C1 junto con A6 y A7 en una sola tanda.
+4. **La pantalla Hoy del cuidador tiene que parecerse más a la pizarra de
+   pendientes.** Lo pidió la dueña el 11-11, mirando la tarjeta de
+   "Adentro" (perro, dueño, "Llegó 20:02 · sale 21:30" y el botón "Se
+   fue"). "La pizarra" es la pizarra de la casa, la que el equipo
+   fotografía y adjunta al reporte del grupo. **Antes de diseñar, pedirle
+   una foto de la pizarra**: lo que se copia es cómo la ordenan (por perro,
+   por hora, por pendiente) y qué escriben ahí, no un estilo inventado.
+   Está pegado al punto 1: si las tareas del día entran, la pizarra puede
+   ser una sola pantalla con la asistencia y lo que falta hacer.
 
 #### Dónde quedamos (cierre del 22-10-2026)
 
