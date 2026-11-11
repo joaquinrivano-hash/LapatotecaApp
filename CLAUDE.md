@@ -2429,10 +2429,13 @@ copiado acá.
 - **El pack de más de ~15 días sale más caro que el pase libre** ($308.000
   por 22 días contra $220.000), y ahora se ve lado a lado. ¿Se deja, se topa
   el contador, o se avisa "te conviene el pase libre"?
-- **El commit `9846d0a` de `pruebas`** ("Día de prueba: con menos de 24
-  horas, solo el cargo") cambia la regla que la dueña confirmó el 22-10
-  (cargo de $5.000 y se devuelve el resto). Confirmar antes de pasarlo a
-  `main`.
+- ~~**El commit `9846d0a` de `pruebas`** ("Día de prueba: con menos de 24
+  horas, solo el cargo")~~ — **confirmado y publicado el 11-11**. Es solo
+  el texto de las condiciones: la regla sigue siendo la del 22-10 (cargo de
+  $5.000 y se devuelve el resto), y lo del resto se dice al cancelar.
+- ~~**El plan de jardín se activa al comprarlo**, con el cobro pendiente~~
+  — **decidido el 11-11: queda por confirmar hasta que se marca pagado**,
+  como el abono del hotel. Pasa a C.
 - El sexo fijo para el dueño; el macho sin castrar que no puede crear la
   cuenta; las fotos de productos (ver "Decisiones de producto abiertas").
 
@@ -2440,7 +2443,8 @@ copiado acá.
 
 1. **Pasar `pruebas` a `main`**: 9 commits que no están en producción —el
    `token_hash` de "olvidé mi contraseña" (`310ac17`), el fichaje con
-   ubicación y su migración, la alerta de crear cuenta y el `9846d0a`—.
+   ubicación y su migración y la alerta de crear cuenta—. El `9846d0a` ya
+   se publicó (11-11).
    Fusionar, correr los tests DESPUÉS de fusionar, y coordinar con A6 y A7.
 2. **El tablero cuenta lo devuelto como ingreso** (`panel.ts` suma
    `pago.monto` sin mirar el estado).
@@ -2457,6 +2461,10 @@ copiado acá.
    conviene. Revisar la tarjeta de planes de `/reservar` y la de la portada
    (va junto con el punto 4), con el tono de la marca: cálido, de tú, y
    hablándole de su perro, no de nuestra operación.
+7. **El plan nace por confirmar** (decidido el 11-11): hoy se puede usar
+   apenas se compra, con el cobro pendiente. Tiene que quedar como el
+   abono del hotel —se usa recién cuando Administración marca el pago—, en
+   la app y en `agendar_dia_con_plan`.
 
 **D. El día de prueba: lo que se encontró revisándolo el 11-11** (sin
 arreglar todavía; cada uno se comprobó con datos, no leyendo):
@@ -2480,8 +2488,26 @@ arreglar todavía; cada uno se comprobó con datos, no leyendo):
    llegada y salida y nada más; la tarjeta del veredicto muestra el perro,
    el dueño y las horas, pero no los incidentes ni los reportes del día.
 
+**E. Lo que la dueña pidió anotar el 11-11, sin detalle todavía.** Son
+tres temas con una palabra cada uno; **antes de empezar cualquiera, hay que
+preguntarle qué quiere**. Lo de abajo es solo lo que ya existe y por dónde
+podría ir, no una decisión:
+
+1. **Tareas pendientes.** No hay nada parecido hoy. ¿Una lista del día para
+   el equipo en `/staff` (dar remedios, bañar, llamar a un dueño), que se
+   marca hecha y deja quién la hizo?
+2. **Reportes.** Se mandan desde `/staff/reportes`, pero las ventanas del
+   folleto (8:00–10:30, 13:00–15:00 y 18:00–19:30,
+   `NEGOCIO.reportes.ventanas`) todavía no se aplican en esa pantalla (ver
+   sección 8). ¿Avisar cuándo toca mandar y a qué perros les falta el
+   reporte de esa ventana?
+3. **Comidas.** La ficha ya guarda marca, medida y raciones por comida
+   (`describirAlimentacion`). ¿Una vista de la hora de comer —quién come
+   qué y cuánto, en la mañana, al almuerzo y en la tarde— para los perros
+   que están en la casa, que se marca dada?
+
 **Orden sugerido:** A1 y A2 primero (sin eso el portal no agenda); después
-la respuesta sobre `9846d0a` y C1 junto con A6 y A7 en una sola tanda.
+C1 junto con A6 y A7 en una sola tanda.
 
 #### Dónde quedamos (cierre del 22-10-2026)
 
