@@ -33,7 +33,9 @@ import type {
   ID,
   InstanteISO,
   Pago,
+  Perro,
   ReservaHotel,
+  ServicioAgendado,
 } from "@/lib/types";
 
 export class DecisionImposible extends Error {
@@ -41,6 +43,105 @@ export class DecisionImposible extends Error {
     super(mensaje);
     this.name = "DecisionImposible";
   }
+}
+
+/* ── Los servicios que pidió el dueño ──────────────────────────────── */
+
+/**
+ * Un servicio agendado desde el portal que todavía no tiene precio firme.
+ *
+ * El dueño vio el afiche y la pantalla le prometió que le hablamos para
+ * confirmar el valor: el baño depende del pelo y del peso que se ven acá, y
+ * el traslado de los kilómetros y de la hora. Por eso nace sin cobro
+ * (`agendarServicio`), y esta es la cola que cierra la promesa.
+ *
+ * A diferencia de las otras tres, acá el monto NO está decidido. En el
+ * recargo la pregunta es si se cobra; en el saldo y en el día, cuándo se
+ * emite. Acá la pregunta es cuánto, y la respuesta sale de una conversación
+ * que la app no tuvo.
+ *
+ * Una cola que nadie mira es peor que no prometer nada: sin esto, un
+ * servicio pedido desde el portal no se cobra nunca.
+ */
+export interface ServicioPorConfirmar {
+  servicio: ServicioAgendado;
+  perro: Perro | null;
+  cliente: Cliente | null;
+  /** Lo que el dueño vio en el portal, que es por dónde parte la conversación. */
+  cotizado: number;
+}
+
+export async function serviciosPorConfirmar(
+  repo: RepositorioPatoteca,
+): Promise<ServicioPorConfirmar[]> {
+  const servicios = await repo.servicios.listar();
+  const esperando = servicios.filter((s) => s.estado === "por_confirmar");
+  if (esperando.length === 0) return [];
+
+  const [perros, clientes] = await Promise.all([
+    repo.perros.listar(),
+    repo.clientes.listar(),
+  ]);
+
+  return esperando
+    .map((servicio) => ({
+      servicio,
+      perro: perros.find((p) => p.id === servicio.perroId) ?? null,
+      cliente: clientes.find((c) => c.id === servicio.clienteId) ?? null,
+      cotizado: servicio.cotizacion.total,
+    }))
+    // Lo que lleva más tiempo esperando primero: lo que se añeja es lo que
+    // se termina no cobrando, y acá además hay alguien esperando que le
+    // hablen.
+    .sort((a, b) => a.servicio.creadoEn.localeCompare(b.servicio.creadoEn));
+}
+
+/**
+ * Le pone precio al servicio y lo cobra.
+ *
+ * La cotización original NO se toca: es lo que el dueño vio y por eso
+ * quedó guardada. Si el valor final es otro, el que manda es el del cobro,
+ * igual que en el hotel, donde la cotización es una cosa y el saldo que se
+ * emite al retiro es otra. Reescribirla dejaría el desglose sin cuadrar
+ * con su propio total y borraría de qué se habló.
+ */
+export async function confirmarServicio(
+  repo: RepositorioPatoteca,
+  servicioId: ID,
+  monto: number,
+  ahora: InstanteISO = new Date().toISOString(),
+  canal?: CanalMensajeria,
+): Promise<{ servicio: ServicioAgendado; pago: Pago }> {
+  const servicio = await repo.servicios.obtener(servicioId);
+  if (!servicio) throw new DecisionImposible("Ese servicio ya no está.");
+  if (servicio.estado !== "por_confirmar") {
+    throw new DecisionImposible("Ese servicio ya tiene su valor confirmado.");
+  }
+  if (!Number.isFinite(monto) || monto < 0) {
+    throw new DecisionImposible("El valor tiene que ser un monto válido.");
+  }
+
+  const pago = await repo.pagos.crear({
+    clienteId: servicio.clienteId,
+    concepto: "servicio",
+    referenciaId: servicio.id,
+    monto: Math.round(monto),
+    estado: "pendiente",
+    emitidoEn: ahora,
+    venceEn: fechaISO(servicio.fechaHora),
+  });
+
+  const confirmado = await repo.servicios.actualizar(servicioId, {
+    estado: "agendado",
+  });
+
+  // Emitir un cobro es avisarlo, igual que en `cobrarPendiente`: el dueño
+  // no estuvo presente cuando se fijó el precio.
+  if (canal) {
+    await avisarDelCobro(repo, canal, pago, "el servicio que pediste", ahora);
+  }
+
+  return { servicio: confirmado, pago };
 }
 
 /* ── El recargo del jardín ─────────────────────────────────────────── */

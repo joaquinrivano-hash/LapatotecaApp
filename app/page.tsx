@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { PRECIOS_DEL_AFICHE } from "@/components/shared/tabla-precios";
 import { InterruptorDelPrototipo } from "@/components/shared/interruptor-prototipo";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -21,7 +22,7 @@ import {
   CabeceraPublica,
 } from "@/components/shared/cabecera-publica";
 import { NEGOCIO } from "@/lib/config/negocio";
-import { PASEOS_POR_PACK, PRECIOS } from "@/lib/config/precios";
+import { PRECIOS } from "@/lib/config/precios";
 import { formatearCLP } from "@/lib/utils/moneda";
 
 /**
@@ -118,13 +119,12 @@ const SERVICIOS: Servicio[] = [
     alt: "Perro con pañuelo de huellas sentado sobre una manta rosada, recién bañado",
     bajada: "Te lo entregamos limpiecito.",
     // El afiche es una matriz de pelo por tamaño, así que la tarjeta
-    // también: con "precios desde" el dueño no sabe cuál es el suyo.
-    columnas: ["Pequeño", "Mediano"],
-    filas: [
-      ["Pelo corto", PRECIOS.spa.peloCorto.chico, PRECIOS.spa.peloCorto.grande],
-      ["Pelo largo", PRECIOS.spa.peloLargo.chico, PRECIOS.spa.peloLargo.grande],
-    ] as const,
-    nota: `Pequeño bajo ${NEGOCIO.spa.pesoChicoBajoKg} kg; mediano de ${NEGOCIO.spa.pesoChicoBajoKg} a ${NEGOCIO.spa.pesoMaximoKg} kg.`,
+    // también: con "precios desde" el dueño no sabe cuál es el suyo. Las
+    // filas salen de `PRECIOS_DEL_AFICHE`, que es la misma tabla que ve
+    // quien está agendando en el portal.
+    columnas: PRECIOS_DEL_AFICHE.spa.columnas,
+    filas: PRECIOS_DEL_AFICHE.spa.filas,
+    nota: PRECIOS_DEL_AFICHE.spa.nota,
   },
   {
     icono: Footprints,
@@ -133,15 +133,9 @@ const SERVICIOS: Servicio[] = [
     alt: "Perro paseando por la vereda entre hojas de otoño",
     bajada:
       "Puedes incluir paseos a la estadía de tu perrito. Sector Providencia.",
-    filas: [
-      ["Cada 15 minutos", PRECIOS.paseo[15]],
-      ["Media hora", PRECIOS.paseo[30]],
-    ] as const,
-    descuentos: [
-      `${PASEOS_POR_PACK} paseos de 15 min: ${formatearCLP(PRECIOS.paseoPack3[15])}`,
-      `${PASEOS_POR_PACK} de media hora: ${formatearCLP(PRECIOS.paseoPack3[30])}`,
-    ],
-    nota: "Se envían fotos y comprobante del tiempo total del paseo.",
+    filas: PRECIOS_DEL_AFICHE.paseo.filas,
+    descuentos: PRECIOS_DEL_AFICHE.paseo.extras,
+    nota: PRECIOS_DEL_AFICHE.paseo.nota,
   },
   {
     icono: Car,
@@ -153,16 +147,9 @@ const SERVICIOS: Servicio[] = [
     // La tarifa de punta no es letra chica: es el doble de información que
     // el dueño necesita para saber cuánto le va a salir. Decir solo "en
     // punta sube" lo obliga a preguntar.
-    columnas: ["Normal", "Punta"],
-    filas: PRECIOS.traslado.tramos.map(
-      (t, i) =>
-        [
-          `${i === 0 ? 0 : PRECIOS.traslado.tramos[i - 1].hastaKm} a ${t.hastaKm} km`,
-          t.normal,
-          t.punta,
-        ] as const,
-    ),
-    nota: `Punta: ${NEGOCIO.traslado.horariosPunta.map((h) => `${h.desde} a ${h.hasta}`).join(" y ")}. Cubrimos parte de Providencia, Ñuñoa, Las Condes, La Reina, Peñalolén, Vitacura y Macul.`,
+    columnas: PRECIOS_DEL_AFICHE.traslado.columnas,
+    filas: PRECIOS_DEL_AFICHE.traslado.filas,
+    nota: `${PRECIOS_DEL_AFICHE.traslado.nota} Cubrimos parte de Providencia, Ñuñoa, Las Condes, La Reina, Peñalolén, Vitacura y Macul.`,
   },
 ];
 

@@ -333,6 +333,8 @@ Entonces, cuándo nace cada cobro:
 | Hotel | **50% al reservar**, saldo al retiro según la salida real |
 | Recargo fuera de horario | **Nunca solo**: lo decide Administración |
 | Ingreso no planificado | Lo emite Administración después |
+| Servicio spot (spa, paseo, traslado) | **Nunca al agendarlo**: la casa confirma el valor y ahí lo emite |
+| Tienda | Al comprar, por adelantado (nace pendiente: no hay pasarela) |
 
 Y como el día de jardín ahora está pagado antes de usarse, **cancelarlo tiene
 consecuencia**: `cancelarDiaDeJardin` aplica la política y, cuando devuelve,
@@ -739,6 +741,88 @@ cliente reserva a futuro y no hay ningún perro en la puerta que registrar.
 
 Los `input type="date"` se ven en el formato del navegador, que puede no ser el
 chileno. Por eso llevan la fecha escrita debajo.
+
+### Los servicios spot se piden, no se compran
+
+`agendarServicio` en `lib/servicios/reservas.ts`, `serviciosPorConfirmar` en
+`cobros-pendientes.ts`, y la tarjeta de `/admin/pagos`.
+
+Los tres servicios sueltos tienen algo en común que el hotel y el jardín no
+tienen: **el precio depende de algo que se verifica con el perro acá**. El
+baño, del pelo y del peso; el traslado, de los kilómetros de verdad y de si
+la hora cae en punta. El número que ve el dueño en el portal es el del
+afiche, y el afiche es una matriz, no un precio.
+
+Por eso el flujo no es comprar sino pedir:
+
+- Se muestra **la tabla del afiche completa**, no solo la línea que le tocó
+  (`<TablaPrecios />`). Con "precios desde" el dueño no sabe cuál es el
+  suyo, y viendo el cuadro entiende por qué su valor puede moverse.
+- La pantalla promete, antes del botón y no detrás de un enlace: **"Te
+  hablaremos en breve para confirmar el valor."**
+- El servicio nace en `por_confirmar` y **sin cobro**. Esa promesa no
+  convive con un cobro ya emitido por un monto exacto: sería decirle que lo
+  conversamos mientras ya le cobramos.
+- Administración le pone precio y lo emite desde **"Servicios por
+  confirmar"**, en `/admin/pagos`. Es la otra mitad de la promesa: sin esa
+  cola, un servicio pedido desde el portal no se cobra nunca.
+
+**La cotización no se reescribe al confirmar.** Es lo que el dueño VIO, y por
+eso quedó guardada; el valor final vive en el cobro, igual que en el hotel,
+donde la cotización es una cosa y el saldo que se emite al retiro es otra.
+Pisarla dejaría el desglose sin cuadrar con su propio total y borraría de qué
+se habló.
+
+La cola va en su propia tarjeta y no en la de cobros pendientes porque **la
+pregunta es otra**. En el recargo se decide si se cobra; en el saldo y en el
+día, cuándo se emite. Acá falta el monto, y sale de una conversación que la
+app no tuvo — por eso el campo viene con lo cotizado escrito y se puede
+cambiar: es el punto de partida, no el resultado.
+
+#### El carrito
+
+Dos botones, porque son dos intenciones: **"Agendar servicio"** para el que
+viene por una sola cosa, y **"Agregar al carrito"** para el que quiere baño y
+traslado y no tiene por qué agendar dos veces ni recibir dos conversaciones.
+
+Cada ítem guarda **su entrada completa, con SU día y SU hora**, no solo el
+tipo. Guardarlos contra los campos del formulario los haría cambiar solos
+cuando el dueño mueve la fecha para elegir el siguiente, y un baño del sábado
+se volvería un baño del lunes sin que nadie lo tocara.
+
+El total del carrito dice **"Total referencial"**, por lo mismo que la nota.
+
+#### Y el dueño lo ve
+
+En "Lo que viene" de Mi cuenta, con la insignia **Servicio** y la línea
+"Te hablamos en breve para confirmar el valor". Antes de esto los servicios
+no aparecían en ninguna pantalla del dueño —lo único que los delataba era el
+cobro—, así que al dejar de nacer cobrados habrían desaparecido del todo.
+
+Por eso `porConfirmar` dejó de ser una bandera y pasó a ser la frase: en el
+hotel falta el abono, en un servicio falta que la casa confirme el valor, y
+no son lo mismo.
+
+#### El afiche vive en un solo lugar
+
+`components/shared/tabla-precios.tsx`. Los mismos números los muestran la
+landing (para quien todavía no es cliente) y el portal (para quien está
+agendando). Los montos salían de `PRECIOS` en los dos lados, así que no se
+iban a desincronizar por un valor; se iban a desincronizar por una **fila**:
+una tabla gana un tramo y la otra no.
+
+#### Esto no necesitó migración
+
+`servicios.estado` es `text` sin `check`, y la política de inserción del dueño
+solo verifica su `cliente_id`. El estado nuevo entra tal cual en la base que
+ya está corriendo.
+
+Con una consecuencia conocida, de la misma familia que el monto (ver "Lo que
+RLS no puede cuidar"): **el dueño puede insertar un servicio ya `agendado`**
+desde la consola, y así saltarse la cola y no aparecer nunca para cobrar. Hoy
+el daño está acotado —son pocos servicios y la casa los ve en la agenda— y se
+cierra igual que los otros: un disparador que fuerce `por_confirmar` en lo que
+inserta el dueño, como `lo_que_agenda_el_dueno` hace con las estadías.
 
 ### La puerta de entrada del portal
 
@@ -1533,21 +1617,101 @@ Y por eso "sumar las ganancias" da cero: los conceptos que no nacen del
 turno —planes, abonos, servicios, tienda, cuenta mensual— no los ve, así que
 no hay nada que sumar.
 
-#### Lo que RLS no puede cuidar: el monto
+#### Lo que RLS no podía cuidar: el monto y el cupo
 
-Una política verifica **quién** cobra y **en qué estado** nace el cobro. No
-puede verificar **cuánto**. El monto lo calcula el navegador, así que alguien
-con la consola abierta puede crearse un cobro de $0, y ninguna política lo
-va a detener — no es un agujero en las reglas, es el límite de dónde están
-escritas.
+Una política verifica **quién** escribe y **en qué estado** nace la fila. No
+puede verificar **cuánto** ni **contar franjas de 30 minutos**. Durante
+semanas el monto lo calculó el navegador —alguien con la consola abierta se
+creaba un cobro de $0— y la capacidad se revisó en la app: entre cotizar y
+escribir no había nada que impidiera que entrara otro, y
+`lib/servicios/capacidad-multiusuario.test.ts` lo midió: 30 reservas
+simultáneas entraban las 30.
 
-Hoy eso está acotado y a la vista: el cobro nace pendiente y lo marca pagado
-una persona mirando la transferencia, así que un cobro falso aparece raro en
-la pantalla de pagos. **Antes de que exista una pasarela de pago, la
-cotización tiene que moverse al servidor** — una ruta que cotice con las
-mismas reglas puras y escriba el cobro ella. Mientras el único camino a la
-plata sea una transferencia que un humano concilia, se puede vivir con esto;
-con cobro automático, no.
+Las dos cosas se cerraron el 6-11-2026 con
+`20261106120000_lo_que_el_dueno_no_se_salta.sql`; ver "Lo que el dueño no
+se salta". El test de concurrencia sigue, porque describe al **prototipo**:
+el repositorio local no tiene candado, y la nube sí.
+
+#### Lo que el dueño no se salta, aunque abra la consola
+
+`20261106120000_lo_que_el_dueno_no_se_salta.sql`, con sus gemelas en
+`lib/repo/agenda-local.ts` y sus casos en `aislamiento.sh`. Salió de un
+**hackeo ético**: ponerse en el lugar de un cliente —o de un script con su
+sesión y la llave pública— y probar qué escribe en la base saltándose la
+app. Lo que entraba, antes de ese archivo:
+
+| Por dónde | Qué conseguía |
+|---|---|
+| `descontar_stock` | La llamaba cualquiera con cualquier producto: la tienda entera en cero en un segundo. |
+| `insert into pagos` | Cualquier concepto y monto. Con un `recargo_jardin` de $0 la cola de Administración daba el recargo por **decidido** y nunca lo cobraba; con un `saldo_hotel` de $0, lo mismo con el saldo. |
+| `insert into estadias_jardin` / `reservas_hotel` | Sin admisión, sin cupo, con la cotización que quisiera. Y 30 a la vez. |
+| `insert into servicios` | Nacía `agendado` y se saltaba la cola que le pone precio: un servicio que nunca se cobra. |
+| `insert into ordenes` | Nacía `pagada` con total 0. |
+
+Lo que distingue a un script de una persona es la velocidad y el volumen,
+así que no bastaba con cerrar cada puerta: había que **acotar el daño** de
+lo que sí se puede hacer.
+
+La respuesta es la de siempre en este repo. **Lo que toca plata o cupo pasa
+por funciones** que saben hacer una sola cosa entera y en una transacción:
+
+- `agendar_dia_suelto` → el precio por tramo y el segundo perro los calcula
+  la base y los compara con la cotización que vio el dueño: si no calzan,
+  rechaza. Día y cobro, juntos.
+- `reservar_hotel` → la cascada completa (duración, plan vigente, segundo
+  perro), las horas extra y el abono, igual. Reserva y abono, juntos.
+- `comprar_en_tienda` → el precio lo pone la vitrina, lo que no alcanza se
+  ajusta y se avisa, y la orden nace **pendiente** como todo lo demás. Esto
+  además **arregla la tienda en la nube**: antes nacía "pagada" por un Webpay
+  que no existe, la base rechazaba el cobro, y la compra fallaba con el stock
+  ya descontado.
+
+**Y disparadores que no dejan hacer lo mismo por fuera**:
+
+- `lo_que_cuida_la_casa`, en cada día y cada reserva que agenda un dueño
+  —directo o a través de cualquier función, también `agendar_dia_con_plan`
+  y `agendar_dia_de_prueba`, que así quedaron cubiertas sin reescribirlas—:
+  el perro es suyo, la hora no pasó, la **admisión** (los bloqueos de
+  `evaluarAdmision`, leídos de la ficha), un perro por día y sin reservas
+  que se pisen, hasta **180 días** adelante, un perro nuevo por bloque, y el
+  **cupo** contado por la base **bajo un candado de transacción**
+  (`pg_advisory_xact_lock`): dos dueños confirmando en el mismo instante
+  entran uno después del otro.
+- El dueño ya **no inserta** en `pagos`, `ordenes` ni `suscripciones`, ni
+  días ni reservas directo. La política "agendo y queda pendiente" se borró:
+  los cobros nacen adentro de las funciones.
+- Un servicio nace `por_confirmar` y el dueño no lo toca después.
+- `descontar_stock` es del equipo; la compra descuenta adentro de su función.
+- Hasta **3 compras sin pagar** por cliente: cada orden descuenta stock al
+  nacer, y sin tope una cuenta vaciaba la vitrina con órdenes que nadie paga.
+
+**El equipo queda como estaba.** El cuidador que registra un perro en la
+puerta con la casa llena lo hace a propósito ("Registrar de todas formas"),
+y la prueba lo verifica: con 25 adentro, el 26 del dueño no entra y el del
+cuidador sí.
+
+Tres decisiones que conviene saber:
+
+- **`es_dueno()` mira la identidad, no `current_user`.** Adentro de una
+  función `security definer` el usuario es la dueña de la función, pero
+  `auth.uid()` sigue siendo el del que llamó: así el disparador cubre
+  también lo que entra por las funciones. Y es nulo-seguro: en el editor
+  SQL y en las migraciones `auth.uid()` es nulo y nada de esto dispara.
+- **El andamio de la prueba limpia la identidad en lo que arma la casa.**
+  `prueba.uid` queda puesto en la transacción, y con él puesto los
+  disparadores habrían bloqueado las preparaciones. En el editor SQL real
+  `auth.uid()` es nulo, y `como_la_casa` ahora lo imita.
+- **Dos parámetros nuevos en `NEGOCIO` que no son reglas comerciales**:
+  `agenda.diasMaximosDeAnticipacion` (180) y
+  `tienda.ordenesSinPagarMaximas` (3). Son topes contra un script, viven
+  también en SQL y entran en `reglas-en-la-base.test.ts`. Si la dueña
+  quiere otros números, se cambian en los dos lados.
+
+Lo que sigue abierto, a propósito: la **cotización de los servicios** no se
+compara (el precio lo confirma la casa, así que no vale nada todavía), y un
+dueño puede seguir corrigiendo su ficha —peso, vacunas— porque son sus
+datos; la admisión se revisa contra lo que diga la ficha al agendar, y
+Administración recibe el aviso de cada cambio.
 
 #### Descontar stock sin poder tocar el precio
 
@@ -1655,9 +1819,9 @@ Así que:
   esta regla sin avisar. Aprobar o rechazar (`resolverDiaDePrueba`) lo hace
   Administración, que pasa. `actualizarPerroComoDueno` además descarta el
   campo, igual que el sexo y la castración.
-- **`lo_que_agenda_el_dueno`** acota lo que el dueño inserta directo: un
-  día suelto esperado, sin plan y sin horas reales, o una reserva de hotel
-  pendiente y sin abono. Todo lo demás tiene su función.
+- **`lo_que_agenda_el_dueno`** acotaba lo que el dueño insertaba directo.
+  Desde `lo_que_el_dueno_no_se_salta` ya no inserta nada directo: también
+  el día suelto y la reserva de hotel tienen su función.
 
 Que haya cupo y que el perro cumpla la admisión sigue en la app, como con
 todo lo que se agenda: es una pregunta de capacidad, no de plata. Lo que se
@@ -2037,9 +2201,29 @@ usando en su celular:
 | `prueba/<algo>` | Una funcionalidad en curso, sale de `pruebas` y vuelve ahí. | Vista previa por rama |
 | `claude/<nombre>` | Lo mismo que `prueba/<algo>`, pero creada por una sesión de Claude en la nube: cada sesión trae la suya asignada y no la elige. | Vista previa por rama |
 | `v0.01` | Foto congelada del prototipo terminado (las 5 etapas). No se le commitea. | Vista previa fija |
+| `prueba/demo` | **La app de `main` con datos de mentira**, para mirar y mostrar sin tocar producción. No se le commitea: se pone al día empujando `main` encima (`git push origin main:prueba/demo`). | Vista previa con `NEXT_PUBLIC_ORIGEN_DATOS=local` (ver abajo) |
 
 El flujo es `prueba/<algo>` → `pruebas` → `main`. Nada llega a `main` sin haber
 pasado por `pruebas` y sin `build`, `lint` y `test` verdes.
+
+**Las vistas previas NO son un ambiente de prueba.** `NEXT_PUBLIC_ORIGEN_DATOS=supabase`
+está cargada también en Preview, así que la vista previa de `pruebas` o de
+cualquier rama se conecta a **la misma base que `lapatoteca.cl`**, con login
+real: un cliente o un cobro de prueba creado ahí queda en producción, y hay
+que borrarlo después ("Borrar un cliente de prueba").
+
+Para mirar sin ese riesgo existe `prueba/demo` (11-11-2026): la misma app con
+el prototipo —datos del seed en el navegador y el selector "Soy cliente /
+Trabajo acá / Administro"—. Lo que la pone en modo prototipo no está en el
+código sino en Vercel: una variable `NEXT_PUBLIC_ORIGEN_DATOS=local` cargada
+**solo en Preview y solo para la rama `prueba/demo`**, que le gana a la
+general de Preview. **Sin confirmar** que la dueña ya la cargó: si el link
+pide correo y contraseña en vez de mostrar el selector, la variable no está o
+falta el Redeploy (Vercel mete las `NEXT_PUBLIC_` al construir).
+
+La demo no se actualiza sola: cuando `main` avanza, se empuja encima con
+`git push origin main:prueba/demo`. Y cada publicación cuenta para el tope
+diario de Vercel (ver el paso 0 de "Lo que falta hacer afuera").
 
 Ojo con el nombre: la rama de una funcionalidad es `prueba/` en **singular**.
 Git no deja que exista `pruebas` y `pruebas/whatsapp` a la vez —una referencia
@@ -2151,6 +2335,7 @@ no tienen un orden que no rompa nada (ver más abajo): el código llegó a
 | `20261022160000_planes_y_dia_de_prueba` | Comprar y usar un plan y agendar el día de prueba, en la base; los disparadores que no dejan al dueño tocar planes, aprobarse el día de prueba ni insertar días o reservas por fuera. **Va junto con su código**: con una sin la otra, agendar el día de prueba y usar el plan fallan (ver abajo) | Corrida el 22-10-2026, verificada desde afuera |
 | `20261022170000_devolver_el_dia_de_prueba` | Redefine `cancelar_dia_de_prueba` para que lo ya pagado quede en "Por devolver". **No está acoplada**: sin ella el código nuevo funciona igual, con el comportamiento viejo (lo pagado no se devuelve), así que se puede correr después de publicar. Si alguna vez se vuelve a correr `cambios_de_agenda` suelto, hay que correr esta después | Corrida el 22-10-2026, confirmada con `pg_proc` |
 | `20261026120000_ubicacion_del_fichaje` | `turnos.entrada_ubicacion` y `turnos.salida_ubicacion`, dónde estaba el celular al fichar. **Va antes que su código**: con el código nuevo y sin estas columnas, fichar falla; al revés no rompe nada, porque el código viejo no las nombra | **Sin confirmar** |
+| `20261106120000_lo_que_el_dueno_no_se_salta` | Las funciones `agendar_dia_suelto`, `reservar_hotel` y `comprar_en_tienda`; el disparador `lo_que_cuida_la_casa` (admisión, cupo bajo candado, duplicados, horizonte); el dueño deja de insertar cobros, órdenes, suscripciones, días y reservas directo; `descontar_stock` solo para el equipo. **Va junto con su código, como `planes_y_dia_de_prueba`**: el código nuevo llama funciones que sin ella no existen, y el código viejo inserta directo lo que ella bloquea. Se corre la migración y se publica `main` en seguida, minutos y no días | **Sin confirmar** (agregada el 6-11-2026) |
 | `20261105120000_traslado_y_paseos` | `servicios.con_regreso`, `servicios.cantidad` y `reservas_hotel.paseos_cortos_contratados`: el traslado de ida y vuelta, los paseos sueltos por cantidad y el paseo de 15 min del hotel. **No está acoplada**: sin ella, agendar un traslado con regreso, un pack de paseos o una reserva con paseo de 15 min falla al guardar (columna que no existe), pero todo lo demás sigue igual, así que se puede correr después de publicar | Corrida el 5-11-2026, verificada desde afuera: las tres columnas dan `401` |
 
 La regla de acá en adelante:
@@ -2183,6 +2368,103 @@ sesión que arregló las cancelaciones y cerró los planes y el día de prueba,
 con las dieciséis (hasta `devolver_el_dia_de_prueba`) ese mismo día, y con
 las diecisiete (hasta `ubicacion_del_fichaje`) el 26-10-2026. Eso dice que las migraciones hacen lo que dicen en
 un Postgres limpio; si corrieron en producción lo dice la tabla.
+
+#### Dónde quedamos (11-11-2026)
+
+El backlog completo, para retomar sin leer el historial. Lo de más abajo
+("cierre del 22-10") quedó como historia: lo que sigue abierto de ahí está
+copiado acá.
+
+**A. Afuera del código, lo hace la dueña, en este orden:**
+
+1. **Correr `20261106120000_lo_que_el_dueno_no_se_salta`** en el editor SQL.
+   **Urgente**: el código ya está en `main` y llama funciones que sin ella no
+   existen, así que hasta que corra **en producción no se puede agendar un
+   día de jardín, reservar hotel ni comprar en la tienda**. **Confirmado el
+   11-11 desde afuera que NO había corrido**: la dueña tocó "Reservar el
+   día" en producción y salió "Algo salió mal". Verificar desde afuera con
+   los **cinco** parámetros —PostgREST busca la función por todos sus
+   nombres, y con uno solo da `404` aunque exista—:
+   `GET /rest/v1/rpc/agendar_dia_suelto?perro=<uuid>&nueva_fecha=2026-11-20&nuevo_inicio=2026-11-20T12:00:00Z&nuevo_fin=2026-11-20T15:00:00Z&la_cotizacion=%7B%7D`
+   tiene que dar `401`, no `404`. Control al lado: `cancelar_dia_de_jardin?estadia=<uuid>`
+   da `401`.
+2. **Probar en el portal** un día de jardín, una reserva de hotel y una
+   compra (las tres pendientes en `/admin/pagos`) y un baño (en "Servicios
+   por confirmar").
+3. **Desconectar `lapatoteca-app` del repo en Vercel** (paso 10 de "Lo que
+   falta hacer afuera").
+4. **Confirmar que `pxeclt@gmail.com` creó su cuenta** (`/admin/equipo`: la
+   invitación pasa a usada).
+5. **Cargar `GOOGLE_MAPS_SERVER_API_KEY` en Vercel**, solo Production y
+   Sensitive, y Redeploy. Sin ella el cálculo de kilómetros del traslado
+   está publicado pero inerte: el dueño los escribe a mano.
+6. **Plantilla "Reset Password" de Supabase** (Authentication → Emails) con
+   `{{ .TokenHash }}`. Va junto con C1: sin las dos cosas, "olvidé mi
+   contraseña" sigue fallando cuando el enlace se abre en otro aparato.
+7. **Correr `20261026120000_ubicacion_del_fichaje`**, pero **solo después**
+   de que C1 llegue a `main`. Hoy está en `pruebas`, no en producción.
+
+**B. Decisiones de producto esperando a la dueña:**
+
+- Los dos topes de `lo_que_el_dueno_no_se_salta`: **180 días** de
+  anticipación y **3 compras sin pagar**. Los puso una sesión como defensa
+  contra scripts; se cambian en `NEGOCIO` y en el SQL.
+- **El pack de más de ~15 días sale más caro que el pase libre** ($308.000
+  por 22 días contra $220.000), y ahora se ve lado a lado. ¿Se deja, se topa
+  el contador, o se avisa "te conviene el pase libre"?
+- **El commit `9846d0a` de `pruebas`** ("Día de prueba: con menos de 24
+  horas, solo el cargo") cambia la regla que la dueña confirmó el 22-10
+  (cargo de $5.000 y se devuelve el resto). Confirmar antes de pasarlo a
+  `main`.
+- El sexo fijo para el dueño; el macho sin castrar que no puede crear la
+  cuenta; las fotos de productos (ver "Decisiones de producto abiertas").
+
+**C. Código pendiente:**
+
+1. **Pasar `pruebas` a `main`**: 9 commits que no están en producción —el
+   `token_hash` de "olvidé mi contraseña" (`310ac17`), el fichaje con
+   ubicación y su migración, la alerta de crear cuenta y el `9846d0a`—.
+   Fusionar, correr los tests DESPUÉS de fusionar, y coordinar con A6 y A7.
+2. **El tablero cuenta lo devuelto como ingreso** (`panel.ts` suma
+   `pago.monto` sin mirar el estado).
+3. **Tocar "Agendar servicio" dos veces crea dos servicios.** Ya no nacen
+   cobrados, pero sigue siendo un error.
+4. **La tabla de valores de la tarjeta PLANES de la landing** (P52 del
+   Excel de seguimiento: el título está, la tabla no).
+5. **La cotización de los servicios no se compara en la base.** Hoy no
+   importa —el precio lo confirma la casa—; el día que un servicio tenga
+   precio firme, se cierra como el resto.
+6. **El texto de los planes, más descriptivo y cercano.** Lo pidió la dueña
+   el 11-11. Hoy explica la regla ("se paga por adelantado y vale hasta fin
+   de mes…") pero no le cuenta al dueño para qué le sirve ni cuál le
+   conviene. Revisar la tarjeta de planes de `/reservar` y la de la portada
+   (va junto con el punto 4), con el tono de la marca: cálido, de tú, y
+   hablándole de su perro, no de nuestra operación.
+
+**D. El día de prueba: lo que se encontró revisándolo el 11-11** (sin
+arreglar todavía; cada uno se comprobó con datos, no leyendo):
+
+1. **La cola de veredicto no mira si el perro vino.** Entra apenas la fecha
+   es hoy (`fecha <= hoy` en `diasDePruebaPorEvaluar`), así que a las 8:00
+   ya se puede aprobar a un perro que llega a las 10:00.
+2. **Toma el día equivocado si hubo una cancelación.** Busca la estadía de
+   prueba con `find` sin saltarse las canceladas: un perro que canceló la
+   del 10 y agendó otra para el 22 aparece el 15 como "por evaluar", con la
+   fecha vieja.
+3. **"No llegó" no se puede marcar.** `marcarNoLlego` existe y ninguna
+   pantalla lo llama: el perro que no vino queda `esperada` para siempre y
+   aparece en la cola como si hubiera que evaluarlo.
+4. **Aprobar no deja escribir la nota**, aunque este archivo dice que se
+   guarda también al aprobar: la fila solo pide nota para rechazar.
+5. **El dueño lee "¡Te esperamos!" después de haber venido.** Mientras
+   espera el veredicto, Mi cuenta sigue diciendo "Día de prueba el domingo
+   14 de junio a las 10:00. ¡Te esperamos!".
+6. **Lo que vio el equipo no llega a quien decide.** El cuidador marca
+   llegada y salida y nada más; la tarjeta del veredicto muestra el perro,
+   el dueño y las horas, pero no los incidentes ni los reportes del día.
+
+**Orden sugerido:** A1 y A2 primero (sin eso el portal no agenda); después
+la respuesta sobre `9846d0a` y C1 junto con A6 y A7 en una sola tanda.
 
 #### Dónde quedamos (cierre del 22-10-2026)
 
@@ -2411,15 +2693,22 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
     importar para este correo. Se prueba pidiendo "olvidé mi contraseña" en
     el computador y abriendo el correo en el teléfono: antes decía que el
     enlace no servía, ahora tiene que dejar escribir la contraseña.
+14. **Correr `20261106120000_lo_que_el_dueno_no_se_salta` en el editor
+    SQL, junto con publicar su código** (ver la tabla de migraciones: está
+    acoplada). Después, verificar desde afuera con la consulta de A1 en
+    "Dónde quedamos (11-11-2026)", **con los cinco parámetros**: con uno
+    solo PostgREST no encuentra la firma y da `404` aunque la función
+    exista. `404` es que no corrió, `401` es que existe. Y probar desde el portal un
+    día de jardín, una reserva de hotel y una compra: las tres tienen que
+    quedar pendientes en `/admin/pagos`.
 
 **Decisiones de producto abiertas:**
 
-- **La tienda nace pagada** (con un "webpay" que no existe), mientras que
-  todo lo demás nace pendiente hasta que Administración concilia la
-  transferencia. Los planes ya se igualaron (22-10): darlos por pagados
-  hacía fallar la compra en la nube. La tienda tiene el **mismo bug** —crea
-  la orden "pagada", descuenta stock y falla al crear el cobro—, así que
-  igualarla no es solo una decisión: hoy en la nube no funciona.
+- ~~**La tienda nace pagada**~~ — igualada el 6-11-2026 con
+  `lo_que_el_dueno_no_se_salta`: la orden y su cobro nacen pendientes,
+  el precio lo pone la vitrina y la compra pasa por `comprar_en_tienda`.
+  Falta que la dueña lo vea: la pantalla de pagos ya la lista como cualquier
+  cobro, y el aviso de la tienda dice "quedó pendiente de pago".
 - **El sexo quedó fijo para el dueño**, igual que la castración, porque
   decide si a un macho se le exige. Lo decidió una sesión; falta que la dueña
   lo confirme.

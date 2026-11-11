@@ -56,6 +56,28 @@ export function construirCotizacion(
  * `indicePerro` es la posición dentro de la reserva: 0 es el primero y paga
  * tarifa completa.
  */
+/**
+ * Cuántos OTROS perros del mismo dueño ya están comprometidos ese día.
+ *
+ * Es lo que decide el descuento de segundo perro, y vive acá para que la
+ * cotización de la app y la gemela en SQL (`hay_otro_perro_del_dueno`)
+ * cuenten lo mismo: un día cancelado o al que el perro no llegó no es un
+ * perro comprometido.
+ */
+export function indiceDeSegundoPerro(
+  estadiasDelDia: readonly { clienteId: string; perroId: string; estado: string }[],
+  clienteId: string,
+  perroId: string,
+): number {
+  return estadiasDelDia.filter(
+    (e) =>
+      e.clienteId === clienteId &&
+      e.perroId !== perroId &&
+      e.estado !== "cancelada" &&
+      e.estado !== "no_show",
+  ).length;
+}
+
 export function descuentoSegundoPerro(
   indicePerro = 0,
 ): DescuentoSolicitado | null {

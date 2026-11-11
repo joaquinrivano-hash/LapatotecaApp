@@ -8,6 +8,8 @@ import {
   CalendarCheck,
   Car,
   Check,
+  ShoppingBasket,
+  Trash2,
   Footprints,
   Minus,
   Moon,
@@ -27,6 +29,7 @@ import { ComoPagar } from "@/components/shared/como-pagar";
 import { EstadoVacio } from "@/components/shared/estado-vacio";
 import { PerroAvatar } from "@/components/shared/perro-avatar";
 import { PrecioCLP } from "@/components/shared/precio";
+import { TablaPrecios } from "@/components/shared/tabla-precios";
 import { NEGOCIO } from "@/lib/config/negocio";
 import { NOMBRE_PELO } from "@/lib/rules/servicios";
 import type { DuracionPaseo, NivelSpa } from "@/lib/types";
@@ -44,10 +47,12 @@ import {
   reservarDiaJardin,
   ReservaRechazada,
 } from "@/lib/servicios/reservas";
+import type { EntradaServicio } from "@/lib/servicios/reservas";
 import { cn } from "@/lib/utils";
 import {
   formatearDiaMesCorto,
   formatearFecha,
+  formatearFechaCorta,
   formatearFechaLarga,
   instanteEnHora,
   sumarDias,
@@ -393,71 +398,91 @@ function ComprarPlan({ perro }: { perro: Perro }) {
           pasan al mes siguiente.
         </p>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label>¿Cuántos días al mes?</Label>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Un día menos"
-              disabled={dias <= NEGOCIO.planes.minimoDias}
-              onClick={() => setDias((d) => Math.max(NEGOCIO.planes.minimoDias, d - 1))}
-            >
-              <Minus />
-            </Button>
-            <span className="font-display min-w-12 text-center text-2xl font-bold tabular-nums">
-              {dias}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Un día más"
-              onClick={() => setDias((d) => Math.min(22, d + 1))}
-            >
-              <Plus />
-            </Button>
-            <span className="text-muted-foreground ml-auto text-sm">
+      <CardContent>
+        {/* Son DOS alternativas, no un plan con un agregado abajo: el pase
+            libre REEMPLAZA al pack por días, no lo complementa. Apiladas se
+            leían como "el plan" y "algo más"; lado a lado, con la misma
+            forma y cada una con su propio botón, la pregunta que queda es
+            cuál de las dos, que es la correcta.
+
+            El ámbar es el color de dato de la marca y acá separa la segunda
+            opción sin competir con el fucsia, que es el de acción. Lleva
+            texto marino, nunca blanco. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="border-border flex flex-col gap-3 rounded-2xl border-2 p-4">
+            <div>
+              <p className="font-display text-lg font-bold">Por días</p>
+              <Label className="text-muted-foreground font-normal">
+                ¿Cuántos días al mes?
+              </Label>
+            </div>
+
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Un día menos"
+                disabled={dias <= NEGOCIO.planes.minimoDias}
+                onClick={() =>
+                  setDias((d) => Math.max(NEGOCIO.planes.minimoDias, d - 1))
+                }
+              >
+                <Minus />
+              </Button>
+              <span className="font-display min-w-12 text-center text-2xl font-bold tabular-nums">
+                {dias}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Un día más"
+                onClick={() => setDias((d) => Math.min(22, d + 1))}
+              >
+                <Plus />
+              </Button>
+            </div>
+            <p className="text-muted-foreground text-center text-sm">
               {formatearCLP(precioDelTramo(dias))} por día
-            </span>
+            </p>
+
+            <Button
+              size="lg"
+              disabled={ocupado}
+              onClick={() => comprar("dias")}
+              className="mt-auto w-full flex-col gap-0 py-3"
+            >
+              <span>Plan de {dias} días</span>
+              <span className="text-sm font-normal opacity-90">
+                {formatearCLP(precio)}
+              </span>
+            </Button>
+          </div>
+
+          <div className="border-accent bg-accent/15 flex flex-col gap-3 rounded-2xl border-2 p-4">
+            <div>
+              <p className="font-display text-lg font-bold">Pase libre</p>
+              <p className="text-muted-foreground text-sm text-pretty">
+                Asistencia libre todos los días hábiles, con tope a las{" "}
+                {NEGOCIO.jardin.horaCierre}:00.
+              </p>
+            </div>
+
+            <p className="font-display text-center text-2xl font-bold tabular-nums">
+              {formatearCLP(PRECIOS.planes.paseLibre)}
+              <span className="block text-sm font-normal">al mes</span>
+            </p>
+
+            <Button
+              variant="accent"
+              size="lg"
+              disabled={ocupado}
+              onClick={() => comprar("pase_libre")}
+              className="mt-auto w-full"
+            >
+              Comprar pase libre
+            </Button>
           </div>
         </div>
-
-        <Button
-          size="xl"
-          disabled={ocupado}
-          onClick={() => comprar("dias")}
-          className="w-full flex-col gap-0 py-3"
-        >
-          <span>Plan de {dias} días</span>
-          <span className="text-sm font-normal opacity-90">
-            {formatearCLP(precio)}
-          </span>
-        </Button>
-
-        {/* El pase libre va abajo y aparte: no es un plan más de la lista,
-            es el que los reemplaza a todos. Al lado del otro, en el mismo
-            tamaño, se leía como la segunda de dos opciones iguales.
-
-            El ámbar es el color de dato de la marca y acá hace de destaque
-            sin competir con el fucsia, que es el color de acción. */}
-        <button
-          type="button"
-          disabled={ocupado}
-          onClick={() => comprar("pase_libre")}
-          className="bg-accent text-foreground w-full rounded-2xl px-4 py-4 text-left transition-opacity disabled:opacity-60"
-        >
-          <span className="font-display flex items-baseline justify-between gap-3 text-lg font-bold">
-            Pase libre
-            <span className="text-base tabular-nums">
-              {formatearCLP(PRECIOS.planes.paseLibre)} al mes
-            </span>
-          </span>
-          <span className="mt-0.5 block text-sm text-pretty opacity-80">
-            Asistencia libre todos los días hábiles, con tope a las{" "}
-            {NEGOCIO.jardin.horaCierre}:00.
-          </span>
-        </button>
       </CardContent>
     </Card>
   );
@@ -687,6 +712,20 @@ function ServicioSpot({ perro }: { perro: Perro }) {
   const [conRegreso, setConRegreso] = useState(false);
   const [otraDireccion, setOtraDireccion] = useState(false);
   const [direccion, setDireccion] = useState("");
+  /**
+   * Lo que el dueño va juntando antes de confirmar.
+   *
+   * Cada ítem guarda su propia entrada completa —con SU día y SU hora— y no
+   * solo el tipo: un baño el sábado y un traslado el lunes son dos cosas
+   * distintas, y guardarlas contra los campos del formulario las haría
+   * cambiar solas cuando él mueve la fecha para elegir el siguiente.
+   *
+   * El concepto y el total se guardan cotizados: es lo que vio al
+   * agregarlo, y es lo que tiene que seguir viendo en la lista.
+   */
+  const [carrito, setCarrito] = useState<
+    { clave: string; entrada: EntradaServicio; concepto: string; total: number }[]
+  >([]);
   /** `null` mientras no se sabe; `false` cuando la distancia no llegó. */
   const [midiendo, setMidiendo] = useState(false);
   const [kmMedidos, setKmMedidos] = useState<number | null>(null);
@@ -755,24 +794,50 @@ function ServicioSpot({ perro }: { perro: Perro }) {
     ],
   );
 
-  async function agendar() {
-    const { agendarServicio } = await import("@/lib/servicios/reservas");
+  /** Lo que está elegido ahora mismo, listo para agendar o para el carrito. */
+  function loElegido(): EntradaServicio {
+    return {
+      perroId: perro.id,
+      fechaHora,
+      tipo,
+      nivelSpa,
+      duracionMin: duracion,
+      cantidad: cantidadPaseos,
+      km,
+      conRegreso,
+    };
+  }
+
+  function agregarAlCarrito() {
+    if (!previa.datos) return;
+    setCarrito((actual) => [
+      ...actual,
+      {
+        clave: `${Date.now()}-${actual.length}`,
+        entrada: loElegido(),
+        concepto: previa.datos!.lineas[0]?.concepto ?? "Servicio",
+        total: previa.datos!.total,
+      },
+    ]);
+    toast.success("Agregado al carrito", {
+      description: "Puedes seguir agregando y agendar todo junto.",
+    });
+  }
+
+  async function agendar(entradas: EntradaServicio[], vaciar: boolean) {
+    const { agendarServicios } = await import("@/lib/servicios/reservas");
     try {
-      await ejecutar((repo) =>
-        agendarServicio(repo, {
-          perroId: perro.id,
-          fechaHora,
-          tipo,
-          nivelSpa,
-          duracionMin: duracion,
-          cantidad: cantidadPaseos,
-          km,
-          conRegreso,
-        }),
+      await ejecutar((repo) => agendarServicios(repo, entradas));
+      if (vaciar) setCarrito([]);
+      toast.success(
+        entradas.length === 1
+          ? "Servicio agendado"
+          : `${entradas.length} servicios agendados`,
+        {
+          description:
+            "Nos pondremos en contacto contigo para acordar los detalles.",
+        },
       );
-      toast.success("Servicio agendado", {
-        description: "Lo dejamos en tu cuenta del mes.",
-      });
     } catch (error) {
       avisarError(error);
     }
@@ -844,25 +909,39 @@ function ServicioSpot({ perro }: { perro: Perro }) {
         )}
 
         {tipo === "spa" && (
-          <div className="grid grid-cols-2 gap-2">
-            {/* El precio del baño lo deciden el pelo y el peso. El peso ya
-                está en la ficha, así que lo único que hay que preguntar es
-                el pelo. */}
-            {(["peloCorto", "peloLargo"] as const).map((nivel) => (
-              <button
-                key={nivel}
-                type="button"
-                onClick={() => setNivelSpa(nivel)}
-                className={cn(
-                  "rounded-xl border-2 py-3 text-sm font-semibold capitalize transition-all",
-                  nivelSpa === nivel
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground",
-                )}
-              >
-                {NOMBRE_PELO[nivel]}
-              </button>
-            ))}
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              {/* El precio del baño lo deciden el pelo y el peso. El peso ya
+                  está en la ficha, así que lo único que hay que preguntar es
+                  el pelo. */}
+              {(["peloCorto", "peloLargo"] as const).map((nivel) => (
+                <button
+                  key={nivel}
+                  type="button"
+                  onClick={() => setNivelSpa(nivel)}
+                  className={cn(
+                    "rounded-xl border-2 py-3 text-sm font-semibold capitalize transition-all",
+                    nivelSpa === nivel
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground",
+                  )}
+                >
+                  {NOMBRE_PELO[nivel]}
+                </button>
+              ))}
+            </div>
+
+            {/* El pelo lo declara el dueño y se confirma con el perro acá.
+                De los dos, el corto es el único que puede subir de precio,
+                así que el aviso va solo en ese: decirlo en los dos sería
+                advertir de algo que no puede pasar. Y va ANTES de agendar,
+                no cuando llegue el cobro con una diferencia que nadie
+                mencionó. */}
+            {nivelSpa === "peloCorto" && (
+              <p className="text-muted-foreground text-sm text-pretty">
+                * Si tu perro resulta de pelo largo, se cobrará la diferencia.
+              </p>
+            )}
           </div>
         )}
 
@@ -1009,13 +1088,117 @@ function ServicioSpot({ perro }: { perro: Perro }) {
           </div>
         )}
 
+        {/* La tabla del afiche completa, no solo la línea que le tocó.
+            El precio depende del pelo y del peso, o de los kilómetros y la
+            hora, y todo eso se verifica acá: ver el cuadro entero es lo que
+            le permite entender por qué su valor puede moverse. */}
+        <TablaPrecios tipo={tipo} />
+
         {previa.datos && <Desglose cotizacion={previa.datos} />}
 
-        <Button size="xl" className="w-full" disabled={ocupado} onClick={agendar}>
-          <Check />
-          Agendar
-        </Button>
+        {/* Dos caminos, porque son dos intenciones distintas: el que viene
+            por una sola cosa no tiene por qué pasar por un carrito, y el que
+            quiere baño y traslado no tiene por qué agendar dos veces y
+            recibir dos conversaciones. */}
+        <div className="space-y-2">
+          <Button
+            size="xl"
+            className="w-full"
+            disabled={ocupado || !previa.datos}
+            onClick={() => agendar([loElegido()], false)}
+          >
+            <Check />
+            Agendar servicio
+          </Button>
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full"
+            disabled={ocupado || !previa.datos}
+            onClick={agregarAlCarrito}
+          >
+            <ShoppingBasket />
+            Agregar al carrito
+          </Button>
+        </div>
+
+        {/* La nota va acá y no detrás de un enlace: el dueño acaba de ver un
+            total y tiene que saber, ANTES de tocar el botón, que ese número
+            es el del afiche y que se lo confirmamos nosotros. */}
+        <p className="text-muted-foreground text-sm text-pretty">
+          Te hablaremos en breve para confirmar el valor.
+        </p>
+
+        {carrito.length > 0 && (
+          <div className="border-primary/40 space-y-3 rounded-2xl border-2 p-4">
+            <p className="font-display font-bold">
+              Tu carrito ({carrito.length})
+            </p>
+
+            <ul className="divide-border divide-y">
+              {carrito.map((item) => (
+                <li
+                  key={item.clave}
+                  className="flex items-baseline gap-2 py-2 text-sm"
+                >
+                  <span className="flex-1 text-pretty">
+                    {item.concepto}
+                    <span className="text-muted-foreground block text-xs">
+                      {formatearFechaCorta(item.entrada.fechaHora)} ·{" "}
+                      {horaDe(item.entrada.fechaHora)}
+                    </span>
+                  </span>
+                  <PrecioCLP monto={item.total} tamano="sm" />
+                  <button
+                    type="button"
+                    aria-label={`Sacar ${item.concepto} del carrito`}
+                    className="text-muted-foreground hover:text-primary"
+                    onClick={() =>
+                      setCarrito((actual) =>
+                        actual.filter((i) => i.clave !== item.clave),
+                      )
+                    }
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            <div className="flex items-baseline justify-between gap-3 font-semibold">
+              <span>Total referencial</span>
+              <PrecioCLP
+                monto={carrito.reduce((suma, i) => suma + i.total, 0)}
+              />
+            </div>
+
+            <Button
+              size="xl"
+              className="w-full"
+              disabled={ocupado}
+              onClick={() =>
+                agendar(
+                  carrito.map((i) => i.entrada),
+                  true,
+                )
+              }
+            >
+              <Check />
+              Agendar todo
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
+}
+
+/** La hora de pared de un instante, para la lista del carrito. */
+function horaDe(instante: string): string {
+  return new Intl.DateTimeFormat("es-CL", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: NEGOCIO.zonaHoraria,
+  }).format(new Date(instante));
 }

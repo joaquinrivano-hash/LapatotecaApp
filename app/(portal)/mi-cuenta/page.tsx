@@ -54,6 +54,12 @@ import {
   formatearHora,
 } from "@/lib/utils/fecha";
 
+const NOMBRE_SERVICIO: Record<string, string> = {
+  spa: "Baño",
+  paseo: "Paseo",
+  traslado: "Traslado",
+};
+
 export default function MiCuenta() {
   const hoy = hoyDelStaff();
   const clienteId = useSesion((s) => s.clienteId);
@@ -65,18 +71,21 @@ export default function MiCuenta() {
       const perros = await repo.perros.porCliente(clienteId);
       const ids = new Set(perros.map((p) => p.id));
 
-      const [planes, reservas, estadias, reportes] = await Promise.all([
-        repo.planes.porCliente(clienteId),
-        repo.reservasHotel.porCliente(clienteId),
-        repo.estadiasJardin.porCliente(clienteId),
-        repo.reportes.listar(),
-      ]);
+      const [planes, reservas, estadias, servicios, reportes] =
+        await Promise.all([
+          repo.planes.porCliente(clienteId),
+          repo.reservasHotel.porCliente(clienteId),
+          repo.estadiasJardin.porCliente(clienteId),
+          repo.servicios.porCliente(clienteId),
+          repo.reportes.listar(),
+        ]);
       const pagos = await repo.pagos.porCliente(clienteId);
 
       return {
         planes,
         reservas,
         estadias,
+        servicios,
         // Un cobro reembolsado en cero no se muestra: es la constancia de
         // algo que se anuló, y al dueño le diría "te cobramos $0".
         pagos: pagos
@@ -116,7 +125,8 @@ export default function MiCuenta() {
         total: r.cotizacion.total,
         inicioProgramado: r.inicioProgramado,
         esDiaDePrueba: false,
-        porConfirmar: r.estado === "pendiente",
+        porConfirmar:
+          r.estado === "pendiente" ? "Por confirmar: falta el abono" : null,
         sePuedeCancelar: false,
       })),
     // Lo que viene es lo que todavía no termina. Un día finalizado o al que
@@ -139,10 +149,33 @@ export default function MiCuenta() {
         total: e.cotizacion?.total ?? 0,
         inicioProgramado: e.inicioProgramado,
         esDiaDePrueba: e.origen === "dia_de_prueba",
-        porConfirmar: false,
+        porConfirmar: null,
         // Si el perro ya llegó, no se cancela: es un retiro, y lo registra
         // el equipo.
         sePuedeCancelar: e.estado === "esperada",
+      })),
+    // Lo que pidió desde el portal. Sin esto el servicio desaparecía de su
+    // pantalla: nace sin cobro —el valor lo confirma la casa— así que no
+    // aparecía ni siquiera en Cobros, y el dueño quedaba sin ninguna señal
+    // de que su pedido existe.
+    ...(datos?.servicios ?? [])
+      .filter(
+        (s) => s.fechaHora.slice(0, 10) >= hoy && s.estado !== "cancelado",
+      )
+      .map((s) => ({
+        id: s.id,
+        linea: "servicio" as const,
+        perroId: s.perroId,
+        fecha: s.fechaHora.slice(0, 10),
+        detalle: `${NOMBRE_SERVICIO[s.tipo]} · ${formatearHora(s.fechaHora)}`,
+        total: s.cotizacion.total,
+        inicioProgramado: s.fechaHora,
+        esDiaDePrueba: false,
+        porConfirmar:
+          s.estado === "por_confirmar"
+            ? "Te hablamos en breve para confirmar el valor"
+            : null,
+        sePuedeCancelar: false,
       })),
   ].sort((a, b) => a.fecha.localeCompare(b.fecha));
 
@@ -368,15 +401,29 @@ export default function MiCuenta() {
                     <p className="text-muted-foreground truncate text-sm">
                       {nombrePerro(item.perroId)} · {item.detalle}
                     </p>
-                    {/* Tomada pero sin abono: el cupo es suyo, falta pagar. */}
+                    {/* Falta algo antes de que sea firme, y no siempre es
+                        lo mismo: en el hotel falta el abono, en un servicio
+                        falta que la casa confirme el valor. */}
                     {item.porConfirmar && (
-                      <p className="text-warning text-xs font-semibold">
-                        Por confirmar: falta el abono
+                      <p className="text-warning text-xs font-semibold text-pretty">
+                        {item.porConfirmar}
                       </p>
                     )}
                   </div>
-                  <Badge variant={item.linea === "hotel" ? "hotel" : "jardin"}>
-                    {item.linea === "hotel" ? "Hotel" : "Jardín"}
+                  <Badge
+                    variant={
+                      item.linea === "hotel"
+                        ? "hotel"
+                        : item.linea === "jardin"
+                          ? "jardin"
+                          : "secondary"
+                    }
+                  >
+                    {item.linea === "hotel"
+                      ? "Hotel"
+                      : item.linea === "jardin"
+                        ? "Jardín"
+                        : "Servicio"}
                   </Badge>
                   {item.total > 0 && <PrecioCLP monto={item.total} />}
                 </CardContent>

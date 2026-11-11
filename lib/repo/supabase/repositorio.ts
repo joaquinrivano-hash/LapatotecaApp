@@ -895,6 +895,63 @@ function agendaDe(cliente: Cliente0): AgendaRepo {
         planDevuelto: entidad<PlanComprado>(r.plan),
       };
     },
+
+    // Las tres de `20261106120000_lo_que_el_dueno_no_se_salta.sql`: el
+    // dueño ya no inserta días, reservas, cobros ni órdenes. El precio lo
+    // pone la base y lo compara con la cotización que vio; la admisión y
+    // el cupo los revisa el disparador `lo_que_cuida_la_casa` bajo candado.
+
+    async agendarDiaSuelto(perroId, horario, cotizacion) {
+      const r = await llamar(
+        "agendar_dia_suelto",
+        {
+          perro: perroId,
+          nueva_fecha: horario.fecha,
+          nuevo_inicio: horario.inicio,
+          nuevo_fin: horario.fin,
+          la_cotizacion: cotizacion,
+        },
+        "No se pudo agendar el día",
+      );
+      return {
+        estadia: entidad<EstadiaJardin>(r.estadia)!,
+        pago: entidad<Pago>(r.pago)!,
+      };
+    },
+
+    async reservarHotel(perroId, pedido, cotizacion) {
+      const r = await llamar(
+        "reservar_hotel",
+        {
+          perro: perroId,
+          nuevo_inicio: pedido.inicio,
+          nuevo_fin: pedido.fin,
+          paseos: pedido.paseosContratados,
+          paseos_cortos: pedido.paseosCortosContratados,
+          la_cotizacion: cotizacion,
+        },
+        "No se pudo tomar la reserva",
+      );
+      return {
+        reserva: entidad<ReservaHotel>(r.reserva)!,
+        pago: entidad<Pago>(r.pago)!,
+      };
+    },
+
+    async comprarEnTienda(_clienteId, items) {
+      // El cliente lo pone la base (`mi_cliente_id()`): mandarlo sería
+      // dejar que el navegador comprara a nombre de otro.
+      const r = await llamar(
+        "comprar_en_tienda",
+        { los_items: items },
+        "No se pudo cerrar la compra",
+      );
+      return {
+        orden: entidad<OrdenTienda>(r.orden)!,
+        pago: entidad<Pago>(r.pago)!,
+        ajustados: (r.ajustados as string[] | null) ?? [],
+      };
+    },
   };
 }
 
