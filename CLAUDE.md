@@ -2238,6 +2238,92 @@ sesión que arregló las cancelaciones y cerró los planes y el día de prueba,
 y con las dieciséis (hasta `devolver_el_dia_de_prueba`) ese mismo día. Eso dice que las migraciones hacen lo que dicen en
 un Postgres limpio; si corrieron en producción lo dice la tabla.
 
+#### Dónde quedamos (11-11-2026)
+
+El backlog completo, para retomar sin leer el historial. Lo de más abajo
+("cierre del 22-10") quedó como historia: lo que sigue abierto de ahí está
+copiado acá.
+
+**A. Afuera del código, lo hace la dueña, en este orden:**
+
+1. **Correr `20261106120000_lo_que_el_dueno_no_se_salta`** en el editor SQL.
+   **Urgente**: el código ya está en `main` y llama funciones que sin ella no
+   existen, así que hasta que corra **en producción no se puede agendar un
+   día de jardín, reservar hotel ni comprar en la tienda**. Verificar desde
+   afuera: `GET /rest/v1/rpc/agendar_dia_suelto?perro=00000000-0000-0000-0000-000000000000`
+   tiene que dar `401`, no `404`.
+2. **Probar en el portal** un día de jardín, una reserva de hotel y una
+   compra (las tres pendientes en `/admin/pagos`) y un baño (en "Servicios
+   por confirmar").
+3. **Desconectar `lapatoteca-app` del repo en Vercel** (paso 10 de "Lo que
+   falta hacer afuera").
+4. **Confirmar que `pxeclt@gmail.com` creó su cuenta** (`/admin/equipo`: la
+   invitación pasa a usada).
+5. **Cargar `GOOGLE_MAPS_SERVER_API_KEY` en Vercel**, solo Production y
+   Sensitive, y Redeploy. Sin ella el cálculo de kilómetros del traslado
+   está publicado pero inerte: el dueño los escribe a mano.
+6. **Plantilla "Reset Password" de Supabase** (Authentication → Emails) con
+   `{{ .TokenHash }}`. Va junto con C1: sin las dos cosas, "olvidé mi
+   contraseña" sigue fallando cuando el enlace se abre en otro aparato.
+7. **Correr `20261026120000_ubicacion_del_fichaje`**, pero **solo después**
+   de que C1 llegue a `main`. Hoy está en `pruebas`, no en producción.
+
+**B. Decisiones de producto esperando a la dueña:**
+
+- Los dos topes de `lo_que_el_dueno_no_se_salta`: **180 días** de
+  anticipación y **3 compras sin pagar**. Los puso una sesión como defensa
+  contra scripts; se cambian en `NEGOCIO` y en el SQL.
+- **El pack de más de ~15 días sale más caro que el pase libre** ($308.000
+  por 22 días contra $220.000), y ahora se ve lado a lado. ¿Se deja, se topa
+  el contador, o se avisa "te conviene el pase libre"?
+- **El commit `9846d0a` de `pruebas`** ("Día de prueba: con menos de 24
+  horas, solo el cargo") cambia la regla que la dueña confirmó el 22-10
+  (cargo de $5.000 y se devuelve el resto). Confirmar antes de pasarlo a
+  `main`.
+- El sexo fijo para el dueño; el macho sin castrar que no puede crear la
+  cuenta; las fotos de productos (ver "Decisiones de producto abiertas").
+
+**C. Código pendiente:**
+
+1. **Pasar `pruebas` a `main`**: 9 commits que no están en producción —el
+   `token_hash` de "olvidé mi contraseña" (`310ac17`), el fichaje con
+   ubicación y su migración, la alerta de crear cuenta y el `9846d0a`—.
+   Fusionar, correr los tests DESPUÉS de fusionar, y coordinar con A6 y A7.
+2. **El tablero cuenta lo devuelto como ingreso** (`panel.ts` suma
+   `pago.monto` sin mirar el estado).
+3. **Tocar "Agendar servicio" dos veces crea dos servicios.** Ya no nacen
+   cobrados, pero sigue siendo un error.
+4. **La tabla de valores de la tarjeta PLANES de la landing** (P52 del
+   Excel de seguimiento: el título está, la tabla no).
+5. **La cotización de los servicios no se compara en la base.** Hoy no
+   importa —el precio lo confirma la casa—; el día que un servicio tenga
+   precio firme, se cierra como el resto.
+
+**D. El día de prueba: lo que se encontró revisándolo el 11-11** (sin
+arreglar todavía; cada uno se comprobó con datos, no leyendo):
+
+1. **La cola de veredicto no mira si el perro vino.** Entra apenas la fecha
+   es hoy (`fecha <= hoy` en `diasDePruebaPorEvaluar`), así que a las 8:00
+   ya se puede aprobar a un perro que llega a las 10:00.
+2. **Toma el día equivocado si hubo una cancelación.** Busca la estadía de
+   prueba con `find` sin saltarse las canceladas: un perro que canceló la
+   del 10 y agendó otra para el 22 aparece el 15 como "por evaluar", con la
+   fecha vieja.
+3. **"No llegó" no se puede marcar.** `marcarNoLlego` existe y ninguna
+   pantalla lo llama: el perro que no vino queda `esperada` para siempre y
+   aparece en la cola como si hubiera que evaluarlo.
+4. **Aprobar no deja escribir la nota**, aunque este archivo dice que se
+   guarda también al aprobar: la fila solo pide nota para rechazar.
+5. **El dueño lee "¡Te esperamos!" después de haber venido.** Mientras
+   espera el veredicto, Mi cuenta sigue diciendo "Día de prueba el domingo
+   14 de junio a las 10:00. ¡Te esperamos!".
+6. **Lo que vio el equipo no llega a quien decide.** El cuidador marca
+   llegada y salida y nada más; la tarjeta del veredicto muestra el perro,
+   el dueño y las horas, pero no los incidentes ni los reportes del día.
+
+**Orden sugerido:** A1 y A2 primero (sin eso el portal no agenda); después
+la respuesta sobre `9846d0a` y C1 junto con A6 y A7 en una sola tanda.
+
 #### Dónde quedamos (cierre del 22-10-2026)
 
 Para retomar sin leer el historial. `main`, `pruebas` y la rama de la sesión
