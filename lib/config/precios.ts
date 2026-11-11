@@ -118,8 +118,6 @@ export const DESCUENTOS = {
   hotelDesde7Noches: 0.1,
   /** Hotel desde 14 noches. Reemplaza al anterior, no se suma. */
   hotelDesde14Noches: 0.15,
-  /** Hotel, adicional, si el cliente tiene un plan de jardín vigente. */
-  hotelConPlanDeJardin: 0.1,
   /** Desde el segundo perro del mismo dueño en el mismo día o reserva. */
   segundoPerro: 0.2,
   /** Spa premium y paseos sueltos, para clientes activos. */

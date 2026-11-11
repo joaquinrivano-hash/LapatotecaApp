@@ -9,6 +9,7 @@
 
 import { NEGOCIO } from "@/lib/config/negocio";
 import { DESCUENTOS, PRECIOS } from "@/lib/config/precios";
+import { lineasDePaseos } from "@/lib/rules/servicios";
 import {
   construirCotizacion,
   descuentoSegundoPerro,
@@ -23,13 +24,12 @@ export interface EntradaPrecioHotel {
   inicio: InstanteISO;
   /** Programado al cotizar, real al cerrar la estadía. */
   fin: InstanteISO;
-  /** Paseos contratados, a $4.000 cada uno. */
+  /** Paseos de media hora. Cada tres, la promo del folleto. */
   paseosContratados?: number;
+  /** Paseos de 15 minutos, con la misma promo. */
   paseosCortosContratados?: number;
   /** Posición del perro en la reserva del dueño: 0 = primero, sin descuento. */
   indicePerro?: number;
-  /** Suma un 10% adicional si el cliente tiene plan de jardín vigente. */
-  conPlanDeJardin?: boolean;
 }
 
 export interface DesgloseEstadiaHotel {
@@ -105,17 +105,6 @@ export function descuentoPorDuracion(
   return null;
 }
 
-/** El folleto da un 10% adicional a quien tiene un plan de jardín vigente. */
-export function descuentoPorPlanDeJardin(
-  tienePlanVigente: boolean,
-): DescuentoSolicitado | null {
-  if (!tienePlanVigente) return null;
-  return {
-    concepto: "Con plan de jardín vigente",
-    porcentaje: DESCUENTOS.hotelConPlanDeJardin,
-  };
-}
-
 export function calcularPrecioHotel(entrada: EntradaPrecioHotel): Cotizacion {
   const { bloques, horasExtraCobradas } = desglosarEstadiaHotel(
     entrada.inicio,
@@ -141,32 +130,19 @@ export function calcularPrecioHotel(entrada: EntradaPrecioHotel): Cotizacion {
   }
 
   // Las dos duraciones van en líneas separadas: juntas en una sola, "3
-  // paseos $11.000" no se puede comprobar mirándolo.
-  for (const { cuantos, minutos, precio } of [
-    {
-      cuantos: entrada.paseosCortosContratados ?? 0,
-      minutos: 15,
-      precio: PRECIOS.hotel.paseoCorto,
-    },
-    {
-      cuantos: entrada.paseosContratados ?? 0,
-      minutos: 30,
-      precio: PRECIOS.hotel.paseo,
-    },
-  ]) {
-    if (cuantos === 0) continue;
-    lineas.push({
-      concepto: "Paseos",
-      detalle: `${cuantos} ${cuantos === 1 ? "paseo" : "paseos"} de ${minutos} min`,
-      monto: cuantos * precio,
-    });
-  }
+  // paseos $11.000" no se puede comprobar mirándolo. Y cada tres entra la
+  // promo del folleto, en su propia línea, igual que el paseo suelto.
+  lineas.push(
+    ...lineasDePaseos(entrada.paseosCortosContratados ?? 0, 15),
+    ...lineasDePaseos(entrada.paseosContratados ?? 0, 30),
+  );
 
+  // El plan de jardín ya no descuenta el hotel: el folleto no lo da, y la
+  // dueña lo confirmó el 11-11-2026.
   const cotizacion = construirCotizacion(
     lineas,
     soloAplicables([
       descuentoPorDuracion(bloques),
-      descuentoPorPlanDeJardin(entrada.conPlanDeJardin ?? false),
       descuentoSegundoPerro(entrada.indicePerro),
     ]),
   );

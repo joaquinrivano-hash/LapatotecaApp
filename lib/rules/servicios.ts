@@ -22,6 +22,7 @@ import type {
   Cotizacion,
   DuracionPaseo,
   InstanteISO,
+  LineaCotizacion,
   NivelSpa,
 } from "@/lib/types";
 
@@ -89,37 +90,50 @@ export interface EntradaPaseo {
  */
 export function cotizarPaseo(entrada: EntradaPaseo): Cotizacion {
   const cantidad = Math.max(1, Math.round(entrada.cantidad ?? 1));
+  return construirCotizacion(
+    lineasDePaseos(cantidad, entrada.duracionMin),
+    soloAplicables([descuentoSegundoPerro(entrada.indicePerro)]),
+  );
+}
+
+/**
+ * Las líneas de N paseos de una duración: los packs de tres a precio de
+ * promo y el resto sueltos.
+ *
+ * La usan el paseo suelto y el hotel, porque el folleto no distingue: tres
+ * paseos de media hora son $10.000 los pida quien los pida. Antes el hotel
+ * multiplicaba, y tres paseos durante la estadía salían $12.000.
+ */
+export function lineasDePaseos(
+  cantidad: number,
+  duracionMin: DuracionPaseo,
+): LineaCotizacion[] {
   const packs = Math.floor(cantidad / PASEOS_POR_PACK);
   const sueltos = cantidad % PASEOS_POR_PACK;
-
-  const suelto = PRECIOS.paseo[entrada.duracionMin];
-  const lineas = [];
+  const suelto = PRECIOS.paseo[duracionMin];
+  const lineas: LineaCotizacion[] = [];
 
   if (sueltos > 0) {
     lineas.push({
       concepto: sueltos === 1 ? "Paseo" : `${sueltos} paseos`,
-      detalle: formatearDuracion(entrada.duracionMin),
+      detalle: formatearDuracion(duracionMin),
       monto: sueltos * suelto,
     });
   }
   if (packs > 0) {
-    const porPack = PRECIOS.paseoPack3[entrada.duracionMin];
+    const porPack = PRECIOS.paseoPack3[duracionMin];
     lineas.push({
       concepto:
         packs === 1
           ? `Promo ${PASEOS_POR_PACK} paseos`
           : `${packs} packs de ${PASEOS_POR_PACK} paseos`,
-      detalle: `${formatearDuracion(entrada.duracionMin)} · ahorras ${formatearCLP(
+      detalle: `${formatearDuracion(duracionMin)} · ahorras ${formatearCLP(
         packs * (PASEOS_POR_PACK * suelto - porPack),
       )}`,
       monto: packs * porPack,
     });
   }
-
-  return construirCotizacion(
-    lineas,
-    soloAplicables([descuentoSegundoPerro(entrada.indicePerro)]),
-  );
+  return lineas;
 }
 
 /** Horario punta según los tramos configurados, en hora de Santiago. */

@@ -656,6 +656,11 @@ intento "con dos noches y media paga la hora extra" "ok" \
   "$(lola_lista) select reservar_hotel('$LOLA', $EN3, $EN3 + interval '51 hours', 0, 0, '{\"total\": 49000, \"abono\": 24500}'::jsonb); select 'ok';"
 intento "desde 7 noches, el 10%" "ok" \
   "$(lola_lista) select reservar_hotel('$LOLA', $EN3, $EN3 + interval '168 hours', 0, 0, '{\"total\": 151200, \"abono\": 75600}'::jsonb); select 'ok';"
+# 48.000 + 3 de media hora (10.000, la promo) + 4 de 15 (5.000 + 2.000).
+intento "cada tres paseos, la promo del folleto" "ok" \
+  "$(lola_lista) select reservar_hotel('$LOLA', $EN3, $EN3 + interval '48 hours', 3, 4, '{\"total\": 65000, \"abono\": 32500}'::jsonb); select 'ok';"
+intento "los paseos multiplicados, sin la promo, ya no calzan" "no calza" \
+  "$(lola_lista) select reservar_hotel('$LOLA', $EN3, $EN3 + interval '48 hours', 3, 4, '{\"total\": 68000, \"abono\": 34000}'::jsonb);"
 
 echo "▸ y ya nada directo"
 intento "un día suelto a mano" "se agenda desde la app" \

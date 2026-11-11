@@ -1,6 +1,6 @@
 import { Tag } from "lucide-react";
 import { NEGOCIO } from "@/lib/config/negocio";
-import { PASEOS_POR_PACK, PRECIOS } from "@/lib/config/precios";
+import { DESCUENTOS, PASEOS_POR_PACK, PRECIOS } from "@/lib/config/precios";
 import { formatearCLP } from "@/lib/utils/moneda";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +32,21 @@ export interface AficheDePrecios {
 }
 
 export const PRECIOS_DEL_AFICHE = {
+  hotel: {
+    filas: [
+      ["Cada 24 horas", PRECIOS.hotel.bloque24h],
+      ["Hora adicional", PRECIOS.hotel.horaExtra],
+      ["Paseo de 15 min", PRECIOS.hotel.paseoCorto],
+      ["Paseo de media hora", PRECIOS.hotel.paseo],
+    ],
+    extras: [
+      `Desde ${NEGOCIO.hotel.nochesParaDescuento10} noches: ${Math.round(DESCUENTOS.hotelDesde7Noches * 100)}% de descuento`,
+      `Desde ${NEGOCIO.hotel.nochesParaDescuento15} noches: ${Math.round(DESCUENTOS.hotelDesde14Noches * 100)}% de descuento`,
+      `${PASEOS_POR_PACK} paseos de 15 min: ${formatearCLP(PRECIOS.paseoPack3[15])}`,
+      `${PASEOS_POR_PACK} de media hora: ${formatearCLP(PRECIOS.paseoPack3[30])}`,
+    ],
+    nota: `La hora adicional corre recién pasadas ${NEGOCIO.hotel.horasToleranciaCheckout} horas de tolerancia al retirar. Se reserva con ${Math.round(NEGOCIO.hotel.fraccionAbono * 100)}% de abono, y si cancelas con ${NEGOCIO.hotel.horasParaDevolucion} horas o más de aviso te lo devolvemos completo.`,
+  },
   spa: {
     columnas: ["Pequeño", "Mediano"],
     filas: [
@@ -65,7 +80,7 @@ export const PRECIOS_DEL_AFICHE = {
       .map((h) => `${h.desde} a ${h.hasta}`)
       .join(" y ")}.`,
   },
-} satisfies Record<"spa" | "paseo" | "traslado", AficheDePrecios>;
+} satisfies Record<"hotel" | "spa" | "paseo" | "traslado", AficheDePrecios>;
 
 export type TipoConAfiche = keyof typeof PRECIOS_DEL_AFICHE;
 

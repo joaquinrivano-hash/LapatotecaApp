@@ -525,12 +525,16 @@ declare
   precio_paseo constant integer := 4000;
   -- PRECIOS.hotel.paseoCorto
   precio_paseo_corto constant integer := 2000;
+  -- PASEOS_POR_PACK
+  paseos_por_pack constant integer := 3;
+  -- PRECIOS.paseoPack3.30
+  precio_pack_paseo constant integer := 10000;
+  -- PRECIOS.paseoPack3.15
+  precio_pack_paseo_corto constant integer := 5000;
   -- DESCUENTOS.hotelDesde7Noches
   desde_7 constant numeric := 0.1;
   -- DESCUENTOS.hotelDesde14Noches
   desde_14 constant numeric := 0.15;
-  -- DESCUENTOS.hotelConPlanDeJardin
-  con_plan constant numeric := 0.1;
   -- DESCUENTOS.segundoPerro
   segundo_perro constant numeric := 0.2;
   f perros;
@@ -562,22 +566,22 @@ begin
     extra := ceil(sobrantes - tolerancia);
   end if;
 
+  -- Los paseos, como `lineasDePaseos`: cada tres, el precio de la promo; el
+  -- resto, sueltos. Entre enteros, `/` es la división entera.
   subtotal := bloques * precio_bloque + extra * precio_hora_extra
-            + coalesce(paseos, 0) * precio_paseo
-            + coalesce(paseos_cortos, 0) * precio_paseo_corto;
+            + (coalesce(paseos, 0) / paseos_por_pack) * precio_pack_paseo
+            + (coalesce(paseos, 0) % paseos_por_pack) * precio_paseo
+            + (coalesce(paseos_cortos, 0) / paseos_por_pack) * precio_pack_paseo_corto
+            + (coalesce(paseos_cortos, 0) % paseos_por_pack) * precio_paseo_corto;
 
-  -- La cascada, en el mismo orden que `calcularPrecioHotel`: duración, plan
-  -- de jardín vigente, segundo perro. Cada uno sobre lo que va quedando.
+  -- La cascada, en el mismo orden que `calcularPrecioHotel`: duración y
+  -- segundo perro, cada uno sobre lo que va quedando. El plan de jardín ya
+  -- no descuenta el hotel (11-11-2026): el folleto no lo da.
   restante := subtotal;
   if bloques >= noches_para_15 then
     restante := restante - round(restante * desde_14);
   elsif bloques >= noches_para_10 then
     restante := restante - round(restante * desde_7);
-  end if;
-  if exists (select 1 from planes
-              where perro_id = f.id and cerrado_en is null
-                and dias_usados < dias_totales and vence_en >= desde) then
-    restante := restante - round(restante * con_plan);
   end if;
   if hay_otro_perro_del_dueno(f.cliente_id, f.id, desde) then
     restante := restante - round(restante * segundo_perro);

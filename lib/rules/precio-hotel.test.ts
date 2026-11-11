@@ -88,7 +88,7 @@ describe("calcularPrecioHotel", () => {
 
     // Juntos en una sola línea, "3 paseos $11.000" no se puede comprobar
     // mirándolo.
-    const lineas = c.lineas.filter((l) => l.concepto === "Paseos");
+    const lineas = c.lineas.filter((l) => l.concepto !== "Alojamiento");
     expect(lineas).toHaveLength(2);
     expect(lineas.map((l) => l.monto)).toEqual([
       PRECIOS.hotel.paseoCorto,
@@ -96,6 +96,38 @@ describe("calcularPrecioHotel", () => {
     ]);
     expect(lineas[0].detalle).toContain("15 min");
     expect(lineas[1].detalle).toContain("30 min");
+  });
+
+  it("cada tres paseos entra la promo del folleto, igual que el paseo suelto", () => {
+    // 3 noches = 72.000; 3 de media hora = 10.000 y no 12.000; 4 de 15 min
+    // = un pack de 5.000 más uno suelto de 2.000.
+    const c = calcularPrecioHotel({
+      inicio: en("15", "10:00"),
+      fin: en("18", "10:00"),
+      paseosContratados: 3,
+      paseosCortosContratados: 4,
+    });
+    expect(c.total).toBe(
+      72_000 +
+        PRECIOS.paseoPack3[30] +
+        PRECIOS.paseoPack3[15] +
+        PRECIOS.paseo[15],
+    );
+    // El ahorro va escrito, que es lo que hace pedir tres en vez de dos.
+    expect(c.lineas.some((l) => l.detalle?.includes("ahorras $2.000"))).toBe(
+      true,
+    );
+  });
+
+  it("el plan de jardín no descuenta el hotel", () => {
+    // Antes sumaba un 10%; el folleto no lo da (11-11-2026). Lo único que
+    // queda en la cascada es la duración y el segundo perro.
+    const c = calcularPrecioHotel({
+      inicio: en("15", "10:00"),
+      fin: en("18", "10:00"),
+    });
+    expect(c.descuentos).toEqual([]);
+    expect(c.total).toBe(72_000);
   });
 
   it("calcula el abono al reservar", () => {
@@ -165,16 +197,6 @@ describe("descuentos por duración", () => {
     expect(c.total).toBe(285_600);
   });
 
-  it("el plan de jardín vigente suma otro 10% en cascada", () => {
-    // 3 noches = 72.000 → -10% = 64.800
-    const c = calcularPrecioHotel({
-      inicio: en("15", "10:00"),
-      fin: en("18", "10:00"),
-      conPlanDeJardin: true,
-    });
-    expect(c.descuentos).toHaveLength(1);
-    expect(c.total).toBe(64_800);
-  });
 
   it("el segundo perro encadena su 20% sobre el precio ya descontado", () => {
     // 15 noches = 360.000 → -15% = 306.000 → -20% = 244.800
