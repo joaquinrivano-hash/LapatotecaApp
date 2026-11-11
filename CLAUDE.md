@@ -2145,7 +2145,7 @@ afuera, y se actualiza cuando cambia:
 | Hosting | Proyecto de Vercel **`lapatoteca`**: tiene el dominio y publica `main` como Production. |
 | Proyecto viejo | **`lapatoteca-app`** en Vercel quedó sin el dominio y está por borrarse. Ahí vive `lapatoteca-apppruebas.vercel.app`, que apuntaba a `prueba/vista-dueno`. **No se cargan variables ahí.** |
 | Base y login | Supabase, proyecto `kcxzoesspkggpchvqlnw`, plan Pro (US$25 + IVA al mes, el servidor Micro lo cubre el crédito). |
-| Migraciones corridas | **Las 17**, al 5 de noviembre de 2026 — hasta `20261105120000_traslado_y_paseos`. `cambios_de_agenda` y `planes_y_dia_de_prueba` se verificaron desde afuera después de correrlas: sus seis funciones existen y dan `401` sin sesión. La 16ª la corrió la dueña y la confirmó con la consulta de `pg_proc` (dio `true`). Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
+| Migraciones corridas | **Las 18**, al 11 de noviembre de 2026 — hasta `20261106120000_lo_que_el_dueno_no_se_salta`, que la dueña corrió el 11-11 en su versión corregida (la del hotel sin descuento por plan) y se verificó desde afuera: `agendar_dia_suelto`, `reservar_hotel` y `comprar_en_tienda` pasaron de `404` a `401`. `cambios_de_agenda` y `planes_y_dia_de_prueba` se verificaron desde afuera después de correrlas: sus seis funciones existen y dan `401` sin sesión. La 16ª la corrió la dueña y la confirmó con la consulta de `pg_proc` (dio `true`). Se corren a mano en el editor SQL; no hay integración automática, así que esta línea se actualiza al correr una nueva. |
 | Confirmación de correo | **Encendida.** Quien se registra recibe un enlace y hasta que no lo abre no tiene sesión. Se apaga en Authentication → Sign In → Email si alguna vez estorba. |
 | Correo saliente | **Resend**, dominio `lapatoteca.cl` verificado (región Brasil). Los tres registros DNS los puso Resend solo, con el *Auto configure* de Vercel. La API key vive en Supabase → Authentication → SMTP, con usuario `resend` y remitente `hola@lapatoteca.cl`. |
 | Buscador de direcciones | Llave de Google Cloud con el correo de la empresa, restringida a los dominios de `lapatoteca.cl`, `*.vercel.app` y `localhost:3000`, y a Maps JavaScript API + Places API (New). |
@@ -2239,7 +2239,7 @@ no tienen un orden que no rompa nada (ver más abajo): el código llegó a
 | `20261022150000_cambios_de_agenda` | Cancelar y mover lo agendado con su cobro, en la base; el disparador que no deja al dueño reescribir estadías ni reservas. **Sin ella, cancelar desde el portal falla** (antes de este cambio quedaba a medias) | Corrida el 22-10-2026, verificada desde afuera |
 | `20261022160000_planes_y_dia_de_prueba` | Comprar y usar un plan y agendar el día de prueba, en la base; los disparadores que no dejan al dueño tocar planes, aprobarse el día de prueba ni insertar días o reservas por fuera. **Va junto con su código**: con una sin la otra, agendar el día de prueba y usar el plan fallan (ver abajo) | Corrida el 22-10-2026, verificada desde afuera |
 | `20261022170000_devolver_el_dia_de_prueba` | Redefine `cancelar_dia_de_prueba` para que lo ya pagado quede en "Por devolver". **No está acoplada**: sin ella el código nuevo funciona igual, con el comportamiento viejo (lo pagado no se devuelve), así que se puede correr después de publicar. Si alguna vez se vuelve a correr `cambios_de_agenda` suelto, hay que correr esta después | Corrida el 22-10-2026, confirmada con `pg_proc` |
-| `20261106120000_lo_que_el_dueno_no_se_salta` | Las funciones `agendar_dia_suelto`, `reservar_hotel` y `comprar_en_tienda`; el disparador `lo_que_cuida_la_casa` (admisión, cupo bajo candado, duplicados, horizonte); el dueño deja de insertar cobros, órdenes, suscripciones, días y reservas directo; `descontar_stock` solo para el equipo. **Va junto con su código, como `planes_y_dia_de_prueba`**: el código nuevo llama funciones que sin ella no existen, y el código viejo inserta directo lo que ella bloquea. Se corre la migración y se publica `main` en seguida, minutos y no días. **Se corrigió el 11-11, antes de correrla**: `reservar_hotel` ya no da el 10% por plan de jardín y cobra los paseos con la promo de tres. Si alguien alcanzó a correr la versión anterior, se vuelve a correr entera: es repetible | **Sin confirmar** (agregada el 6-11-2026; confirmado desde afuera el 11-11 que no había corrido) |
+| `20261106120000_lo_que_el_dueno_no_se_salta` | Las funciones `agendar_dia_suelto`, `reservar_hotel` y `comprar_en_tienda`; el disparador `lo_que_cuida_la_casa` (admisión, cupo bajo candado, duplicados, horizonte); el dueño deja de insertar cobros, órdenes, suscripciones, días y reservas directo; `descontar_stock` solo para el equipo. **Va junto con su código, como `planes_y_dia_de_prueba`**: el código nuevo llama funciones que sin ella no existen, y el código viejo inserta directo lo que ella bloquea. Se corre la migración y se publica `main` en seguida, minutos y no días. **Se corrigió el 11-11, antes de correrla**: `reservar_hotel` ya no da el 10% por plan de jardín y cobra los paseos con la promo de tres. Si alguien alcanzó a correr la versión anterior, se vuelve a correr entera: es repetible | **Corrida el 11-11-2026**, la versión corregida, verificada desde afuera: sus tres funciones dan `401` |
 | `20261105120000_traslado_y_paseos` | `servicios.con_regreso`, `servicios.cantidad` y `reservas_hotel.paseos_cortos_contratados`: el traslado de ida y vuelta, los paseos sueltos por cantidad y el paseo de 15 min del hotel. **No está acoplada**: sin ella, agendar un traslado con regreso, un pack de paseos o una reserva con paseo de 15 min falla al guardar (columna que no existe), pero todo lo demás sigue igual, así que se puede correr después de publicar | Corrida el 5-11-2026, verificada desde afuera: las tres columnas dan `401` |
 
 La regla de acá en adelante:
@@ -2280,8 +2280,9 @@ copiado acá.
 
 **A. Afuera del código, lo hace la dueña, en este orden:**
 
-1. **Correr `20261106120000_lo_que_el_dueno_no_se_salta`** en el editor SQL.
-   **Urgente**: el código ya está en `main` y llama funciones que sin ella no
+1. ~~**Correr `20261106120000_lo_que_el_dueno_no_se_salta`**~~ — **corrida
+   el 11-11-2026**, verificada desde afuera (las tres funciones dan `401`).
+   Lo de abajo queda como historia y como receta. **Era urgente**: el código ya está en `main` y llama funciones que sin ella no
    existen, así que hasta que corra **en producción no se puede agendar un
    día de jardín, reservar hotel ni comprar en la tienda**. **Confirmado el
    11-11 desde afuera que NO había corrido**: la dueña tocó "Reservar el
@@ -2565,11 +2566,9 @@ Lo que una sesión no puede hacer sola. Se tacha acá cuando se hace.
    `401` no distingue la versión: si hay que volver a comprobarlo, es
    con `select prosrc like '%a_devolver%' from pg_proc where
    proname = 'cancelar_dia_de_prueba';`, que tiene que dar `true`.
-11. **Correr `20261106120000_lo_que_el_dueno_no_se_salta` en el editor
-    SQL, junto con publicar su código** (ver la tabla de migraciones: está
-    acoplada). Después, verificar desde afuera con `GET
-    /rest/v1/rpc/agendar_dia_suelto?perro=00000000-0000-0000-0000-000000000000`:
-    `404` es que no corrió, `401` es que existe. Y probar desde el portal un
+11. ~~**Correr `20261106120000_lo_que_el_dueno_no_se_salta` en el editor
+    SQL**~~ — corrida el 11-11-2026 y verificada desde afuera con los
+    cinco parámetros (con uno solo da `404` aunque exista). Falta probar desde el portal un
     día de jardín, una reserva de hotel y una compra: las tres tienen que
     quedar pendientes en `/admin/pagos`.
 10. **Desconectar el proyecto viejo `lapatoteca-app` del repo.** Lo pidió
