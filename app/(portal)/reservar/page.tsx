@@ -833,7 +833,10 @@ function ServicioSpot({ perro }: { perro: Perro }) {
         entradas.length === 1
           ? "Servicio agendado"
           : `${entradas.length} servicios agendados`,
-        { description: "Te hablamos en breve para confirmar el valor." },
+        {
+          description:
+            "Nos pondremos en contacto contigo para acordar los detalles.",
+        },
       );
     } catch (error) {
       avisarError(error);

@@ -1,3 +1,4 @@
+import { Tag } from "lucide-react";
 import { NEGOCIO } from "@/lib/config/negocio";
 import { PASEOS_POR_PACK, PRECIOS } from "@/lib/config/precios";
 import { formatearCLP } from "@/lib/utils/moneda";
@@ -124,10 +125,19 @@ export function TablaPrecios({
         ))}
       </dl>
 
+      {/* Las promociones van en ámbar: son lo que hace elegir, y en gris
+          debajo de la tabla se leían como letra chica. El ámbar lleva texto
+          marino, nunca blanco (2,18:1). */}
       {afiche.extras && (
-        <ul className="text-muted-foreground mt-2 space-y-0.5 text-sm">
+        <ul className="mt-2 flex flex-wrap gap-1.5">
           {afiche.extras.map((e) => (
-            <li key={e}>{e}</li>
+            <li
+              key={e}
+              className="bg-accent text-accent-foreground inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-semibold"
+            >
+              <Tag className="size-3.5 shrink-0" aria-hidden />
+              {e}
+            </li>
           ))}
         </ul>
       )}
