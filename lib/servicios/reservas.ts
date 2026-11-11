@@ -28,7 +28,7 @@ import {
   calcularPrecioJardin,
   type DevolucionJardin,
 } from "@/lib/rules/precio-jardin";
-import { elegirPlanParaUsar, planesVigentes } from "@/lib/rules/planes";
+import { elegirPlanParaUsar } from "@/lib/rules/planes";
 import { cotizarPaseo, cotizarSpa, cotizarTraslado } from "@/lib/rules/servicios";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
 import { describirAviso, dejarAviso } from "@/lib/servicios/avisos";
@@ -110,8 +110,6 @@ export interface EntradaReservaHotel {
 export interface CotizacionHotel extends Disponibilidad {
   cotizacion: Cotizacion;
   abono: number;
-  /** Aplicó el 10% por tener plan de jardín vigente. */
-  conPlanDeJardin: boolean;
 }
 
 export async function cotizarReservaHotel(
@@ -124,13 +122,10 @@ export async function cotizarReservaHotel(
   const desde = fechaISO(entrada.inicio);
   const hasta = fechaISO(entrada.fin);
 
-  const [existentes, planes, estadiasDelDia] = await Promise.all([
+  const [existentes, estadiasDelDia] = await Promise.all([
     ocupantesEnRango(repo, desde, hasta),
-    repo.planes.porPerro(entrada.perroId),
     repo.estadiasJardin.porFecha(desde),
   ]);
-
-  const conPlanDeJardin = planesVigentes(planes, desde).length > 0;
 
   // El descuento de segundo perro aplica si el dueño ya tiene otro perro
   // comprometido ese día. La regla es compartida con la base.
@@ -145,7 +140,6 @@ export async function cotizarReservaHotel(
     fin: entrada.fin,
     paseosContratados: entrada.paseosContratados,
     paseosCortosContratados: entrada.paseosCortosContratados,
-    conPlanDeJardin,
     indicePerro,
   });
 
@@ -166,7 +160,6 @@ export async function cotizarReservaHotel(
   return {
     cotizacion,
     abono: cotizacion.abono ?? calcularAbono(cotizacion.total),
-    conPlanDeJardin,
     admision,
     capacidad,
     sePuede: admision.admitido && capacidad.hayCupo,

@@ -26,7 +26,6 @@ import { indiceDeSegundoPerro } from "@/lib/rules/descuentos";
 import {
   comprarPlan,
   esDiaHabil,
-  planesVigentes,
   planVigente,
 } from "@/lib/rules/planes";
 import { calcularPrecioHotel } from "@/lib/rules/precio-hotel";
@@ -443,16 +442,12 @@ export function crearAgendaLocal(repo: Colecciones): AgendaRepo {
       }
 
       const desde = fechaISO(pedido.inicio);
-      const [planes, delDia] = await Promise.all([
-        repo.planes.porPerro(perroId),
-        repo.estadiasJardin.porFecha(desde),
-      ]);
+      const delDia = await repo.estadiasJardin.porFecha(desde);
       const esperado = calcularPrecioHotel({
         inicio: pedido.inicio,
         fin: pedido.fin,
         paseosContratados: pedido.paseosContratados,
         paseosCortosContratados: pedido.paseosCortosContratados,
-        conPlanDeJardin: planesVigentes(planes, desde).length > 0,
         indicePerro: indiceDeSegundoPerro(delDia, perro.clienteId, perro.id),
       });
       if (

@@ -18,7 +18,6 @@ import {
   Ticket,
   TriangleAlert,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -548,12 +547,16 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle>Hotel</CardTitle>
-        <p className="text-muted-foreground text-sm">
-          Se reserva con {PORCENTAJE_ABONO}% de
-          abono. Devolución con {NEGOCIO.hotel.horasParaDevolucion} h de aviso.
+        <p className="text-muted-foreground text-sm text-pretty">
+          ¡Estadía por una o varias noches, en casa y sin jaulas!
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Lo del folleto, antes de elegir fechas: cómo se cobra, qué
+            descuentos hay y cuándo se devuelve. Enterarse en el desglose
+            es enterarse tarde. */}
+        <TablaPrecios tipo="hotel" />
+
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {/*
             El selector nativo muestra la fecha en el formato del navegador,
@@ -596,12 +599,6 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
           <Skeleton className="h-32" />
         ) : datos ? (
           <>
-            {datos.conPlanDeJardin && (
-              <Badge variant="jardin">
-                <Ticket />
-                Te aplicamos el 10% por tener plan de jardín
-              </Badge>
-            )}
             <Desglose cotizacion={datos.cotizacion} />
 
             {/* Los paseos van DEBAJO de la cotización porque se deciden
@@ -609,54 +606,65 @@ function ReservaDeHotel({ perro }: { perro: Perro }) {
                 antes de saber cuánto sale la estadía, la pregunta no tiene
                 contra qué compararse.
 
-                Cada botón suma uno, y el que ya tiene algo ofrece sacarlo:
-                si solo se pudiera sumar, un toque de más no se arregla. */}
-            <div className="space-y-2">
+                Es un contador con el menos y el más siempre a la vista: con
+                un botón de "Agregar" y el menos escondido hasta tener uno,
+                no se entendía que se podía sacar ni cuántos llevaba. */}
+            <div className="border-border space-y-1 rounded-2xl border p-3">
+              <p className="text-sm font-semibold">Paseos durante la estadía</p>
+              <p className="text-muted-foreground text-xs text-pretty">
+                Opcionales: los repartimos durante la estadía. Cada{" "}
+                {PASEOS_POR_PACK} entra la promo.
+              </p>
               {(
                 [
                   {
                     minutos: 15,
+                    nombre: "Paseo de 15 min",
                     cuantos: paseosCortos,
                     poner: setPaseosCortos,
-                    precio: PRECIOS.hotel.paseoCorto,
                   },
                   {
                     minutos: 30,
+                    nombre: "Paseo de media hora",
                     cuantos: paseos,
                     poner: setPaseos,
-                    precio: PRECIOS.hotel.paseo,
                   },
                 ] as const
-              ).map(({ minutos, cuantos, poner, precio }) => (
-                <div key={minutos} className="flex items-center gap-2">
+              ).map(({ minutos, nombre, cuantos, poner }) => (
+                <div key={minutos} className="flex items-center gap-3 pt-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{nombre}</p>
+                    <p className="text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs">
+                      {formatearCLP(PRECIOS.paseo[minutos])} c/u
+                      <span className="bg-accent text-accent-foreground rounded-full px-1.5 font-semibold">
+                        {PASEOS_POR_PACK} por{" "}
+                        {formatearCLP(PRECIOS.paseoPack3[minutos])}
+                      </span>
+                    </p>
+                  </div>
                   <Button
                     variant="outline"
-                    className="h-auto flex-1 flex-col gap-0 py-2.5"
+                    size="icon"
+                    aria-label={`Un paseo de ${minutos} min menos`}
+                    disabled={cuantos === 0}
+                    onClick={() => poner((n) => Math.max(0, n - 1))}
+                  >
+                    <Minus />
+                  </Button>
+                  <span
+                    className="min-w-6 text-center text-lg font-bold tabular-nums"
+                    aria-live="polite"
+                  >
+                    {cuantos}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    aria-label={`Un paseo de ${minutos} min más`}
                     onClick={() => poner((n) => n + 1)}
                   >
-                    <span className="flex items-center gap-1.5">
-                      <Plus className="size-4" />
-                      Agregar paseo {minutos} min
-                    </span>
-                    <span className="text-muted-foreground text-xs font-normal">
-                      {formatearCLP(precio)}
-                    </span>
+                    <Plus />
                   </Button>
-                  {cuantos > 0 && (
-                    <span className="flex items-center gap-2">
-                      <span className="min-w-6 text-center font-bold tabular-nums">
-                        {cuantos}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Quitar un paseo de ${minutos} min`}
-                        onClick={() => poner((n) => Math.max(0, n - 1))}
-                      >
-                        <Minus />
-                      </Button>
-                    </span>
-                  )}
                 </div>
               ))}
             </div>

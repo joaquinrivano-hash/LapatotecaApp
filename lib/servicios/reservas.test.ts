@@ -132,7 +132,7 @@ describe("cotizar hotel", () => {
     expect(c.sePuede).toBe(true);
   });
 
-  it("aplica el 10% adicional si tiene plan de jardín vigente", async () => {
+  it("un plan de jardín vigente no descuenta el hotel", async () => {
     const plan: PlanComprado = {
       id: "pl-1",
       clienteId: CLIENTE.id,
@@ -152,8 +152,8 @@ describe("cotizar hotel", () => {
       fin: en("10:00", "2026-06-18"),
     });
 
-    expect(c.conPlanDeJardin).toBe(true);
-    expect(c.cotizacion.total).toBe(64_800);
+    expect(c.cotizacion.descuentos).toEqual([]);
+    expect(c.cotizacion.total).toBe(72_000);
   });
 
   it("avisa cuando no cumple admisión", async () => {

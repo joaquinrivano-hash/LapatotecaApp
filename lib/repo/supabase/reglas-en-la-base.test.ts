@@ -19,7 +19,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NEGOCIO } from "@/lib/config/negocio";
-import { DESCUENTOS, PRECIOS } from "@/lib/config/precios";
+import { DESCUENTOS, PASEOS_POR_PACK, PRECIOS } from "@/lib/config/precios";
 
 const migraciones = join(__dirname, "..", "..", "..", "supabase", "migrations");
 const SQL = readdirSync(migraciones)
@@ -28,7 +28,12 @@ const SQL = readdirSync(migraciones)
   .map((archivo) => readFileSync(join(migraciones, archivo), "utf8"))
   .join("\n");
 
-const FUENTES: Record<string, unknown> = { NEGOCIO, PRECIOS, DESCUENTOS };
+const FUENTES: Record<string, unknown> = {
+  NEGOCIO,
+  PRECIOS,
+  DESCUENTOS,
+  PASEOS_POR_PACK,
+};
 
 /** `NEGOCIO.diaDePrueba.horasParaCancelarSinCosto` → 24 */
 function valorEnConfig(ruta: string): unknown {
@@ -42,7 +47,7 @@ function valorEnConfig(ruta: string): unknown {
 
 const GEMELAS = [
   ...SQL.matchAll(
-    /--\s*((?:NEGOCIO|PRECIOS|DESCUENTOS)\.[\w.]+)\s*\n\s*\w+\s+constant\s+\w+\s*:=\s*(true|false|[\d.]+)\s*;/g,
+    /--\s*((?:NEGOCIO|PRECIOS|DESCUENTOS)\.[\w.]+|PASEOS_POR_PACK)\s*\n\s*\w+\s+constant\s+\w+\s*:=\s*(true|false|[\d.]+)\s*;/g,
   ),
 ].map(([, ruta, valor]) => ({
   ruta,
@@ -90,7 +95,9 @@ describe("reglas escritas en la base", () => {
         "DESCUENTOS.segundoPerro",
         "DESCUENTOS.hotelDesde7Noches",
         "DESCUENTOS.hotelDesde14Noches",
-        "DESCUENTOS.hotelConPlanDeJardin",
+        "PASEOS_POR_PACK",
+        "PRECIOS.paseoPack3.30",
+        "PRECIOS.paseoPack3.15",
       ]),
     );
   });

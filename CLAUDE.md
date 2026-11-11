@@ -106,8 +106,17 @@ consumo y los avisos de vencimiento funcionan igual que en cualquier plan.
   siempre sale más barato que reservar un día de más.
 - Descuentos por duración, umbrales **inclusivos** ("desde N noches"):
   **desde 7 noches -10%**, **desde 14 noches -15%**. Son excluyentes entre sí.
-- **10% adicional** si el cliente tiene un **plan de jardín vigente**.
-- Paseo opcional: **$4.000 cada uno**, de 30 min.
+- **El plan de jardín no descuenta el hotel.** Hasta el 11-11-2026 la app
+  sumaba un 10% a quien tuviera plan vigente; la dueña dijo que no aplica, y
+  el folleto no lo ofrece.
+- Paseos opcionales: **$2.000 de 15 min y $4.000 de 30 min**, y **cada tres
+  entra la promo del folleto** ($5.000 y $10.000), igual que el paseo suelto:
+  tres paseos de media hora valen lo mismo los pida quien los pida. El
+  reparto en packs es `lineasDePaseos`, compartido por los dos.
+- La pantalla de reserva muestra el folleto **antes** de elegir fechas
+  (`<TablaPrecios tipo="hotel" />`), y los paseos van con un contador de
+  menos y más **siempre a la vista**: con un "Agregar paseo" y el menos
+  escondido hasta tener uno, no se entendía que se podía sacar.
 - Reserva con **abono del 50%**.
 - **Devolución solo si se cancela con ≥48h de aviso**: devuelve el abono
   completo. Con menos de 48h, no se devuelve nada.
@@ -134,7 +143,7 @@ los últimos 30 días.
 
 - **Segundo perro del mismo dueño: -20%.**
 - Los descuentos son **acumulables en cascada**, aplicados en orden: duración,
-  plan de jardín vigente, segundo perro, cliente activo.
+  segundo perro, cliente activo.
   Ejemplo: hotel 15 noches $360.000 → -15% = $306.000 → -20% = $244.800.
 - El desglose que ve el cliente debe mostrar cada descuento por separado con su
   monto, nunca un total sin explicación.
@@ -1549,8 +1558,9 @@ por funciones** que saben hacer una sola cosa entera y en una transacción:
 - `agendar_dia_suelto` → el precio por tramo y el segundo perro los calcula
   la base y los compara con la cotización que vio el dueño: si no calzan,
   rechaza. Día y cobro, juntos.
-- `reservar_hotel` → la cascada completa (duración, plan vigente, segundo
-  perro), las horas extra y el abono, igual. Reserva y abono, juntos.
+- `reservar_hotel` → la cascada completa (duración y segundo perro), las
+  horas extra, los paseos con su promo y el abono, igual. Reserva y abono,
+  juntos.
 - `comprar_en_tienda` → el precio lo pone la vitrina, lo que no alcanza se
   ajusta y se avisa, y la orden nace **pendiente** como todo lo demás. Esto
   además **arregla la tienda en la nube**: antes nacía "pagada" por un Webpay
@@ -2225,7 +2235,7 @@ no tienen un orden que no rompa nada (ver más abajo): el código llegó a
 | `20261022150000_cambios_de_agenda` | Cancelar y mover lo agendado con su cobro, en la base; el disparador que no deja al dueño reescribir estadías ni reservas. **Sin ella, cancelar desde el portal falla** (antes de este cambio quedaba a medias) | Corrida el 22-10-2026, verificada desde afuera |
 | `20261022160000_planes_y_dia_de_prueba` | Comprar y usar un plan y agendar el día de prueba, en la base; los disparadores que no dejan al dueño tocar planes, aprobarse el día de prueba ni insertar días o reservas por fuera. **Va junto con su código**: con una sin la otra, agendar el día de prueba y usar el plan fallan (ver abajo) | Corrida el 22-10-2026, verificada desde afuera |
 | `20261022170000_devolver_el_dia_de_prueba` | Redefine `cancelar_dia_de_prueba` para que lo ya pagado quede en "Por devolver". **No está acoplada**: sin ella el código nuevo funciona igual, con el comportamiento viejo (lo pagado no se devuelve), así que se puede correr después de publicar. Si alguna vez se vuelve a correr `cambios_de_agenda` suelto, hay que correr esta después | Corrida el 22-10-2026, confirmada con `pg_proc` |
-| `20261106120000_lo_que_el_dueno_no_se_salta` | Las funciones `agendar_dia_suelto`, `reservar_hotel` y `comprar_en_tienda`; el disparador `lo_que_cuida_la_casa` (admisión, cupo bajo candado, duplicados, horizonte); el dueño deja de insertar cobros, órdenes, suscripciones, días y reservas directo; `descontar_stock` solo para el equipo. **Va junto con su código, como `planes_y_dia_de_prueba`**: el código nuevo llama funciones que sin ella no existen, y el código viejo inserta directo lo que ella bloquea. Se corre la migración y se publica `main` en seguida, minutos y no días | **Sin confirmar** (agregada el 6-11-2026) |
+| `20261106120000_lo_que_el_dueno_no_se_salta` | Las funciones `agendar_dia_suelto`, `reservar_hotel` y `comprar_en_tienda`; el disparador `lo_que_cuida_la_casa` (admisión, cupo bajo candado, duplicados, horizonte); el dueño deja de insertar cobros, órdenes, suscripciones, días y reservas directo; `descontar_stock` solo para el equipo. **Va junto con su código, como `planes_y_dia_de_prueba`**: el código nuevo llama funciones que sin ella no existen, y el código viejo inserta directo lo que ella bloquea. Se corre la migración y se publica `main` en seguida, minutos y no días. **Se corrigió el 11-11, antes de correrla**: `reservar_hotel` ya no da el 10% por plan de jardín y cobra los paseos con la promo de tres. Si alguien alcanzó a correr la versión anterior, se vuelve a correr entera: es repetible | **Sin confirmar** (agregada el 6-11-2026; confirmado desde afuera el 11-11 que no había corrido) |
 | `20261105120000_traslado_y_paseos` | `servicios.con_regreso`, `servicios.cantidad` y `reservas_hotel.paseos_cortos_contratados`: el traslado de ida y vuelta, los paseos sueltos por cantidad y el paseo de 15 min del hotel. **No está acoplada**: sin ella, agendar un traslado con regreso, un pack de paseos o una reserva con paseo de 15 min falla al guardar (columna que no existe), pero todo lo demás sigue igual, así que se puede correr después de publicar | Corrida el 5-11-2026, verificada desde afuera: las tres columnas dan `401` |
 
 La regla de acá en adelante:
@@ -2277,6 +2287,13 @@ copiado acá.
    `GET /rest/v1/rpc/agendar_dia_suelto?perro=<uuid>&nueva_fecha=2026-11-20&nuevo_inicio=2026-11-20T12:00:00Z&nuevo_fin=2026-11-20T15:00:00Z&la_cotizacion=%7B%7D`
    tiene que dar `401`, no `404`. Control al lado: `cancelar_dia_de_jardin?estadia=<uuid>`
    da `401`.
+
+   **El archivo cambió el 11-11**, después de que se le pidió correrlo:
+   el hotel ya no descuenta por plan de jardín y los paseos llevan la promo
+   de tres. Hay que correr la versión de `main` de **ese día o posterior**.
+   Si se corrió una copia anterior, el hotel de un dueño con plan o con tres
+   paseos falla con "El precio del hotel no calza": se arregla volviendo a
+   correr el archivo entero, que es repetible.
 2. **Probar en el portal** un día de jardín, una reserva de hotel y una
    compra (las tres pendientes en `/admin/pagos`) y un baño (en "Servicios
    por confirmar").
@@ -2630,6 +2647,10 @@ tema tiene su explicación más arriba en este archivo.
 - **El que ya era cliente no hace día de prueba** (22-10): Administración
   lo aprueba sin que venga y sin cobrarle, desde el tablero o la ficha del
   cliente (ver "Y el que ya era cliente no lo hace").
+- **El hotel como el folleto** (11-11): sin el 10% por plan de jardín, los
+  paseos con la promo de tres, la tabla del folleto antes de elegir fechas y
+  un contador de paseos con menos y más a la vista. Las promociones de los
+  precios de referencia van en ámbar.
 
 ## 6. Comandos
 
