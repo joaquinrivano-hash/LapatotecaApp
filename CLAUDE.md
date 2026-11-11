@@ -2092,9 +2092,29 @@ usando en su celular:
 | `prueba/<algo>` | Una funcionalidad en curso, sale de `pruebas` y vuelve ahí. | Vista previa por rama |
 | `claude/<nombre>` | Lo mismo que `prueba/<algo>`, pero creada por una sesión de Claude en la nube: cada sesión trae la suya asignada y no la elige. | Vista previa por rama |
 | `v0.01` | Foto congelada del prototipo terminado (las 5 etapas). No se le commitea. | Vista previa fija |
+| `prueba/demo` | **La app de `main` con datos de mentira**, para mirar y mostrar sin tocar producción. No se le commitea: se pone al día empujando `main` encima (`git push origin main:prueba/demo`). | Vista previa con `NEXT_PUBLIC_ORIGEN_DATOS=local` (ver abajo) |
 
 El flujo es `prueba/<algo>` → `pruebas` → `main`. Nada llega a `main` sin haber
 pasado por `pruebas` y sin `build`, `lint` y `test` verdes.
+
+**Las vistas previas NO son un ambiente de prueba.** `NEXT_PUBLIC_ORIGEN_DATOS=supabase`
+está cargada también en Preview, así que la vista previa de `pruebas` o de
+cualquier rama se conecta a **la misma base que `lapatoteca.cl`**, con login
+real: un cliente o un cobro de prueba creado ahí queda en producción, y hay
+que borrarlo después ("Borrar un cliente de prueba").
+
+Para mirar sin ese riesgo existe `prueba/demo` (11-11-2026): la misma app con
+el prototipo —datos del seed en el navegador y el selector "Soy cliente /
+Trabajo acá / Administro"—. Lo que la pone en modo prototipo no está en el
+código sino en Vercel: una variable `NEXT_PUBLIC_ORIGEN_DATOS=local` cargada
+**solo en Preview y solo para la rama `prueba/demo`**, que le gana a la
+general de Preview. **Sin confirmar** que la dueña ya la cargó: si el link
+pide correo y contraseña en vez de mostrar el selector, la variable no está o
+falta el Redeploy (Vercel mete las `NEXT_PUBLIC_` al construir).
+
+La demo no se actualiza sola: cuando `main` avanza, se empuja encima con
+`git push origin main:prueba/demo`. Y cada publicación cuenta para el tope
+diario de Vercel (ver el paso 0 de "Lo que falta hacer afuera").
 
 Ojo con el nombre: la rama de una funcionalidad es `prueba/` en **singular**.
 Git no deja que exista `pruebas` y `pruebas/whatsapp` a la vez —una referencia
