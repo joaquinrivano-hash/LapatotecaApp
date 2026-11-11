@@ -20,6 +20,7 @@ import {
   registrarSalidaHotel,
   registrarSalidaJardin,
 } from "@/lib/servicios/asistencia";
+import { formatearDuracion } from "@/lib/utils/fecha";
 import type { Perro } from "@/lib/types";
 
 export default function Buscar() {
@@ -68,9 +69,9 @@ export default function Buscar() {
       const resultado = await ejecutar((repo) =>
         registrarSalidaJardin(repo, item.id),
       );
-      if (resultado.horasFueraDeHorario > 0) {
+      if (resultado.minutosDeAtraso > 0) {
         toast.warning(`Se fue ${perro.nombre}, fuera de horario`, {
-          description: `${resultado.horasFueraDeHorario} h después del cierre. Queda anotado.`,
+          description: `${formatearDuracion(resultado.minutosDeAtraso)} después de las ${resultado.atrasoDesde}. Queda anotado.`,
         });
       } else {
         toast.success(`Se fue ${perro.nombre}`);

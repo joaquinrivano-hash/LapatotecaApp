@@ -49,6 +49,7 @@ const LINEA_DE_CONCEPTO: Record<ConceptoPago, LineaIngreso | null> = {
   saldo_hotel: "hotel",
   dia_suelto: "jardin",
   recargo_jardin: "jardin",
+  horas_de_mas: "jardin",
   plan: "jardin",
   dia_de_prueba: "jardin",
   servicio: "servicios",

@@ -13,6 +13,7 @@ import type {
   ServicioAgendado,
 } from "@/lib/types";
 import {
+  cobrarHorasDeMas,
   cobrarPendiente,
   cobrarRecargo,
   confirmarServicio,
@@ -24,6 +25,9 @@ import {
   devolucionesPorTransferir,
   marcarDevolucionTransferida,
   emitirSaldoHotel,
+  horasDeMasPorDecidir,
+  perdonarHorasDeMas,
+  perdonarPendiente,
   perdonarRecargo,
   recargosPorDecidir,
   saldosPorEmitir,
@@ -108,14 +112,29 @@ function montar(datos: Partial<DatosPatoteca>) {
   repo = crearRepositorioLocal({ almacen });
 }
 
-beforeEach(() => montar({ estadiasJardin: [cerrada("20:30")] }));
+beforeEach(() => montar({ estadiasJardin: [cerrada("21:30")] }));
 
 describe("el recargo fuera de horario espera una decisión", () => {
-  it("aparece en la cola con sus horas y su monto", async () => {
+  it("aparece en la cola con la hora del retiro y su monto", async () => {
+    // Día suelto retirado a las 21:30: el cargo fijo de después de las 21:00.
     const cola = await recargosPorDecidir(repo);
     expect(cola).toHaveLength(1);
-    expect(cola[0].horas).toBe(2);
-    expect(cola[0].monto).toBe(2_000);
+    expect(cola[0].detalle).toBe("retiro 21:30");
+    expect(cola[0].monto).toBe(5_000);
+  });
+
+  it("con plan, entre las 19:00 y las 21:00 se cobra por media hora", async () => {
+    // 20:10 son 70 minutos: tres medias horas iniciadas.
+    montar({ estadiasJardin: [{ ...cerrada("20:10"), origen: "plan" }] });
+    const [recargo] = await recargosPorDecidir(repo);
+    expect(recargo.monto).toBe(1_500);
+  });
+
+  it("con plan y después de las 21:00, se suman los $5.000", async () => {
+    // Las dos horas completas entre las 19 y las 21 (4 × $500) y el cargo.
+    montar({ estadiasJardin: [{ ...cerrada("21:10"), origen: "plan" }] });
+    const [recargo] = await recargosPorDecidir(repo);
+    expect(recargo.monto).toBe(2_000 + 5_000);
   });
 
   it("un retiro a la hora no aparece", async () => {
@@ -123,14 +142,14 @@ describe("el recargo fuera de horario espera una decisión", () => {
     expect(await recargosPorDecidir(repo)).toEqual([]);
   });
 
-  it("los 15 minutos de gracia tampoco", async () => {
-    montar({ estadiasJardin: [cerrada("19:10")] });
+  it("un día suelto retirado antes de las 21:00 no tiene recargo", async () => {
+    montar({ estadiasJardin: [cerrada("20:30")] });
     expect(await recargosPorDecidir(repo)).toEqual([]);
   });
 
   it("una jornada todavía abierta no se decide", async () => {
     montar({
-      estadiasJardin: [{ ...cerrada("20:30"), estado: "presente", finReal: undefined }],
+      estadiasJardin: [{ ...cerrada("21:30"), estado: "presente", finReal: undefined }],
     });
     expect(await recargosPorDecidir(repo)).toEqual([]);
   });
@@ -138,17 +157,17 @@ describe("el recargo fuera de horario espera una decisión", () => {
 
 describe("cobrarlo", () => {
   it("emite el recargo pendiente y lo saca de la cola", async () => {
-    const pago = await cobrarRecargo(repo, "est-001", en("21:00"));
+    const pago = await cobrarRecargo(repo, "est-001", en("22:00"));
 
     expect(pago.concepto).toBe("recargo_jardin");
-    expect(pago.monto).toBe(2_000);
+    expect(pago.monto).toBe(5_000);
     expect(pago.estado).toBe("pendiente");
     expect(await recargosPorDecidir(repo)).toEqual([]);
   });
 
   it("no se puede cobrar dos veces el mismo retiro", async () => {
-    await cobrarRecargo(repo, "est-001", en("21:00"));
-    await expect(cobrarRecargo(repo, "est-001", en("21:05"))).rejects.toThrow(
+    await cobrarRecargo(repo, "est-001", en("22:00"));
+    await expect(cobrarRecargo(repo, "est-001", en("22:05"))).rejects.toThrow(
       DecisionImposible,
     );
   });
@@ -165,7 +184,7 @@ describe("perdonarlo", () => {
   it("deja rastro en vez de desaparecer", async () => {
     // Un cobro que se borra no deja cómo explicar, el día 1, por qué ese
     // retiro tarde no se cobró.
-    const pago = await perdonarRecargo(repo, "est-001", en("21:00"));
+    const pago = await perdonarRecargo(repo, "est-001", en("22:00"));
 
     expect(pago.monto).toBe(0);
     expect(pago.estado).toBe("reembolsado");
@@ -173,20 +192,131 @@ describe("perdonarlo", () => {
   });
 
   it("lo saca de la cola: perdonado es decidido", async () => {
-    await perdonarRecargo(repo, "est-001", en("21:00"));
+    await perdonarRecargo(repo, "est-001", en("22:00"));
     expect(await recargosPorDecidir(repo)).toEqual([]);
   });
 
   it("no suma nada por cobrar", async () => {
-    await perdonarRecargo(repo, "est-001", en("21:00"));
+    await perdonarRecargo(repo, "est-001", en("22:00"));
     expect(await repo.pagos.porCobrar()).toEqual([]);
   });
 
   it("perdonado no se puede volver a cobrar", async () => {
-    await perdonarRecargo(repo, "est-001", en("21:00"));
+    await perdonarRecargo(repo, "est-001", en("22:00"));
     await expect(cobrarRecargo(repo, "est-001")).rejects.toThrow(
       DecisionImposible,
     );
+  });
+});
+
+/* ── Se quedó más de lo que reservó ──────────────────────────────── */
+
+describe("las horas de más esperan una decisión", () => {
+  /**
+   * Reservó de 9:00 a 12:00 (menos de 4 h, $10.000), pagó al agendar, y lo
+   * vinieron a buscar a las 18:00: estuvo casi 9 horas, que son $18.000.
+   */
+  function seQuedoMas(cobrado = 10_000, emitidoEn = en("10:00", "2026-06-10")) {
+    montar({
+      estadiasJardin: [
+        {
+          ...cerrada("18:00"),
+          inicioProgramado: en("09:00"),
+          finProgramado: en("12:00"),
+          inicioReal: en("09:10"),
+        },
+      ],
+      pagos: [
+        {
+          id: "pago-dia",
+          clienteId: CLIENTE.id,
+          concepto: "dia_suelto",
+          referenciaId: "est-001",
+          monto: cobrado,
+          estado: "pagado",
+          emitidoEn,
+          pagadoEn: emitidoEn,
+        },
+      ],
+    });
+  }
+
+  it("aparece con lo que reservó, lo que estuvo y la diferencia", async () => {
+    seQuedoMas();
+    const [decision] = await horasDeMasPorDecidir(repo);
+    expect(decision.monto).toBe(18_000 - 10_000);
+    expect(decision.detalle).toBe("Reservó 09:00 a 12:00 · estuvo 09:10 a 18:00");
+  });
+
+  it("respeta el descuento que ya tenía: se cobra en la misma proporción", async () => {
+    // Segundo perro: pagó $8.000 por el tramo de $10.000, así que la
+    // diferencia también va con su 20%.
+    seQuedoMas(8_000);
+    const [decision] = await horasDeMasPorDecidir(repo);
+    expect(decision.monto).toBe(6_400);
+  });
+
+  it("un ingreso sin reserva no tiene horas de más: se cobró con las reales", async () => {
+    // El cobro nació después de que llegó: es el día que se emitió con la
+    // hora de verdad, y mirarlo acá lo cobraría dos veces.
+    seQuedoMas(18_000, en("18:30"));
+    expect(await horasDeMasPorDecidir(repo)).toEqual([]);
+  });
+
+  it("si se quedó dentro del mismo tramo no hay nada que decidir", async () => {
+    montar({
+      estadiasJardin: [
+        { ...cerrada("12:30"), inicioProgramado: en("09:00"), finProgramado: en("12:00"), inicioReal: en("09:00") },
+      ],
+      pagos: [
+        {
+          id: "pago-dia",
+          clienteId: CLIENTE.id,
+          concepto: "dia_suelto",
+          referenciaId: "est-001",
+          monto: 10_000,
+          estado: "pendiente",
+          emitidoEn: en("10:00", "2026-06-10"),
+        },
+      ],
+    });
+    expect(await horasDeMasPorDecidir(repo)).toEqual([]);
+  });
+
+  it("cobrarlo emite la diferencia y lo saca de la cola", async () => {
+    seQuedoMas();
+    const pago = await cobrarHorasDeMas(repo, "est-001", en("19:00"));
+    expect(pago.concepto).toBe("horas_de_mas");
+    expect(pago.monto).toBe(8_000);
+    expect(pago.estado).toBe("pendiente");
+    expect(await horasDeMasPorDecidir(repo)).toEqual([]);
+  });
+
+  it("perdonarlo deja rastro en cero", async () => {
+    seQuedoMas();
+    const pago = await perdonarHorasDeMas(repo, "est-001", en("19:00"));
+    expect(pago.monto).toBe(0);
+    expect(pago.estado).toBe("reembolsado");
+    expect(await horasDeMasPorDecidir(repo)).toEqual([]);
+  });
+
+  it("aparece en la tarjeta del dueño, y Perdonar sirve igual que en el recargo", async () => {
+    seQuedoMas();
+    const [grupo] = await cobrosPendientesPorCliente(repo);
+    const pendiente = grupo.pendientes.find((p) => p.tipo === "horas_de_mas");
+    expect(pendiente?.monto).toBe(8_000);
+    expect(pendiente?.detalle).toContain("Reservó 09:00 a 12:00");
+
+    await perdonarPendiente(repo, pendiente!, en("19:00"));
+    expect(await cobrosPendientesPorCliente(repo)).toEqual([]);
+  });
+
+  it("un saldo de hotel no se perdona: es una deuda, no una decisión", async () => {
+    montar({ estadiasJardin: [], reservasHotel: [reservaCerrada("10:00")] });
+    const [grupo] = await cobrosPendientesPorCliente(repo);
+    await expect(
+      perdonarPendiente(repo, grupo.pendientes[0], en("11:00")),
+    ).rejects.toThrow(DecisionImposible);
   });
 });
 
@@ -289,8 +419,8 @@ describe("agrupado por dueño", () => {
     montar({
       perros: [PELUSA, OTRO_PERRO],
       estadiasJardin: [
-        cerrada("20:30", "est-001"),
-        { ...cerrada("21:30", "est-002"), perroId: OTRO_PERRO.id },
+        cerrada("21:30", "est-001"),
+        { ...cerrada("20:30", "est-002"), perroId: OTRO_PERRO.id, origen: "plan" },
       ],
     });
 
@@ -298,7 +428,7 @@ describe("agrupado por dueño", () => {
     expect(grupos).toHaveLength(1);
     expect(grupos[0].cliente.nombre).toBe("Javiera");
     expect(grupos[0].pendientes).toHaveLength(2);
-    expect(grupos[0].total).toBe(2_000 + 3_000);
+    expect(grupos[0].total).toBe(5_000 + 1_500);
   });
 
   it("no mezcla dueños distintos", async () => {
@@ -306,8 +436,8 @@ describe("agrupado por dueño", () => {
       clientes: [CLIENTE, OTRO_CLIENTE],
       perros: [PELUSA, PERRO_AJENO],
       estadiasJardin: [
-        cerrada("20:30", "est-001"),
-        { ...cerrada("20:30", "est-002"), perroId: PERRO_AJENO.id, clienteId: OTRO_CLIENTE.id },
+        cerrada("21:30", "est-001"),
+        { ...cerrada("21:30", "est-002"), perroId: PERRO_AJENO.id, clienteId: OTRO_CLIENTE.id },
       ],
     });
 
@@ -318,7 +448,7 @@ describe("agrupado por dueño", () => {
 
   it("junta tipos distintos del mismo dueño", async () => {
     montar({
-      estadiasJardin: [cerrada("20:30")],
+      estadiasJardin: [cerrada("21:30")],
       reservasHotel: [reservaCerrada("10:00")],
     });
 
@@ -327,7 +457,7 @@ describe("agrupado por dueño", () => {
       "recargo",
       "saldo_hotel",
     ]);
-    expect(grupo.total).toBe(2_000 + 24_000);
+    expect(grupo.total).toBe(5_000 + 24_000);
   });
 
   it("ordena por lo que lleva más tiempo esperando", async () => {
@@ -336,9 +466,9 @@ describe("agrupado por dueño", () => {
       clientes: [CLIENTE, OTRO_CLIENTE],
       perros: [PELUSA, PERRO_AJENO],
       estadiasJardin: [
-        { ...cerrada("20:30", "est-001"), fecha: "2026-06-20" },
+        { ...cerrada("21:30", "est-001"), fecha: "2026-06-20" },
         {
-          ...cerrada("20:30", "est-002"),
+          ...cerrada("21:30", "est-002"),
           fecha: "2026-06-10",
           perroId: PERRO_AJENO.id,
           clienteId: OTRO_CLIENTE.id,
@@ -352,7 +482,7 @@ describe("agrupado por dueño", () => {
 
   it("cobrarPendiente resuelve cualquiera de los tres tipos", async () => {
     montar({
-      estadiasJardin: [cerrada("20:30")],
+      estadiasJardin: [cerrada("21:30")],
       reservasHotel: [reservaCerrada("10:00")],
     });
 
@@ -437,11 +567,11 @@ describe("las devoluciones que todavía no salen", () => {
 });
 
 describe("avisarle al dueño del cobro que no pidió", () => {
-  beforeEach(() => montar({ estadiasJardin: [cerrada("20:30")] }));
+  beforeEach(() => montar({ estadiasJardin: [cerrada("21:30")] }));
 
   it("sin canal cobra igual: un mensaje que no sale no frena un cobro", async () => {
     const [grupo] = await cobrosPendientesPorCliente(repo);
-    await cobrarPendiente(repo, grupo.pendientes[0], en("21:00"));
+    await cobrarPendiente(repo, grupo.pendientes[0], en("22:00"));
 
     expect(await repo.pagos.listar()).toHaveLength(1);
     expect(await repo.mensajes.listar()).toEqual([]);
@@ -452,14 +582,14 @@ describe("avisarle al dueño del cobro que no pidió", () => {
     await cobrarPendiente(
       repo,
       grupo.pendientes[0],
-      en("21:00"),
+      en("22:00"),
       crearCanalSimulado(),
     );
 
     const [mensaje] = await repo.mensajes.listar();
     expect(mensaje.plantilla).toBe("cobro_emitido");
     expect(mensaje.vistaPrevia).toContain("retiro fuera de horario");
-    expect(mensaje.vistaPrevia).toContain("$2.000");
+    expect(mensaje.vistaPrevia).toContain("$5.000");
     expect(mensaje.vistaPrevia).toContain("Javiera");
     // Queda amarrado al cobro: desde la bandeja se puede llegar a él.
     expect(mensaje.referencia).toEqual({
@@ -483,7 +613,7 @@ describe("avisarle al dueño del cobro que no pidió", () => {
   });
 
   it("perdonar no manda nada: no hay cobro que avisar", async () => {
-    await perdonarRecargo(repo, "est-001", en("21:00"));
+    await perdonarRecargo(repo, "est-001", en("22:00"));
     expect(await repo.mensajes.listar()).toEqual([]);
   });
 });

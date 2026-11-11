@@ -33,8 +33,20 @@ export const NEGOCIO = {
      */
     horasJornadaCorta: 4,
     horasJornadaMedia: 8,
-    /** Margen antes de empezar a cobrar el recargo fuera de horario. */
-    minutosGracia: 15,
+    /**
+     * Hasta dónde se entrega y se retira, según el folleto. Después de esta
+     * hora el retiro tarde cuesta un cargo fijo, con plan o sin plan.
+     */
+    horaFinAtencion: 21,
+    /** Con plan, entre el cierre y el fin de la atención se cobra por bloque. */
+    minutosBloqueRecargo: 30,
+    /**
+     * Margen antes de empezar a cobrar el recargo. En cero desde el 06-11:
+     * la dueña prefiere ver cada retiro tarde y perdonarlo ella, en vez de
+     * que la app regale minutos sola. El recargo nunca se cobra solo, así que
+     * un minuto de más no le llega a nadie sin que ella lo decida.
+     */
+    minutosGracia: 0,
     /**
      * Cancelando con al menos estas horas de aviso, el día se devuelve: el
      * cobro se anula y, si venía de un plan, el día vuelve al pack.

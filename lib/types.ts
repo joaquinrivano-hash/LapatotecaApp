@@ -458,6 +458,11 @@ export type ConceptoPago =
   | "dia_suelto"
   /** Retiro tarde del jardín. Lo decide Administración, no nace solo. */
   | "recargo_jardin"
+  /**
+   * El perro se quedó más de lo que se reservó y pagó: la diferencia de
+   * tramo. Igual que el recargo, la decide Administración.
+   */
+  | "horas_de_mas"
   | "plan"
   | "servicio"
   | "tienda"

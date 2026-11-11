@@ -23,8 +23,12 @@ import { armarMensajeDeCobro } from "@/lib/integraciones/mensajeria/armado";
 import { despacharArmado } from "@/lib/integraciones/mensajeria/servicio";
 import type { CanalMensajeria } from "@/lib/integraciones/tipos";
 import { calcularPrecioHotel } from "@/lib/rules/precio-hotel";
-import { fechaISO } from "@/lib/utils/fecha";
-import { calcularRecargoFueraDeHorario } from "@/lib/rules/precio-jardin";
+import { fechaISO, formatearHora } from "@/lib/utils/fecha";
+import {
+  calcularHorasDeMas,
+  calcularRecargoFueraDeHorario,
+  describirHorasDeMas,
+} from "@/lib/rules/precio-jardin";
 import type { RepositorioPatoteca } from "@/lib/repo/tipos";
 import type {
   Cliente,
@@ -144,101 +148,203 @@ export async function confirmarServicio(
   return { servicio: confirmado, pago };
 }
 
-/* ── El recargo del jardín ─────────────────────────────────────────── */
+/* ── Lo que decide Administración: el retiro tarde y las horas de más ─ */
 
-export interface RecargoPorDecidir {
+/**
+ * Dos cosas del jardín que quedan calculadas al cerrar la jornada y nunca se
+ * cobran solas. Las dos son una DECISIÓN —cobrarla o perdonarla— y se
+ * contestan igual: "¿existe ya un cobro de este concepto para esta estadía?".
+ * Perdonar deja un cobro en cero, no un vacío, así que no vuelve a aparecer.
+ *
+ *   · El **retiro tarde**: con plan desde las 19:00, sin plan desde las
+ *     21:00 (`calcularRecargoFueraDeHorario`).
+ *   · Las **horas de más**: reservó y pagó menos horas de las que estuvo,
+ *     y el tramo real es más caro que el reservado (`calcularHorasDeMas`).
+ */
+export type ConceptoDecidible = "recargo_jardin" | "horas_de_mas";
+
+export interface DecisionPendiente {
   estadia: EstadiaJardin;
-  horas: number;
   monto: number;
+  /** En palabras, para la planilla y para el aviso al dueño. */
+  detalle: string;
 }
 
+/** Por compatibilidad con quien ya los llamaba así. */
+export type RecargoPorDecidir = DecisionPendiente;
+
 /** El recargo que le corresponde a una estadía ya cerrada, si lo hubo. */
-function recargoDe(estadia: EstadiaJardin): { horas: number; monto: number } {
-  if (!estadia.finReal) return { horas: 0, monto: 0 };
+function recargoDe(estadia: EstadiaJardin): { monto: number; detalle: string } {
+  if (!estadia.finReal) return { monto: 0, detalle: "" };
   const inicio = estadia.inicioReal ?? estadia.inicioProgramado;
-  const { horas, monto } = calcularRecargoFueraDeHorario(
+  const { monto } = calcularRecargoFueraDeHorario(
     inicio,
     estadia.finReal,
+    estadia.origen,
   );
-  return { horas, monto };
+  return { monto, detalle: `retiro ${formatearHora(estadia.finReal)}` };
+}
+
+/**
+ * Lo que se cobró POR ADELANTADO por el día, o nulo si no se cobró así.
+ *
+ * Las horas de más solo existen si hubo una reserva pagada antes de que el
+ * perro llegara. Un ingreso sin reserva se cobra después, con las horas
+ * reales (`diasPorCobrar`), y ahí no hay nada "de más": mirarlo acá lo
+ * cobraría dos veces. La señal es la fecha del cobro, que es lo único que
+ * distingue las dos cosas: el día reservado se cobra al agendarlo.
+ */
+function cobradoPorAdelantado(pagos: Pago[], estadia: EstadiaJardin): number | null {
+  const llegada = estadia.inicioReal ?? estadia.inicioProgramado;
+  const delDia = pagos.filter(
+    (p) =>
+      p.referenciaId === estadia.id &&
+      p.concepto === "dia_suelto" &&
+      p.emitidoEn < llegada &&
+      // Anulado en cero: el día no se cobró, no hay contra qué comparar.
+      !(p.estado === "reembolsado" && p.monto === 0),
+  );
+  if (delDia.length === 0) return null;
+  return delDia.reduce((suma, p) => suma + p.monto, 0);
+}
+
+function horasDeMasDe(
+  estadia: EstadiaJardin,
+  pagos: Pago[],
+): { monto: number; detalle: string } {
+  if (!estadia.finReal || estadia.origen !== "dia_suelto") {
+    return { monto: 0, detalle: "" };
+  }
+  const cobrado = cobradoPorAdelantado(pagos, estadia);
+  if (cobrado === null) return { monto: 0, detalle: "" };
+  const { monto } = calcularHorasDeMas({
+    inicioProgramado: estadia.inicioProgramado,
+    finProgramado: estadia.finProgramado,
+    inicioReal: estadia.inicioReal,
+    finReal: estadia.finReal,
+    cobrado,
+  });
+  return { monto, detalle: describirHorasDeMas(estadia) };
 }
 
 /**
  * Un cobro de este concepto para esta estadía significa "ya se decidió",
  * tenga monto o no: perdonar deja un cobro en cero, no deja un vacío.
  */
-function yaDecidido(pagos: Pago[], estadiaId: ID): boolean {
+function yaDecidido(pagos: Pago[], estadiaId: ID, concepto: ConceptoDecidible): boolean {
   return pagos.some(
-    (p) => p.referenciaId === estadiaId && p.concepto === "recargo_jardin",
+    (p) => p.referenciaId === estadiaId && p.concepto === concepto,
   );
 }
 
-export async function recargosPorDecidir(
+async function porDecidir(
   repo: RepositorioPatoteca,
-): Promise<RecargoPorDecidir[]> {
+  concepto: ConceptoDecidible,
+): Promise<DecisionPendiente[]> {
   const [estadias, pagos] = await Promise.all([
     repo.estadiasJardin.listar(),
     repo.pagos.listar(),
   ]);
 
   return estadias
-    .filter((e) => e.estado === "finalizada" && !yaDecidido(pagos, e.id))
-    .map((estadia) => ({ estadia, ...recargoDe(estadia) }))
+    .filter((e) => e.estado === "finalizada" && !yaDecidido(pagos, e.id, concepto))
+    .map((estadia) => ({
+      estadia,
+      ...(concepto === "recargo_jardin"
+        ? recargoDe(estadia)
+        : horasDeMasDe(estadia, pagos)),
+    }))
     .filter((r) => r.monto > 0)
     .sort((a, b) => (a.estadia.finReal ?? "").localeCompare(b.estadia.finReal ?? ""));
 }
 
-async function decidirRecargo(
+export function recargosPorDecidir(repo: RepositorioPatoteca) {
+  return porDecidir(repo, "recargo_jardin");
+}
+
+/** Los días que se pagaron por menos horas de las que el perro estuvo. */
+export function horasDeMasPorDecidir(repo: RepositorioPatoteca) {
+  return porDecidir(repo, "horas_de_mas");
+}
+
+const YA_SE_DECIDIO: Record<ConceptoDecidible, string> = {
+  recargo_jardin: "Ese retiro tarde ya se decidió.",
+  horas_de_mas: "Esas horas de más ya se decidieron.",
+};
+
+const NADA_QUE_COBRAR: Record<ConceptoDecidible, string> = {
+  recargo_jardin: "Ese retiro no tiene recargo que cobrar.",
+  horas_de_mas: "Ese día no tiene horas de más que cobrar.",
+};
+
+async function decidir(
   repo: RepositorioPatoteca,
+  concepto: ConceptoDecidible,
   estadiaId: ID,
-  monto: number,
+  cobrar: boolean,
   ahora: InstanteISO,
 ): Promise<Pago> {
   const estadia = await repo.estadiasJardin.obtener(estadiaId);
   if (!estadia) throw new DecisionImposible(`No existe la estadía ${estadiaId}`);
 
   const pagos = await repo.pagos.listar();
-  if (yaDecidido(pagos, estadiaId)) {
-    throw new DecisionImposible("Ese retiro tarde ya se decidió.");
+  if (yaDecidido(pagos, estadiaId, concepto)) {
+    throw new DecisionImposible(YA_SE_DECIDIO[concepto]);
   }
+
+  const { monto: calculado } =
+    concepto === "recargo_jardin" ? recargoDe(estadia) : horasDeMasDe(estadia, pagos);
+  if (cobrar && calculado <= 0) {
+    throw new DecisionImposible(NADA_QUE_COBRAR[concepto]);
+  }
+  const monto = cobrar ? calculado : 0;
 
   return repo.pagos.crear({
     clienteId: estadia.clienteId,
-    concepto: "recargo_jardin",
+    concepto,
     referenciaId: estadia.id,
     monto,
-    // Un recargo perdonado nace reembolsado en cero, que es como la app ya
-    // anula el cobro del día de prueba. Borrarlo sería más limpio de mirar y
-    // dejaría la cobranza del mes sin poder explicarse: un cobro que
-    // desaparece no deja rastro de que existió ni de que alguien lo perdonó.
+    // Lo perdonado nace reembolsado en cero, que es como la app ya anula el
+    // cobro del día de prueba. Borrarlo sería más limpio de mirar y dejaría
+    // la cobranza del mes sin poder explicarse: un cobro que desaparece no
+    // deja rastro de que existió ni de que alguien lo perdonó.
     estado: monto > 0 ? "pendiente" : "reembolsado",
     emitidoEn: ahora,
   });
 }
 
 /** Lo cobra: nace pendiente y entra en la cuenta del mes como cualquier otro. */
-export async function cobrarRecargo(
+export function cobrarRecargo(
   repo: RepositorioPatoteca,
   estadiaId: ID,
   ahora: InstanteISO = new Date().toISOString(),
 ): Promise<Pago> {
-  const estadia = await repo.estadiasJardin.obtener(estadiaId);
-  if (!estadia) throw new DecisionImposible(`No existe la estadía ${estadiaId}`);
-
-  const { monto } = recargoDe(estadia);
-  if (monto <= 0) {
-    throw new DecisionImposible("Ese retiro no tiene recargo que cobrar.");
-  }
-  return decidirRecargo(repo, estadiaId, monto, ahora);
+  return decidir(repo, "recargo_jardin", estadiaId, true, ahora);
 }
 
 /** Lo perdona, dejando constancia de que se perdonó. */
-export async function perdonarRecargo(
+export function perdonarRecargo(
   repo: RepositorioPatoteca,
   estadiaId: ID,
   ahora: InstanteISO = new Date().toISOString(),
 ): Promise<Pago> {
-  return decidirRecargo(repo, estadiaId, 0, ahora);
+  return decidir(repo, "recargo_jardin", estadiaId, false, ahora);
+}
+
+export function cobrarHorasDeMas(
+  repo: RepositorioPatoteca,
+  estadiaId: ID,
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<Pago> {
+  return decidir(repo, "horas_de_mas", estadiaId, true, ahora);
+}
+
+export function perdonarHorasDeMas(
+  repo: RepositorioPatoteca,
+  estadiaId: ID,
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<Pago> {
+  return decidir(repo, "horas_de_mas", estadiaId, false, ahora);
 }
 
 /* ── El día de jardín que nadie alcanzó a pagar por adelantado ────── */
@@ -442,7 +548,7 @@ export async function marcarDevolucionTransferida(
 
 /* ── Todo junto, por cliente ───────────────────────────────────────── */
 
-export type TipoPendiente = "recargo" | "saldo_hotel" | "dia";
+export type TipoPendiente = "recargo" | "horas_de_mas" | "saldo_hotel" | "dia";
 
 export interface Pendiente {
   tipo: TipoPendiente;
@@ -451,8 +557,12 @@ export interface Pendiente {
   perroId: ID;
   fecha: FechaISO;
   monto: number;
-  /** Solo en el recargo: cuántas horas pasadas del cierre. */
-  horas?: number;
+  /**
+   * En el recargo y en las horas de más: lo que pasó, en palabras ("retiro
+   * 21:40", "Reservó 09:00 a 12:00 · estuvo 09:10 a 18:00"). Es lo que se
+   * mira para decidir y lo que se le explica al dueño.
+   */
+  detalle?: string;
 }
 
 export interface ClienteConPendientes {
@@ -476,21 +586,30 @@ export interface ClienteConPendientes {
 export async function cobrosPendientesPorCliente(
   repo: RepositorioPatoteca,
 ): Promise<ClienteConPendientes[]> {
-  const [recargos, saldos, dias, clientes] = await Promise.all([
+  const [recargos, horasDeMas, saldos, dias, clientes] = await Promise.all([
     recargosPorDecidir(repo),
+    horasDeMasPorDecidir(repo),
     saldosPorEmitir(repo),
     diasPorCobrar(repo),
     repo.clientes.listar(),
   ]);
 
   const pendientes: Pendiente[] = [
-    ...recargos.map(({ estadia, horas, monto }) => ({
+    ...recargos.map(({ estadia, detalle, monto }) => ({
       tipo: "recargo" as const,
       referenciaId: estadia.id,
       perroId: estadia.perroId,
       fecha: estadia.fecha,
       monto,
-      horas,
+      detalle,
+    })),
+    ...horasDeMas.map(({ estadia, detalle, monto }) => ({
+      tipo: "horas_de_mas" as const,
+      referenciaId: estadia.id,
+      perroId: estadia.perroId,
+      fecha: estadia.fecha,
+      monto,
+      detalle,
     })),
     ...saldos.map(({ reserva, saldo }) => ({
       tipo: "saldo_hotel" as const,
@@ -540,6 +659,7 @@ export async function cobrosPendientesPorCliente(
 /** En palabras del dueño, para el mensaje que le llega. */
 const POR_QUE: Record<TipoPendiente, string> = {
   recargo: "el retiro fuera de horario",
+  horas_de_mas: "las horas de más en el jardín",
   saldo_hotel: "el saldo de la estadía en el hotel",
   dia: "el día de jardín",
 };
@@ -568,12 +688,38 @@ export async function cobrarPendiente(
   const pago =
     tipo === "recargo"
       ? await cobrarRecargo(repo, referenciaId, ahora)
-      : tipo === "saldo_hotel"
-        ? await emitirSaldoHotel(repo, referenciaId, ahora)
-        : await emitirDiaDeJardin(repo, referenciaId, ahora);
+      : tipo === "horas_de_mas"
+        ? await cobrarHorasDeMas(repo, referenciaId, ahora)
+        : tipo === "saldo_hotel"
+          ? await emitirSaldoHotel(repo, referenciaId, ahora)
+          : await emitirDiaDeJardin(repo, referenciaId, ahora);
 
-  if (canal) await avisarDelCobro(repo, canal, pago, POR_QUE[tipo], ahora);
+  // Las horas de más se explican con las horas: "las horas de más" a secas
+  // es justo el cobro que hace escribir preguntando qué es.
+  const motivo =
+    tipo === "horas_de_mas" && pendiente.detalle
+      ? `${POR_QUE[tipo]} (${pendiente.detalle.toLowerCase()})`
+      : POR_QUE[tipo];
+  if (canal) await avisarDelCobro(repo, canal, pago, motivo, ahora);
   return pago;
+}
+
+/**
+ * Lo perdona. Solo el recargo y las horas de más: un saldo de hotel o un día
+ * ya usado no son una decisión, son una deuda.
+ */
+export async function perdonarPendiente(
+  repo: RepositorioPatoteca,
+  pendiente: Pendiente,
+  ahora: InstanteISO = new Date().toISOString(),
+): Promise<Pago> {
+  if (pendiente.tipo === "recargo") {
+    return perdonarRecargo(repo, pendiente.referenciaId, ahora);
+  }
+  if (pendiente.tipo === "horas_de_mas") {
+    return perdonarHorasDeMas(repo, pendiente.referenciaId, ahora);
+  }
+  throw new DecisionImposible("Eso no se perdona: es una deuda, no una decisión.");
 }
 
 /**

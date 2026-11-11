@@ -602,13 +602,15 @@ export function generarSeed(
       const esPasado = fecha < hoy;
       const esHoy = fecha === hoy;
 
-      // Uno de cada doce lo retiran tarde: alimenta el recargo fuera de horario.
+      // Uno de cada doce lo retiran tarde: alimenta el recargo fuera de
+      // horario. Hasta las 21:30, para que haya de los dos: con plan se
+      // cobra desde las 19:00 y el día suelto recién desde las 21:00.
       const retiroTarde = esPasado && azar.probabilidad(0.08);
       const finReal = esPasado
         ? instanteEn(
             fecha,
             retiroTarde
-              ? aCuartos(azar.entero(19 * 60 + 20, 20 * 60 + 45))
+              ? aCuartos(azar.entero(19 * 60 + 20, 21 * 60 + 30))
               : salidaMin + aCuartos(azar.entero(-20, 20)),
           )
         : undefined;
@@ -669,9 +671,10 @@ export function generarSeed(
             ? calcularRecargoFueraDeHorario(
                 inicioReal ?? inicioProgramado,
                 finReal,
+                origen,
               )
             : { monto: 0 };
-        const jornada = cotizacion.total - recargo.monto;
+        const jornada = cotizacion.total;
         const emitido = finReal ?? finProgramado;
         const comoSePago = () =>
           azar.elegir(["webpay", "transferencia", "efectivo"] as const);

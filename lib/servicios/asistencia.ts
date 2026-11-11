@@ -142,9 +142,15 @@ export async function registrarLlegadaJardin(
 
 export interface ResultadoSalida {
   estadia: EstadiaJardin;
-  /** Recargo por retiro tarde, si lo hubo. */
+  /** Recargo por retiro tarde, si lo hubo. No se cobra solo: lo decide Administración. */
   recargo: number;
-  horasFueraDeHorario: number;
+  /**
+   * Cuánto se atrasó, para avisarle al cuidador SIN el monto: con plan desde
+   * las 19:00, sin plan desde las 21:00. Cero si no hubo recargo.
+   */
+  minutosDeAtraso: number;
+  /** Desde qué hora corre ese atraso: "19:00" o "21:00". */
+  atrasoDesde: string;
 }
 
 /**
@@ -172,7 +178,7 @@ export async function registrarSalidaJardin(
     origen: estadia.origen,
   });
 
-  const recargo = calcularRecargoFueraDeHorario(inicio, horaReal);
+  const recargo = calcularRecargoFueraDeHorario(inicio, horaReal, estadia.origen);
 
   const actualizada = await repo.estadiasJardin.actualizar(estadiaId, {
     finReal: horaReal,
@@ -196,7 +202,8 @@ export async function registrarSalidaJardin(
   return {
     estadia: actualizada,
     recargo: recargo.monto,
-    horasFueraDeHorario: recargo.horas,
+    minutosDeAtraso: recargo.minutosDeAtraso,
+    atrasoDesde: recargo.desde,
   };
 }
 

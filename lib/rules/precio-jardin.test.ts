@@ -2,9 +2,14 @@ import { describe, expect, it } from "vitest";
 import { instanteEnHora } from "@/lib/utils/fecha";
 import {
   calcularDevolucionJardin,
+  calcularHorasDeMas,
   calcularPrecioJardin,
   calcularRecargoFueraDeHorario,
   clasificarJornada,
+  describirHorasDeMas,
+  horariosDeIngreso,
+  horariosDeSalida,
+  revisarHorarioJardin,
 } from "./precio-jardin";
 
 const DIA = "2026-06-15";
@@ -86,50 +91,160 @@ describe("calcularPrecioJardin", () => {
   });
 });
 
-describe("recargo fuera de horario", () => {
+describe("recargo fuera de horario con plan", () => {
+  const recargo = (hasta: string) =>
+    calcularRecargoFueraDeHorario(en("08:00"), en(hasta), "plan");
+
   it("retirar antes del cierre no tiene recargo", () => {
-    expect(calcularRecargoFueraDeHorario(en("08:00"), en("18:30")).monto).toBe(0);
+    expect(recargo("18:30").monto).toBe(0);
+    expect(recargo("19:00").monto).toBe(0);
   });
 
-  it("los primeros 15 minutos son de gracia", () => {
-    expect(calcularRecargoFueraDeHorario(en("08:00"), en("19:10")).monto).toBe(0);
-    expect(calcularRecargoFueraDeHorario(en("08:00"), en("19:15")).monto).toBe(0);
+  // Sin gracia automática: cada minuto de más le llega a Administración,
+  // que es la que decide si lo cobra o lo perdona.
+  it("un minuto después del cierre ya es un bloque", () => {
+    const r = recargo("19:01");
+    expect(r.bloques).toBe(1);
+    expect(r.monto).toBe(500);
+    expect(r.minutosDeAtraso).toBe(1);
+    expect(r.desde).toBe("19:00");
   });
 
-  it("pasada la gracia se cobra la hora iniciada completa", () => {
-    const r = calcularRecargoFueraDeHorario(en("08:00"), en("19:20"));
-    expect(r.horas).toBe(1);
-    expect(r.monto).toBe(1_000);
+  it("cada 30 minutos o fracción entre las 19:00 y las 21:00 son $500", () => {
+    expect(recargo("19:30").monto).toBe(500);
+    expect(recargo("19:31").monto).toBe(1_000);
+    expect(recargo("20:30").monto).toBe(1_500);
+    expect(recargo("21:00").monto).toBe(2_000);
   });
 
-  it("cuenta cada hora iniciada después del cierre", () => {
-    expect(calcularRecargoFueraDeHorario(en("08:00"), en("20:30")).monto).toBe(
-      2_000,
-    );
-    expect(calcularRecargoFueraDeHorario(en("08:00"), en("21:00")).monto).toBe(
-      2_000,
-    );
-    expect(calcularRecargoFueraDeHorario(en("08:00"), en("21:05")).monto).toBe(
-      3_000,
-    );
+  // Pasado el fin de la atención se suma el cargo fijo, y los bloques
+  // paran en las 21:00: no se siguen contando encima.
+  it("pasadas las 21:00 se suman los $5.000 a los $2.000 de las dos horas", () => {
+    const r = recargo("21:40");
+    expect(r.bloques).toBe(4);
+    expect(r.despuesDeAtencion).toBe(true);
+    expect(r.monto).toBe(7_000);
+    expect(recargo("23:00").monto).toBe(7_000);
+  });
+});
+
+describe("recargo fuera de horario con día suelto", () => {
+  const recargo = (hasta: string, origen: "dia_suelto" | "dia_de_prueba" = "dia_suelto") =>
+    calcularRecargoFueraDeHorario(en("08:00"), en(hasta), origen);
+
+  // El día suelto se paga entero y alcanza hasta el fin de la atención.
+  it("entre las 19:00 y las 21:00 no hay recargo", () => {
+    expect(recargo("19:45").monto).toBe(0);
+    expect(recargo("21:00").monto).toBe(0);
   });
 
-  it("se suma al día suelto", () => {
+  it("pasadas las 21:00 es un cargo fijo de $5.000", () => {
+    const r = recargo("21:10");
+    expect(r.monto).toBe(5_000);
+    expect(r.minutosDeAtraso).toBe(10);
+    expect(r.desde).toBe("21:00");
+    expect(recargo("22:30").monto).toBe(5_000);
+  });
+
+  it("el día de prueba sigue la regla del día suelto", () => {
+    expect(recargo("20:00", "dia_de_prueba").monto).toBe(0);
+    expect(recargo("21:30", "dia_de_prueba").monto).toBe(5_000);
+  });
+});
+
+// El retiro tarde es una decisión de Administración, con su propia cola.
+// Si además fuera dentro del precio del día, se cobraría dos veces.
+describe("el precio del día no trae el retiro tarde adentro", () => {
+  it("un día suelto retirado tarde cuesta lo mismo que el día", () => {
     const c = calcularPrecioJardin({
       inicio: en("07:30"),
-      fin: en("19:20"),
+      fin: en("21:20"),
       origen: "dia_suelto",
     });
-    expect(c.total).toBe(19_000);
+    expect(c.total).toBe(18_000);
+    expect(c.lineas.map((l) => l.concepto)).toEqual(["Jardín día suelto"]);
   });
 
-  it("el plan cubre el día, no que lo retiren tarde", () => {
+  it("con plan sigue en cero aunque lo retiren tarde", () => {
     const c = calcularPrecioJardin({
       inicio: en("07:30"),
       fin: en("20:30"),
       origen: "plan",
     });
-    expect(c.total).toBe(2_000);
+    expect(c.total).toBe(0);
+  });
+});
+
+describe("los horarios que se pueden elegir", () => {
+  it("el ingreso va de 07:00 a 18:30, cada media hora", () => {
+    const ingresos = horariosDeIngreso();
+    expect(ingresos[0]).toBe(7 * 60);
+    expect(ingresos.at(-1)).toBe(18 * 60 + 30);
+    expect(ingresos).toHaveLength(24);
+  });
+
+  it("la salida parte media hora después del ingreso y llega al cierre", () => {
+    const salidas = horariosDeSalida(9 * 60);
+    expect(salidas[0]).toBe(9 * 60 + 30);
+    expect(salidas.at(-1)).toBe(19 * 60);
+  });
+
+  it("revisa que el horario sirva", () => {
+    expect(revisarHorarioJardin(9 * 60, 13 * 60)).toEqual([]);
+    expect(revisarHorarioJardin(13 * 60, 9 * 60)).toEqual([
+      "La hora de salida tiene que ser después de la de ingreso.",
+    ]);
+    expect(revisarHorarioJardin(6 * 60, 13 * 60)[0]).toMatch(/de 07:00 a 19:00/);
+    expect(revisarHorarioJardin(9 * 60, 20 * 60)[0]).toMatch(/de 07:00 a 19:00/);
+  });
+});
+
+describe("las horas de más", () => {
+  const dia = (desde: string, hasta: string, realDesde: string, realHasta: string, cobrado: number) =>
+    calcularHorasDeMas({
+      inicioProgramado: en(desde),
+      finProgramado: en(hasta),
+      inicioReal: en(realDesde),
+      finReal: en(realHasta),
+      cobrado,
+    });
+
+  it("reservó 3 horas y se quedó 9: falta la diferencia hasta el día largo", () => {
+    const h = dia("09:00", "12:00", "09:00", "18:00", 10_000);
+    expect(h).toEqual({ monto: 8_000, reservada: "corta", real: "larga" });
+  });
+
+  it("reservó 3 horas y se quedó 5: falta hasta el tramo medio", () => {
+    expect(dia("09:00", "12:00", "09:00", "14:00", 10_000).monto).toBe(6_000);
+  });
+
+  // Llegar antes o irse después dentro del mismo tramo no es otra reserva.
+  it("dentro del mismo tramo no falta nada", () => {
+    expect(dia("09:00", "14:00", "08:30", "16:30", 16_000).monto).toBe(0);
+  });
+
+  it("irse antes no devuelve nada", () => {
+    expect(dia("07:00", "19:00", "09:00", "11:00", 18_000).monto).toBe(0);
+  });
+
+  // Si el día tuvo el descuento del segundo perro, la diferencia también.
+  it("respeta el descuento con que se cobró lo reservado", () => {
+    expect(dia("09:00", "12:00", "09:00", "18:00", 8_000).monto).toBe(6_400);
+  });
+
+  it("cuenta desde la llegada real: llegar antes también suma horas", () => {
+    expect(dia("12:00", "15:00", "08:00", "15:00", 10_000).monto).toBe(6_000);
+  });
+
+  it("lo describe con las horas, para la planilla y para el dueño", () => {
+    expect(
+      describirHorasDeMas({
+        inicioProgramado: en("09:00"),
+        finProgramado: en("12:00"),
+        inicioReal: en("09:10"),
+        finReal: en("18:00"),
+      }),
+    ).toBe("Reservó 09:00 a 12:00 · estuvo 09:10 a 18:00");
   });
 });
 

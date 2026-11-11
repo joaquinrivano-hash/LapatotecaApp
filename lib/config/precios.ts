@@ -52,8 +52,14 @@ export const PRECIOS = {
     jornadaCorta: 10_000,
     jornadaMedia: 16_000,
     jornadaLarga: 18_000,
-    /** Por hora iniciada después del cierre, según el check-out real. */
-    horaFueraDeHorario: 1_000,
+    /**
+     * Retiro tarde, según la salida real (lo decide Administración):
+     * con plan, cada bloque de 30 min entre el cierre y el fin de la
+     * atención; con plan o sin plan, un cargo fijo pasado el fin de la
+     * atención.
+     */
+    recargoPlanPorBloque: 500,
+    recargoDespuesDeAtencion: 5_000,
   },
 
   planes: {

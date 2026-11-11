@@ -431,11 +431,17 @@ export default function Landing() {
                     Todos los días de {NEGOCIO.jardin.horaApertura}:00 a{" "}
                     {NEGOCIO.jardin.horaCierre}:00
                     <br />
+                    {/* El retiro tarde se dice entero: con plan se cobra
+                        por bloque hasta el fin de la atención, y desde ahí
+                        es un cargo fijo para todos. */}
                     <span className="text-muted-foreground text-pretty">
-                      Después de las {NEGOCIO.jardin.horaCierre}:00 se cobra
-                      valor hotel:{" "}
-                      {formatearCLP(PRECIOS.jardin.horaFueraDeHorario)} por
-                      hora.
+                      Retiro tarde: con plan,{" "}
+                      {formatearCLP(PRECIOS.jardin.recargoPlanPorBloque)} cada{" "}
+                      {NEGOCIO.jardin.minutosBloqueRecargo} minutos entre las{" "}
+                      {NEGOCIO.jardin.horaCierre}:00 y las{" "}
+                      {NEGOCIO.jardin.horaFinAtencion}:00. Después de las{" "}
+                      {NEGOCIO.jardin.horaFinAtencion}:00,{" "}
+                      {formatearCLP(PRECIOS.jardin.recargoDespuesDeAtencion)}.
                     </span>
                   </span>
                 </p>

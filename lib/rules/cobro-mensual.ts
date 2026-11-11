@@ -48,6 +48,7 @@ const ETIQUETA_CONCEPTO: Record<ConceptoPago, string> = {
   saldo_hotel: "Saldo de hotel",
   dia_suelto: "Jardín día suelto",
   recargo_jardin: "Retiro fuera de horario",
+  horas_de_mas: "Se quedó más de lo reservado",
   plan: "Plan de jardín",
   servicio: "Servicio",
   tienda: "Compra en tienda",

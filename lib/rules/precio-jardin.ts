@@ -1,10 +1,15 @@
 /**
  * Precio del jardín.
  *
- * Día suelto: hasta 6 horas inclusive $10.000, más de 6 horas $18.000.
- * Si el perro viene con plan, la jornada ya está pagada y solo consume un día
- * del pack. El recargo fuera de horario se cobra igual, con plan o sin plan:
- * el pack cubre el día, no que lo pasen a buscar tarde.
+ * Día suelto: tres tramos por tiempo (menos de 4 h, entre 4 y 8 h, más de
+ * 8 h). Si el perro viene con plan, la jornada ya está pagada y solo consume
+ * un día del pack.
+ *
+ * El retiro tarde NO entra en el precio del día: es un recargo aparte, que
+ * no se cobra solo — lo decide Administración (`calcularRecargoFueraDeHorario`).
+ * Antes iba como una línea más del día, y un ingreso sin reserva retirado
+ * tarde quedaba con el recargo dos veces: dentro del día que se emitía y en
+ * su propia cola.
  */
 
 import { NEGOCIO } from "@/lib/config/negocio";
@@ -67,39 +72,90 @@ const DETALLE_JORNADA: Record<TipoJornada, string> = {
   larga: `Más de ${NEGOCIO.jardin.horasJornadaMedia} h`,
 };
 
-export interface RecargoFueraDeHorario {
-  horas: number;
-  monto: number;
-  /** Minutos pasados del cierre, incluyendo los de gracia. */
-  minutosPasados: number;
+export function precioDeJornada(jornada: TipoJornada): number {
+  return PRECIO_JORNADA[jornada];
 }
 
+/* ── El retiro tarde ───────────────────────────────────────────────── */
+
+export interface RecargoFueraDeHorario {
+  monto: number;
+  /** Minutos después de la hora desde la que se cobra (ver `desde`). */
+  minutosDeAtraso: number;
+  /**
+   * Desde qué hora corre el atraso, en palabras: "19:00" con plan,
+   * "21:00" sin plan. Es lo que se le dice al cuidador.
+   */
+  desde: string;
+  /** Con plan: bloques de 30 min cobrados entre el cierre y el fin de la atención. */
+  bloques: number;
+  /** Si además se pasó del fin de la atención, que tiene su cargo fijo. */
+  despuesDeAtencion: boolean;
+}
+
+const hora = (h: number) => `${String(h).padStart(2, "0")}:00`;
+
 /**
- * Recargo por retiro tarde, medido contra el cierre del jardín y calculado
- * desde el check-out REAL. Los primeros 15 minutos son de gracia; después se
- * cobra cada hora iniciada.
+ * Recargo por retiro tarde, desde la salida REAL. Desde el 06-11:
+ *
+ * - **Con plan**: entre el cierre del jardín (19:00) y el fin de la
+ *   atención (21:00), $500 por cada bloque de 30 minutos o fracción. Pasadas
+ *   las 21:00 se suman $5.000 fijos.
+ * - **Día suelto** (y día de prueba): entre las 19:00 y las 21:00 no hay
+ *   recargo — el día ya se pagó entero. Pasadas las 21:00, $5.000 fijos.
+ *
+ * Por qué distinto: el plan sale más barato por día, y lo que cubre es el
+ * horario del jardín; el día suelto se paga a precio completo y alcanza
+ * hasta el fin de la atención. Pasadas las 21:00 ya no se entrega ni se
+ * retira, así que cuesta lo mismo para todos.
+ *
+ * Nunca se cobra solo: queda calculado para que Administración lo cobre o
+ * lo perdone. Por eso no hay minutos de gracia automáticos.
  */
 export function calcularRecargoFueraDeHorario(
   inicio: InstanteISO,
   finReal: InstanteISO,
+  origen: OrigenEstadia,
 ): RecargoFueraDeHorario {
-  const cierre = instanteEn(
-    fechaISO(inicio),
-    NEGOCIO.jardin.horaCierre * 60,
+  const dia = fechaISO(inicio);
+  const { horaCierre, horaFinAtencion, minutosBloqueRecargo, minutosGracia } =
+    NEGOCIO.jardin;
+  const pasadoDelCierre = minutosEntre(instanteEn(dia, horaCierre * 60), finReal);
+  const pasadoDeAtencion = minutosEntre(
+    instanteEn(dia, horaFinAtencion * 60),
+    finReal,
   );
-  const minutosPasados = minutosEntre(cierre, finReal);
+  const despuesDeAtencion = pasadoDeAtencion > minutosGracia;
+  const fijo = despuesDeAtencion ? PRECIOS.jardin.recargoDespuesDeAtencion : 0;
 
-  if (minutosPasados <= NEGOCIO.jardin.minutosGracia) {
-    return { horas: 0, monto: 0, minutosPasados: Math.max(0, minutosPasados) };
+  if (origen === "plan") {
+    const minutosEnTramo = Math.min(
+      pasadoDelCierre,
+      (horaFinAtencion - horaCierre) * 60,
+    );
+    const bloques =
+      pasadoDelCierre > minutosGracia
+        ? Math.ceil(minutosEnTramo / minutosBloqueRecargo)
+        : 0;
+    return {
+      monto: bloques * PRECIOS.jardin.recargoPlanPorBloque + fijo,
+      minutosDeAtraso: bloques > 0 ? pasadoDelCierre : 0,
+      desde: hora(horaCierre),
+      bloques,
+      despuesDeAtencion,
+    };
   }
 
-  const horas = Math.ceil(minutosPasados / 60);
   return {
-    horas,
-    monto: horas * PRECIOS.jardin.horaFueraDeHorario,
-    minutosPasados,
+    monto: fijo,
+    minutosDeAtraso: despuesDeAtencion ? pasadoDeAtencion : 0,
+    desde: hora(horaFinAtencion),
+    bloques: 0,
+    despuesDeAtencion,
   };
 }
+
+/* ── El precio del día ─────────────────────────────────────────────── */
 
 export function calcularPrecioJardin(
   entrada: EntradaPrecioJardin,
@@ -127,19 +183,125 @@ export function calcularPrecioJardin(
     });
   }
 
-  const recargo = calcularRecargoFueraDeHorario(entrada.inicio, entrada.fin);
-  if (recargo.monto > 0) {
-    lineas.push({
-      concepto: "Fuera de horario",
-      detalle: `${recargo.horas} h después del cierre (retiro ${formatearHora(entrada.fin)})`,
-      monto: recargo.monto,
-    });
-  }
-
   return construirCotizacion(
     lineas,
     soloAplicables([descuentoSegundoPerro(entrada.indicePerro)]),
   );
+}
+
+/* ── Las horas que se pueden elegir ────────────────────────────────── */
+
+/** Cada cuánto se puede elegir la hora de ingreso y de salida. */
+export const MINUTOS_ENTRE_HORARIOS = 30;
+
+/** Las horas de ingreso que se ofrecen: de la apertura a media hora antes del cierre. */
+export function horariosDeIngreso(): number[] {
+  const { horaApertura, horaCierre } = NEGOCIO.jardin;
+  const horarios: number[] = [];
+  for (
+    let m = horaApertura * 60;
+    m < horaCierre * 60;
+    m += MINUTOS_ENTRE_HORARIOS
+  ) {
+    horarios.push(m);
+  }
+  return horarios;
+}
+
+/** Las horas de salida para un ingreso dado: desde media hora después, hasta el cierre. */
+export function horariosDeSalida(desdeMinuto: number): number[] {
+  const horarios: number[] = [];
+  for (
+    let m = desdeMinuto + MINUTOS_ENTRE_HORARIOS;
+    m <= NEGOCIO.jardin.horaCierre * 60;
+    m += MINUTOS_ENTRE_HORARIOS
+  ) {
+    horarios.push(m);
+  }
+  return horarios;
+}
+
+/**
+ * Lo que impide reservar ese horario. La pantalla solo ofrece horas que
+ * sirven, pero quien no deja pasar una que no sirve es el servicio, que es
+ * por donde entra todo el mundo.
+ */
+export function revisarHorarioJardin(
+  desdeMinuto: number,
+  hastaMinuto: number,
+): string[] {
+  const { horaApertura, horaCierre } = NEGOCIO.jardin;
+  const problemas: string[] = [];
+  if (desdeMinuto < horaApertura * 60 || hastaMinuto > horaCierre * 60) {
+    problemas.push(
+      `El jardín abre de ${hora(horaApertura)} a ${hora(horaCierre)}: elige un horario dentro de ese rango.`,
+    );
+  }
+  if (hastaMinuto <= desdeMinuto) {
+    problemas.push("La hora de salida tiene que ser después de la de ingreso.");
+  }
+  return problemas;
+}
+
+/* ── Las horas de más ──────────────────────────────────────────────── */
+
+export interface HorasDeMas {
+  monto: number;
+  reservada: TipoJornada;
+  real: TipoJornada;
+}
+
+/**
+ * Lo que falta cuando el perro se quedó más de lo reservado.
+ *
+ * Mira solo el tramo del día: el retiro tarde es otra cosa y tiene su
+ * propio recargo. Si el tramo real no es más caro que el reservado, no
+ * falta nada — llegar antes o irse después dentro del mismo tramo es la
+ * vida real, no una reserva distinta.
+ *
+ * La diferencia se cobra en la misma proporción que se cobró lo reservado:
+ * si ese día tuvo el descuento del segundo perro, la diferencia también.
+ * Por eso recibe lo que se cobró y no lo calcula.
+ *
+ * Nunca se cobra sola: queda para que Administración la cobre o la
+ * perdone, igual que el recargo.
+ */
+export function calcularHorasDeMas(entrada: {
+  inicioProgramado: InstanteISO;
+  finProgramado: InstanteISO;
+  inicioReal?: InstanteISO;
+  finReal: InstanteISO;
+  /** Lo que se cobró por el día reservado. */
+  cobrado: number;
+}): HorasDeMas {
+  const reservada = clasificarJornada(entrada.inicioProgramado, entrada.finProgramado);
+  const real = clasificarJornada(
+    entrada.inicioReal ?? entrada.inicioProgramado,
+    entrada.finReal,
+  );
+  const precioReservado = PRECIO_JORNADA[reservada];
+  const diferencia = PRECIO_JORNADA[real] - precioReservado;
+  if (diferencia <= 0 || entrada.cobrado <= 0) {
+    return { monto: 0, reservada, real };
+  }
+  return {
+    monto: Math.round((diferencia * entrada.cobrado) / precioReservado),
+    reservada,
+    real,
+  };
+}
+
+/** "Reservó 09:00 a 12:00 · estuvo 09:10 a 18:00" */
+export function describirHorasDeMas(estadia: {
+  inicioProgramado: InstanteISO;
+  finProgramado: InstanteISO;
+  inicioReal?: InstanteISO;
+  finReal?: InstanteISO;
+}): string {
+  const reservado = `${formatearHora(estadia.inicioProgramado)} a ${formatearHora(estadia.finProgramado)}`;
+  if (!estadia.finReal) return `Reservó ${reservado}`;
+  const llegada = formatearHora(estadia.inicioReal ?? estadia.inicioProgramado);
+  return `Reservó ${reservado} · estuvo ${llegada} a ${formatearHora(estadia.finReal)}`;
 }
 
 /* ── Cancelar un día ───────────────────────────────────────────────── */

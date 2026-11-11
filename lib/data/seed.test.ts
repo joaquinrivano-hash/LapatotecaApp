@@ -216,11 +216,22 @@ describe("alertas del backoffice", () => {
     expect(datos.productos.some((p) => p.stock === 0)).toBe(true);
   });
 
-  it("hay retiros fuera de horario que generaron recargo", () => {
-    const conRecargo = datos.estadiasJardin.filter((e) =>
-      e.cotizacion?.lineas.some((l) => l.concepto === "Fuera de horario"),
-    );
-    expect(conRecargo.length).toBeGreaterThan(0);
+  // El recargo va en su propio cobro, no dentro del día: es una decisión de
+  // Administración. Tiene que haber de los dos, con plan y sin plan.
+  it("hay retiros fuera de horario que generaron recargo, con plan y sin plan", () => {
+    const recargos = datos.pagos.filter((p) => p.concepto === "recargo_jardin");
+    const origenDe = (id?: string) =>
+      datos.estadiasJardin.find((e) => e.id === id)?.origen;
+    expect(recargos.some((p) => origenDe(p.referenciaId) === "plan")).toBe(true);
+    expect(recargos.some((p) => origenDe(p.referenciaId) === "dia_suelto")).toBe(true);
+  });
+
+  it("el precio de un día ya no trae el recargo adentro", () => {
+    expect(
+      datos.estadiasJardin.some((e) =>
+        e.cotizacion?.lineas.some((l) => l.concepto === "Fuera de horario"),
+      ),
+    ).toBe(false);
   });
 });
 

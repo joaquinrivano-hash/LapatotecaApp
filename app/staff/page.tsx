@@ -31,7 +31,7 @@ import {
   registrarSalidaJardin,
 } from "@/lib/servicios/asistencia";
 import { formatearCLP } from "@/lib/utils/moneda";
-import { hhmmDesdeMinutos } from "@/lib/utils/fecha";
+import { formatearDuracion, hhmmDesdeMinutos } from "@/lib/utils/fecha";
 
 export default function Hoy() {
   const hoy = hoyDelStaff();
@@ -95,9 +95,9 @@ export default function Hoy() {
     // con el dueño que está ahí parado. El monto NO: el recargo no se cobra
     // solo y la decisión no es de quien está entregando al perro. Poner un
     // precio en esta pantalla convertiría la entrega en una negociación.
-    if (resultado.horasFueraDeHorario > 0) {
+    if (resultado.minutosDeAtraso > 0) {
       toast.warning(`Se fue ${item.perro.nombre}, fuera de horario`, {
-        description: `${resultado.horasFueraDeHorario} h después del cierre. Queda anotado.`,
+        description: `${formatearDuracion(resultado.minutosDeAtraso)} después de las ${resultado.atrasoDesde}. Queda anotado.`,
       });
     } else {
       toast.success(`Se fue ${item.perro.nombre}`);

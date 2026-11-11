@@ -9,7 +9,7 @@ import { useAccion, useConsulta } from "@/lib/hooks/use-consulta";
 import {
   cobrarPendiente,
   cobrosPendientesPorCliente,
-  perdonarRecargo,
+  perdonarPendiente,
   type ClienteConPendientes,
   type Pendiente,
 } from "@/lib/servicios/cobros-pendientes";
@@ -89,11 +89,15 @@ export function CobrosPendientes() {
  */
 const DUENOS_VISIBLES = 5;
 
-const QUE_ES: Record<Pendiente["tipo"], (p: Pendiente) => string> = {
-  recargo: (p) => `Retiro ${p.horas} h fuera de horario`,
-  saldo_hotel: () => "Saldo de hotel",
-  dia: () => "Día de jardín sin cobrar",
+const QUE_ES: Record<Pendiente["tipo"], string> = {
+  recargo: "Retiro fuera de horario",
+  horas_de_mas: "Se quedó más de lo reservado",
+  saldo_hotel: "Saldo de hotel",
+  dia: "Día de jardín sin cobrar",
 };
+
+/** Lo que se decide con Cobrar o Perdonar; lo demás es una deuda. */
+const SE_PUEDE_PERDONAR: Pendiente["tipo"][] = ["recargo", "horas_de_mas"];
 
 function Dueno({
   grupo,
@@ -150,10 +154,13 @@ function Dueno({
                 <span className="font-medium">
                   {nombrePerro(pendiente.perroId)}
                 </span>{" "}
-                · {QUE_ES[pendiente.tipo](pendiente)}
+                · {QUE_ES[pendiente.tipo]}
               </p>
-              <p className="text-muted-foreground text-xs">
+              {/* Las horas van a la vista: es lo que se mira para decidir, y
+                  "se quedó más" sin las horas no se puede conversar. */}
+              <p className="text-muted-foreground text-xs text-pretty">
                 {formatearFechaCorta(pendiente.fecha)}
+                {pendiente.detalle && ` · ${pendiente.detalle}`}
               </p>
             </div>
 
@@ -170,18 +177,16 @@ function Dueno({
               >
                 <Check /> Cobrar
               </Button>
-              {/* Perdonar es solo del recargo: un saldo de hotel o un día ya
-                  usado no son una decisión, son una deuda. */}
-              {pendiente.tipo === "recargo" && (
+              {/* Perdonar es del recargo y de las horas de más: un saldo de
+                  hotel o un día ya usado no son una decisión, son una deuda. */}
+              {SE_PUEDE_PERDONAR.includes(pendiente.tipo) && (
                 <Button
                   size="sm"
                   variant="outline"
                   disabled={ocupado}
                   onClick={async () => {
-                    await ejecutar((repo) =>
-                      perdonarRecargo(repo, pendiente.referenciaId),
-                    );
-                    toast("Recargo perdonado", {
+                    await ejecutar((repo) => perdonarPendiente(repo, pendiente));
+                    toast("Perdonado", {
                       description:
                         "Queda anotado en cero, para poder explicar el mes.",
                     });
