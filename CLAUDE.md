@@ -2269,9 +2269,14 @@ copiado acá.
 1. **Correr `20261106120000_lo_que_el_dueno_no_se_salta`** en el editor SQL.
    **Urgente**: el código ya está en `main` y llama funciones que sin ella no
    existen, así que hasta que corra **en producción no se puede agendar un
-   día de jardín, reservar hotel ni comprar en la tienda**. Verificar desde
-   afuera: `GET /rest/v1/rpc/agendar_dia_suelto?perro=00000000-0000-0000-0000-000000000000`
-   tiene que dar `401`, no `404`.
+   día de jardín, reservar hotel ni comprar en la tienda**. **Confirmado el
+   11-11 desde afuera que NO había corrido**: la dueña tocó "Reservar el
+   día" en producción y salió "Algo salió mal". Verificar desde afuera con
+   los **cinco** parámetros —PostgREST busca la función por todos sus
+   nombres, y con uno solo da `404` aunque exista—:
+   `GET /rest/v1/rpc/agendar_dia_suelto?perro=<uuid>&nueva_fecha=2026-11-20&nuevo_inicio=2026-11-20T12:00:00Z&nuevo_fin=2026-11-20T15:00:00Z&la_cotizacion=%7B%7D`
+   tiene que dar `401`, no `404`. Control al lado: `cancelar_dia_de_jardin?estadia=<uuid>`
+   da `401`.
 2. **Probar en el portal** un día de jardín, una reserva de hotel y una
    compra (las tres pendientes en `/admin/pagos`) y un baño (en "Servicios
    por confirmar").
@@ -2318,6 +2323,12 @@ copiado acá.
 5. **La cotización de los servicios no se compara en la base.** Hoy no
    importa —el precio lo confirma la casa—; el día que un servicio tenga
    precio firme, se cierra como el resto.
+6. **El texto de los planes, más descriptivo y cercano.** Lo pidió la dueña
+   el 11-11. Hoy explica la regla ("se paga por adelantado y vale hasta fin
+   de mes…") pero no le cuenta al dueño para qué le sirve ni cuál le
+   conviene. Revisar la tarjeta de planes de `/reservar` y la de la portada
+   (va junto con el punto 4), con el tono de la marca: cálido, de tú, y
+   hablándole de su perro, no de nuestra operación.
 
 **D. El día de prueba: lo que se encontró revisándolo el 11-11** (sin
 arreglar todavía; cada uno se comprobó con datos, no leyendo):
